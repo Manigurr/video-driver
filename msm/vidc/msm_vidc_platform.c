@@ -98,7 +98,7 @@ static struct msm_vidc_codec_data sm8150_codec_data[] =  {
 	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_DECODER, 10, 200, 200),
 	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_DECODER, 10, 200, 200),
 	CODEC_ENTRY(V4L2_PIX_FMT_VP8, MSM_VIDC_DECODER, 10, 200, 200),
-	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 10, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 60, 200, 200),
 };
 
 /* Update with SM6150 data */
@@ -895,7 +895,7 @@ static struct msm_vidc_codec_capability sm8150_capabilities[] = {
 static struct msm_vidc_codec_capability sm6150_capabilities[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value} */
 	{CAP_FRAME_WIDTH, DEC, CODECS_ALL, 96, 4096, 1, 1920},
-	{CAP_FRAME_HEIGHT, DEC, CODECS_ALL, 96, 2160, 1, 1080},
+	{CAP_FRAME_HEIGHT, DEC, CODECS_ALL, 96, 2176, 1, 1080},
 	{CAP_FRAME_WIDTH, ENC, CODECS_ALL, 96, 4096, 2, 1920},
 	{CAP_FRAME_HEIGHT, ENC, CODECS_ALL, 96, 2160, 2, 1080},
 	/*  ((4096 * 2176) / 256) */
@@ -1728,7 +1728,7 @@ static struct msm_vidc_common_data sm8150_common_data[] = {
 	},
 	{
 		.key = "qcom,max-secure-instances",
-		.value = 2, /*
+		.value = 3,             /*
 					 * As per design driver allows 3rd
 					 * instance as well since the secure
 					 * flags were updated later for the
