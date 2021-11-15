@@ -692,3 +692,35 @@ unlock:
 
 	return rc;
 }
+
+long msm_v4l2_private_ctrl(struct file *file, void *fh,
+	bool valid_prio, unsigned int cmd, void *arg)
+{
+	struct msm_vidc_inst *inst = get_vidc_inst(file, fh);
+	struct msm_v4l2_synx_fence *fence = arg;
+	long rc = 0;
+
+	inst = get_inst_ref(g_core, inst);
+	if (!inst) {
+		d_vpr_e("%s: invalid instance\n", __func__);
+		return -EINVAL;
+	}
+
+	inst_lock(inst, __func__);
+	if (is_session_error(inst)) {
+		i_vpr_e(inst, "%s: inst in error state\n", __func__);
+		rc = -EBUSY;
+		goto unlock;
+	}
+
+	/* create/release fence based on cmd */
+	rc = msm_vidc_handle_fence((void *)inst, cmd, fence);
+	if (rc)
+		goto unlock;
+
+unlock:
+	inst_unlock(inst, __func__);
+	put_inst(inst);
+
+	return rc;
+}

@@ -102,6 +102,7 @@ static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_dec = {
 	.vidioc_subscribe_event         = msm_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event       = msm_v4l2_unsubscribe_event,
 	.vidioc_decoder_cmd             = msm_v4l2_decoder_cmd,
+	.vidioc_default                 = msm_v4l2_private_ctrl,
 };
 
 static struct v4l2_ctrl_ops msm_v4l2_ctrl_ops = {

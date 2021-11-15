@@ -22,6 +22,7 @@
 #include "msm_vidc_platform.h"
 #include "msm_vidc_memory.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc_sync.h"
 #include "msm_vidc_debug.h"
 #include "hfi_packet.h"
 #include "venus_hfi_response.h"
@@ -3383,11 +3384,13 @@ unlock:
 }
 
 int venus_hfi_queue_buffer(struct msm_vidc_inst *inst,
-	struct msm_vidc_buffer *buffer, struct msm_vidc_buffer *metabuf)
+	struct msm_vidc_buffer *buffer, struct msm_vidc_buffer *metabuf,
+	struct msm_vidc_synx_buffer *sbuf)
 {
 	int rc = 0;
 	struct msm_vidc_core *core;
 	struct hfi_buffer hfi_buffer;
+	u32 payload[2] = {0};
 
 	if (!inst || !inst->core || !inst->packet) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -3437,6 +3440,24 @@ int venus_hfi_queue_buffer(struct msm_vidc_inst *inst,
 			sizeof(hfi_buffer));
 		if (rc)
 			goto unlock;
+	}
+
+	if (sbuf) {
+		if (sbuf->wfence)
+			payload[0] = sbuf->wfence->h_synx;
+		if (sbuf->sfence)
+			payload[1] = sbuf->sfence->h_synx;
+		rc = hfi_create_packet(inst->packet,
+			inst->packet_size,
+			HFI_PROP_SYNX_HANDLES,
+			HFI_HOST_FLAGS_INTR_REQUIRED,
+			HFI_PAYLOAD_U32_ARRAY,
+			HFI_PORT_RAW,
+			core->packet_id++,
+			&payload[0],
+			2 * sizeof(u32));
+		if (rc)
+			return rc;
 	}
 
 	rc = __iface_cmdq_write(inst->core, inst->packet);

@@ -20,6 +20,9 @@ LINUXINCLUDE    += -I$(VIDEO_ROOT)/driver/vidc/inc \
 USERINCLUDE     += -I$(VIDEO_ROOT)/include/uapi/vidc/media \
                    -I$(VIDEO_ROOT)/include/uapi/vidc
 
+# Optional include directories
+ccflags-y       += -I$(KERNEL_ROOT)/drivers/media/platform/msm/synx
+
 obj-m += msm_video.o
 
 ifeq ($(CONFIG_MSM_VIDC_WAIPIO), y)
@@ -43,6 +46,7 @@ msm_video-objs += driver/vidc/src/msm_vidc_v4l2.o \
                   driver/vidc/src/msm_vdec.o \
                   driver/vidc/src/msm_venc.o \
                   driver/vidc/src/msm_vidc_driver.o \
+                  driver/vidc/src/msm_vidc_sync.o \
                   driver/vidc/src/msm_vidc_control.o \
                   driver/vidc/src/msm_vidc_buffer.o \
                   driver/vidc/src/msm_vidc_power.o \

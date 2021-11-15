@@ -142,6 +142,25 @@ enum v4l2_mpeg_vidc_blur_types {
 /* Decoder Timestamp Reorder control */
 #define V4L2_CID_MPEG_VIDC_TS_REORDER           (V4L2_CID_MPEG_VIDC_BASE + 0x31)
 
+/*
+ * struct msm_v4l2_synx_fence - v4l2 buffer fence info
+ * @index: id number of the buffer
+ * @type: enum v4l2_buf_type; buffer type
+ * @wait_fd: file descriptor of the wait fence associated with this buffer
+ * @signal_fd: file descriptor of the signal fence associated with this buffer
+ */
+struct msm_v4l2_synx_fence {
+	__u32 index;
+	__u32 type;
+	__s32 wait_fd;
+	__s32 signal_fd;
+	__u32 reserved[4];
+};
+
+/* Create and queue wait fence and signal fence */
+#define VIDIOC_CREATE_QUEUE_FENCES                                           \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 0, struct msm_v4l2_synx_fence)
+
 /* Deprecate below controls once availble in gki and gsi bionic header */
 #ifndef V4L2_CID_MPEG_VIDEO_BASELAYER_PRIORITY_ID
 #define V4L2_CID_MPEG_VIDEO_BASELAYER_PRIORITY_ID                            \

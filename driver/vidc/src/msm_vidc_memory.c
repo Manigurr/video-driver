@@ -14,6 +14,7 @@
 #include "msm_vidc_debug.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc_sync.h"
 #include "msm_vidc_dt.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_events.h"
@@ -574,6 +575,8 @@ static struct msm_vidc_type_size_name buftype_size_name_arr[] = {
 	{MSM_MEM_POOL_ALLOC,      sizeof(struct msm_vidc_alloc),      "MSM_MEM_POOL_ALLOC"      },
 	{MSM_MEM_POOL_TIMESTAMP,  sizeof(struct msm_vidc_timestamp),  "MSM_MEM_POOL_TIMESTAMP"  },
 	{MSM_MEM_POOL_DMABUF,     sizeof(struct msm_memory_dmabuf),   "MSM_MEM_POOL_DMABUF"     },
+	{MSM_MEM_POOL_SYNC_FENCE, sizeof(struct msm_vidc_sync_fence), "MSM_MEM_POOL_SYNC_FENCE" },
+	{MSM_MEM_POOL_SYNX_BUFFER, sizeof(struct msm_vidc_synx_buffer), "MSM_MEM_POOL_SYNX_BUFFER"},
 };
 
 int msm_memory_pools_init(struct msm_vidc_inst *inst)

@@ -9,6 +9,7 @@
 #include "msm_media_info.h"
 
 #include "msm_vidc_driver.h"
+#include "msm_vidc_sync.h"
 #include "msm_vidc_platform.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_control.h"
@@ -1381,6 +1382,7 @@ bool msm_vidc_allow_property(struct msm_vidc_inst *inst, u32 hfi_id)
 	case HFI_PROP_WORST_COMPRESSION_RATIO:
 	case HFI_PROP_WORST_COMPLEXITY_FACTOR:
 	case HFI_PROP_PICTURE_TYPE:
+	case HFI_PROP_SYNX_HANDLES:
 		is_allowed = true;
 		break;
 	case HFI_PROP_DPB_LIST:
@@ -3066,6 +3068,9 @@ void msm_vidc_stats_handler(struct work_struct *work)
 
 static int msm_vidc_queue_buffer(struct msm_vidc_inst *inst, struct msm_vidc_buffer *buf)
 {
+	static struct msm_vidc_synx_buffer tbuf = {0};
+	struct msm_vidc_synx_buffer *sbuf = NULL;
+	struct list_head *slist = NULL;
 	struct msm_vidc_buffer *meta;
 	enum msm_vidc_debugfs_event etype;
 	int rc = 0;
@@ -3104,10 +3109,29 @@ static int msm_vidc_queue_buffer(struct msm_vidc_inst *inst, struct msm_vidc_buf
 		return -EINVAL;
 	}
 
+	/* allow synx packet prep, only at decode output port side */
+	if (is_decode_session(inst) && is_output_buffer(buf->type)) {
+		slist = &inst->synx_tracker.submit_list;
+		/* retrieve synx buffer based on index */
+		sbuf = msm_vidc_sync_get_synx_buffer_from_index(inst, slist, buf->index);
+		if (!sbuf) {
+			i_vpr_e(inst, "%s: index not found %u\n", __func__, buf->index);
+			/**
+			 * For free-pool buffers, create_fence ioctl willnot be called from client.
+			 * So no fences were tied with this buffer. But since delivery mode is set
+			 * for synx_handles hfi, we must set synx_handles prop for all buffers.
+			 * So added WA handlig for the same.
+			 */
+			sbuf = &tbuf;
+		} else {
+			print_synx_buffer(VIDC_HIGH, "high", "submit", inst, sbuf);
+		}
+	}
+
 	if (msm_vidc_is_super_buffer(inst) && is_input_buffer(buf->type))
 		rc = venus_hfi_queue_super_buffer(inst, buf, meta);
 	else
-		rc = venus_hfi_queue_buffer(inst, buf, meta);
+		rc = venus_hfi_queue_buffer(inst, buf, meta, sbuf);
 	if (rc)
 		return rc;
 
@@ -3116,6 +3140,11 @@ static int msm_vidc_queue_buffer(struct msm_vidc_inst *inst, struct msm_vidc_buf
 	if (meta) {
 		meta->attr &= ~MSM_VIDC_ATTR_DEFERRED;
 		meta->attr |= MSM_VIDC_ATTR_QUEUED;
+	}
+	/* remove deferred and attach queued flag */
+	if (sbuf) {
+		sbuf->flag &= ~MSM_VIDC_SYNC_FLAG_DEFERRED;
+		sbuf->flag |= MSM_VIDC_SYNC_FLAG_QUEUED;
 	}
 
 	/* insert timestamp for ts_reorder enable case */
@@ -3446,7 +3475,7 @@ int msm_vidc_queue_internal_buffers(struct msm_vidc_inst *inst,
 		/* do not queue already queued buffers */
 		if (buffer->attr & MSM_VIDC_ATTR_QUEUED)
 			continue;
-		rc = venus_hfi_queue_buffer(inst, buffer, NULL);
+		rc = venus_hfi_queue_buffer(inst, buffer, NULL, NULL);
 		if (rc)
 			return rc;
 		/* mark queued */
@@ -3996,7 +4025,8 @@ int msm_vidc_session_streamoff(struct msm_vidc_inst *inst,
 
 	/* discard pending port settings change if any */
 	msm_vidc_discard_pending_ipsc(inst);
-
+	/* flush synx buffers */
+	msm_vidc_sync_cleanup_synx_buffers(inst, VIDC_HIGH, "high");
 	/* flush deferred buffers */
 	msm_vidc_flush_buffers(inst, buffer_type);
 	msm_vidc_flush_delayed_unmap_buffers(inst, buffer_type);
@@ -4004,6 +4034,7 @@ int msm_vidc_session_streamoff(struct msm_vidc_inst *inst,
 
 error:
 	msm_vidc_kill_session(inst);
+	msm_vidc_sync_cleanup_synx_buffers(inst, VIDC_ERR, "err ");
 	msm_vidc_flush_buffers(inst, buffer_type);
 	return rc;
 }
@@ -4995,6 +5026,9 @@ void msm_vidc_destroy_buffers(struct msm_vidc_inst *inst)
 		return;
 	}
 
+	/* flush and destroy all synx buffers and sync_fences */
+	msm_vidc_sync_cleanup_synx_buffers(inst, VIDC_ERR, "err ");
+
 	for (i = 0; i < ARRAY_SIZE(internal_buf_types); i++) {
 		buffers = msm_vidc_get_buffers(inst, internal_buf_types[i], __func__);
 		if (!buffers)
@@ -5069,6 +5103,7 @@ static void msm_vidc_close_helper(struct kref *kref)
 		struct msm_vidc_inst, kref);
 
 	i_vpr_h(inst, "%s()\n", __func__);
+	msm_vidc_sync_deinit_timeline(inst);
 	msm_vidc_event_queue_deinit(inst);
 	msm_vidc_vb2_queue_deinit(inst);
 	msm_vidc_debugfs_deinit_inst(inst);
@@ -5377,6 +5412,9 @@ int msm_vidc_update_debug_str(struct msm_vidc_inst *inst)
 	snprintf(inst->debug_str, sizeof(inst->debug_str), "%08x: %s%s", sid, codec, domain);
 	d_vpr_h("%s: sid: %08x, codec: %s, domain: %s, final: %s\n",
 		__func__, sid, codec, domain, inst->debug_str);
+
+	/* update sync timeline names */
+	msm_vidc_sync_update_timeline_name(inst);
 
 	return 0;
 }
