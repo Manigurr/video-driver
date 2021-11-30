@@ -1674,9 +1674,9 @@ static u32 vpe_csc_custom_limit_coeff[MAX_LIMIT_COEFFS] = {
 	16, 235, 16, 240, 16, 240
 };
 
-/* Default UBWC config for LPDDR5 */
+/* Default UBWC config for neo */
 static struct msm_vidc_ubwc_config_data ubwc_config_neo[] = {
-	UBWC_CONFIG(8, 32, 16, 0, 1, 1, 1),
+	UBWC_CONFIG(8, 32, 13, 0, 1, 1, 1),
 };
 
 /* Default bus bandwidth for non_real time session based on priority */
