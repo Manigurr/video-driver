@@ -22,34 +22,21 @@
 #define MAX_BIAS_COEFFS   3
 #define MAX_LIMIT_COEFFS  6
 #define MAX_DEBUGFS_NAME  50
-#define DEFAULT_TIMEOUT   3
 #define DEFAULT_HEIGHT    240
 #define DEFAULT_WIDTH     320
-#define MAX_HEIGHT        4320
-#define MAX_WIDTH         8192
-#define MIN_SUPPORTED_WIDTH   32
-#define MIN_SUPPORTED_HEIGHT  32
 #define DEFAULT_FPS       30
-#define MINIMUM_FPS       1
-#define MAXIMUM_FPS       960
 #define MAXIMUM_VP9_FPS   60
-#define SINGLE_INPUT_BUFFER   1
-#define SINGLE_OUTPUT_BUFFER  1
-#define MAX_NUM_INPUT_BUFFERS    VIDEO_MAX_FRAME // same as VB2_MAX_FRAME
-#define MAX_NUM_OUTPUT_BUFFERS   VIDEO_MAX_FRAME // same as VB2_MAX_FRAME
 #define MAX_SUPPORTED_INSTANCES  16
-#define MAX_BSE_VPP_DELAY        6
 #define DEFAULT_BSE_VPP_DELAY    2
 #define MAX_CAP_PARENTS          20
 #define MAX_CAP_CHILDREN         20
-#define DEFAULT_BITSTREM_ALIGNMENT  16
-#define H265_BITSTREM_ALIGNMENT     32
 #define DEFAULT_MAX_HOST_BUF_COUNT  64
 #define DEFAULT_MAX_HOST_BURST_BUF_COUNT 256
 #define BIT_DEPTH_8 (8 << 16 | 8)
 #define BIT_DEPTH_10 (10 << 16 | 10)
 #define CODED_FRAMES_PROGRESSIVE 0x0
 #define CODED_FRAMES_INTERLACE 0x1
+#define MAX_VP9D_INST_COUNT     6
 /* TODO: move below macros to waipio.c */
 #define MAX_ENH_LAYER_HB        3
 #define MAX_HEVC_ENH_LAYER_SLIDING_WINDOW     5
@@ -73,11 +60,7 @@
 #define DCVS_WINDOW 16
 #define ENC_FPS_WINDOW 3
 #define DEC_FPS_WINDOW 10
-/* Superframe can have maximum of 32 frames */
-#define VIDC_SUPERFRAME_MAX 32
-#define COLOR_RANGE_UNSPECIFIED (-1)
 
-#define V4L2_EVENT_VIDC_BASE  10
 #define INPUT_MPLANE V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
 #define OUTPUT_MPLANE V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
 #define INPUT_META_PLANE V4L2_BUF_TYPE_META_OUTPUT
@@ -101,6 +84,7 @@
 	V4L2_CTRL_DRIVER_PRIV(idx))
 
 #define BUFFER_ALIGNMENT_SIZE(x) x
+#define NUM_MBS_360P (((480 + 15) >> 4) * ((360 + 15) >> 4))
 #define NUM_MBS_720P (((1280 + 15) >> 4) * ((720 + 15) >> 4))
 #define NUM_MBS_4k (((4096 + 15) >> 4) * ((2304 + 15) >> 4))
 #define MB_SIZE_IN_PIXEL (16 * 16)
@@ -304,8 +288,13 @@ enum msm_vidc_core_capability_type {
 	ENC_CODECS,
 	DEC_CODECS,
 	MAX_SESSION_COUNT,
+	MAX_NUM_720P_SESSIONS,
+	MAX_NUM_1080P_SESSIONS,
+	MAX_NUM_4K_SESSIONS,
+	MAX_NUM_8K_SESSIONS,
 	MAX_SECURE_SESSION_COUNT,
 	MAX_LOAD,
+	MAX_RT_MBPF,
 	MAX_MBPF,
 	MAX_MBPS,
 	MAX_IMAGE_MBPF,
@@ -313,6 +302,7 @@ enum msm_vidc_core_capability_type {
 	MAX_MBPS_HQ,
 	MAX_MBPF_B_FRAME,
 	MAX_MBPS_B_FRAME,
+	MAX_MBPS_ALL_INTRA,
 	MAX_ENH_LAYER_COUNT,
 	NUM_VPP_PIPE,
 	SW_PC,
@@ -329,11 +319,12 @@ enum msm_vidc_core_capability_type {
 	DCVS,
 	DECODE_BATCH,
 	DECODE_BATCH_TIMEOUT,
-	STATS_TIMEOUT,
+	STATS_TIMEOUT_MS,
 	AV_SYNC_WINDOW_SIZE,
 	CLK_FREQ_THRESHOLD,
 	NON_FATAL_FAULTS,
 	ENC_AUTO_FRAMERATE,
+	MMRM,
 	CORE_CAP_MAX,
 };
 
@@ -364,6 +355,7 @@ enum msm_vidc_inst_capability_type {
 	MB_CYCLES_FW,
 	MB_CYCLES_FW_VPP,
 	SECURE_MODE,
+	TS_REORDER,
 	HFLIP,
 	VFLIP,
 	ROTATION,
@@ -454,6 +446,7 @@ enum msm_vidc_inst_capability_type {
 	PRIORITY,
 	ENC_IP_CR,
 	DPB_LIST,
+	ALL_INTRA,
 	META_LTR_MARK_USE,
 	META_DPB_MISR,
 	META_OPB_MISR,
@@ -548,6 +541,11 @@ enum msm_vidc_ssr_trigger_type {
 	SSR_ERR_FATAL = 1,
 	SSR_SW_DIV_BY_ZERO,
 	SSR_HW_WDOG_IRQ,
+};
+
+enum msm_vidc_stability_trigger_type {
+	STABILITY_VCODEC_HUNG = 1,
+	STABILITY_ENC_BUFFER_FULL,
 };
 
 enum msm_vidc_cache_op {
@@ -861,6 +859,12 @@ struct msm_vidc_ssr {
 	enum msm_vidc_ssr_trigger_type     ssr_type;
 	u32                                sub_client_id;
 	u32                                test_addr;
+};
+
+struct msm_vidc_stability {
+	enum msm_vidc_stability_trigger_type     stability_type;
+	u32                                      sub_client_id;
+	u32                                      value;
 };
 
 struct msm_vidc_sfr {

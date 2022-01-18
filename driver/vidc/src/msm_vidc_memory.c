@@ -16,6 +16,7 @@
 #include "msm_vidc_driver.h"
 #include "msm_vidc_dt.h"
 #include "msm_vidc_core.h"
+#include "msm_vidc_events.h"
 
 struct msm_vidc_buf_region_name {
 	enum msm_vidc_buffer_region region;
@@ -388,6 +389,9 @@ int msm_vidc_memory_alloc(struct msm_vidc_core *core, struct msm_vidc_alloc *mem
 		"%s: dmabuf %pK, size %d, kvaddr %pK, buffer_type %s, secure %d, region %d\n",
 		__func__, mem->dmabuf, mem->size, mem->kvaddr, buf_name(mem->type),
 		mem->secure, mem->region);
+	trace_msm_vidc_dma_buffer("ALLOC", mem->dmabuf, mem->size, mem->kvaddr,
+		buf_name(mem->type), mem->secure, mem->region);
+
 	return 0;
 
 error:
@@ -408,6 +412,9 @@ int msm_vidc_memory_free(struct msm_vidc_core *core, struct msm_vidc_alloc *mem)
 		"%s: dmabuf %pK, size %d, kvaddr %pK, buffer_type %s, secure %d, region %d\n",
 		__func__, mem->dmabuf, mem->size, mem->kvaddr, buf_name(mem->type),
 		mem->secure, mem->region);
+
+	trace_msm_vidc_dma_buffer("FREE", mem->dmabuf, mem->size, mem->kvaddr,
+		buf_name(mem->type), mem->secure, mem->region);
 
 	if (mem->kvaddr) {
 		dma_buf_vunmap(mem->dmabuf, mem->kvaddr);
@@ -579,7 +586,7 @@ int msm_memory_pools_init(struct msm_vidc_inst *inst)
 	}
 
 	if (ARRAY_SIZE(buftype_size_name_arr) != MSM_MEM_POOL_MAX) {
-		i_vpr_e(inst, "%s: num elements mismatch %u %u\n", __func__,
+		i_vpr_e(inst, "%s: num elements mismatch %lu %u\n", __func__,
 			ARRAY_SIZE(buftype_size_name_arr), MSM_MEM_POOL_MAX);
 		return -EINVAL;
 	}

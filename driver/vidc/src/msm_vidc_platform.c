@@ -9,8 +9,16 @@
 #include "msm_vidc_v4l2.h"
 #include "msm_vidc_vb2.h"
 #include "msm_vidc_control.h"
+#include "msm_vidc_core.h"
+#if defined(CONFIG_MSM_VIDC_WAIPIO)
 #include "msm_vidc_waipio.h"
+#endif
+#if defined(CONFIG_MSM_VIDC_DIWALI)
+#include "msm_vidc_diwali.h"
+#endif
+#if defined(CONFIG_MSM_VIDC_IRIS2)
 #include "msm_vidc_iris2.h"
+#endif
 
 static struct v4l2_file_operations msm_v4l2_file_operations = {
 	.owner                          = THIS_MODULE,
@@ -20,7 +28,45 @@ static struct v4l2_file_operations msm_v4l2_file_operations = {
 	.poll                           = msm_v4l2_poll,
 };
 
-static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
+static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_enc = {
+	.vidioc_querycap                = msm_v4l2_querycap,
+	.vidioc_enum_fmt_vid_cap        = msm_v4l2_enum_fmt,
+	.vidioc_enum_fmt_vid_out        = msm_v4l2_enum_fmt,
+	.vidioc_enum_framesizes         = msm_v4l2_enum_framesizes,
+	.vidioc_enum_frameintervals     = msm_v4l2_enum_frameintervals,
+	.vidioc_try_fmt_vid_cap_mplane  = msm_v4l2_try_fmt,
+	.vidioc_try_fmt_vid_out_mplane  = msm_v4l2_try_fmt,
+	.vidioc_s_fmt_vid_cap           = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_vid_out           = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_vid_cap_mplane    = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_vid_out_mplane    = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_meta_out          = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_meta_cap          = msm_v4l2_s_fmt,
+	.vidioc_g_fmt_vid_cap           = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_vid_out           = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_vid_cap_mplane    = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_vid_out_mplane    = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_meta_out          = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_meta_cap          = msm_v4l2_g_fmt,
+	.vidioc_g_selection             = msm_v4l2_g_selection,
+	.vidioc_s_selection             = msm_v4l2_s_selection,
+	.vidioc_s_parm                  = msm_v4l2_s_parm,
+	.vidioc_g_parm                  = msm_v4l2_g_parm,
+	.vidioc_reqbufs                 = msm_v4l2_reqbufs,
+	.vidioc_qbuf                    = msm_v4l2_qbuf,
+	.vidioc_dqbuf                   = msm_v4l2_dqbuf,
+	.vidioc_streamon                = msm_v4l2_streamon,
+	.vidioc_streamoff               = msm_v4l2_streamoff,
+	.vidioc_s_ctrl                  = msm_v4l2_s_ctrl,
+	.vidioc_g_ctrl                  = msm_v4l2_g_ctrl,
+	.vidioc_queryctrl               = msm_v4l2_queryctrl,
+	.vidioc_querymenu               = msm_v4l2_querymenu,
+	.vidioc_subscribe_event         = msm_v4l2_subscribe_event,
+	.vidioc_unsubscribe_event       = msm_v4l2_unsubscribe_event,
+	.vidioc_encoder_cmd             = msm_v4l2_encoder_cmd,
+};
+
+static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_dec = {
 	.vidioc_querycap                = msm_v4l2_querycap,
 	.vidioc_enum_fmt_vid_cap        = msm_v4l2_enum_fmt,
 	.vidioc_enum_fmt_vid_out        = msm_v4l2_enum_fmt,
@@ -56,7 +102,6 @@ static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_subscribe_event         = msm_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event       = msm_v4l2_unsubscribe_event,
 	.vidioc_decoder_cmd             = msm_v4l2_decoder_cmd,
-	.vidioc_encoder_cmd             = msm_v4l2_encoder_cmd,
 };
 
 static struct v4l2_ctrl_ops msm_v4l2_ctrl_ops = {
@@ -89,7 +134,8 @@ static int msm_vidc_init_ops(struct msm_vidc_core *core)
 
 	d_vpr_h("%s: initialize ops\n", __func__);
 	core->v4l2_file_ops = &msm_v4l2_file_operations;
-	core->v4l2_ioctl_ops = &msm_v4l2_ioctl_ops;
+	core->v4l2_ioctl_ops_enc = &msm_v4l2_ioctl_ops_enc;
+	core->v4l2_ioctl_ops_dec = &msm_v4l2_ioctl_ops_dec;
 	core->v4l2_ctrl_ops = &msm_v4l2_ctrl_ops;
 	core->vb2_ops = &msm_vb2_ops;
 	core->vb2_mem_ops = &msm_vb2_mem_ops;
@@ -99,7 +145,7 @@ static int msm_vidc_init_ops(struct msm_vidc_core *core)
 
 static int msm_vidc_deinit_platform_variant(struct msm_vidc_core *core, struct device *dev)
 {
-	int rc = 0;
+	int rc = -EINVAL;
 
 	if (!core || !dev) {
 		d_vpr_e("%s: Invalid params\n", __func__);
@@ -108,22 +154,31 @@ static int msm_vidc_deinit_platform_variant(struct msm_vidc_core *core, struct d
 
 	d_vpr_h("%s()\n", __func__);
 
+#if defined(CONFIG_MSM_VIDC_WAIPIO)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-waipio")) {
 		rc = msm_vidc_deinit_platform_waipio(core, dev);
-	} else {
-		d_vpr_e("%s(): unknown platform\n", __func__);
-		rc = -EINVAL;
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-waipio with %d\n",
+				__func__, rc);
+		return rc;
 	}
-
-	if (rc)
-		d_vpr_e("%s: failed with %d\n", __func__, rc);
+#endif
+#if defined(CONFIG_MSM_VIDC_DIWALI)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-diwali")) {
+		rc = msm_vidc_deinit_platform_diwali(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-diwali with %d\n",
+				__func__, rc);
+		return rc;
+	}
+#endif
 
 	return rc;
 }
 
 static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct device *dev)
 {
-	int rc = 0;
+	int rc = -EINVAL;
 
 	if (!core || !dev) {
 		d_vpr_e("%s: Invalid params\n", __func__);
@@ -132,22 +187,31 @@ static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct dev
 
 	d_vpr_h("%s()\n", __func__);
 
+#if defined(CONFIG_MSM_VIDC_WAIPIO)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-waipio")) {
 		rc = msm_vidc_init_platform_waipio(core, dev);
-	} else {
-		d_vpr_e("%s(): unknown platform\n", __func__);
-		rc = -EINVAL;
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-waipio with %d\n",
+				__func__, rc);
+		return rc;
 	}
-
-	if (rc)
-		d_vpr_e("%s: failed with %d\n", __func__, rc);
+#endif
+#if defined(CONFIG_MSM_VIDC_DIWALI)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-diwali")) {
+		rc = msm_vidc_init_platform_diwali(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-diwali with %d\n",
+				__func__, rc);
+		return rc;
+	}
+#endif
 
 	return rc;
 }
 
 static int msm_vidc_deinit_vpu(struct msm_vidc_core *core, struct device *dev)
 {
-	int rc = 0;
+	int rc = -EINVAL;
 
 	if (!core || !dev) {
 		d_vpr_e("%s: Invalid params\n", __func__);
@@ -156,40 +220,34 @@ static int msm_vidc_deinit_vpu(struct msm_vidc_core *core, struct device *dev)
 
 	d_vpr_h("%s()\n", __func__);
 
+#if defined(CONFIG_MSM_VIDC_IRIS2)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-iris2")) {
 		rc = msm_vidc_deinit_iris2(core);
-	} else {
-		d_vpr_e("%s(): unknown vpu\n", __func__);
-		rc = -EINVAL;
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-iris2 with %d\n",
+				__func__, rc);
 	}
-
-	if (rc)
-		d_vpr_e("%s: failed with %d\n", __func__, rc);
-
+#endif
 	return rc;
 }
 
 static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 {
-	int rc = 0;
+	int rc = -EINVAL;
 
 	if (!core || !dev) {
 		d_vpr_e("%s: Invalid params\n", __func__);
 		return -EINVAL;
 	}
 
-	d_vpr_h("%s()\n", __func__);
-
+#if defined(CONFIG_MSM_VIDC_IRIS2)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-iris2")) {
 		rc = msm_vidc_init_iris2(core);
-	} else {
-		d_vpr_e("%s(): unknown vpu\n", __func__);
-		rc = -EINVAL;
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-iris2 with %d\n",
+				__func__, rc);
 	}
-
-	if (rc)
-		d_vpr_e("%s: failed with %d\n", __func__, rc);
-
+#endif
 	return rc;
 }
 
@@ -205,7 +263,7 @@ int msm_vidc_deinit_platform(struct platform_device *pdev)
 	core = dev_get_drvdata(&pdev->dev);
 	if (!core) {
 		d_vpr_e("%s: core not found in device %s",
-			dev_name(&pdev->dev));
+			__func__, dev_name(&pdev->dev));
 		return -EINVAL;
 	}
 
@@ -234,7 +292,7 @@ int msm_vidc_init_platform(struct platform_device *pdev)
 	core = dev_get_drvdata(&pdev->dev);
 	if (!core) {
 		d_vpr_e("%s: core not found in device %s",
-			dev_name(&pdev->dev));
+			__func__, dev_name(&pdev->dev));
 		return -EINVAL;
 	}
 

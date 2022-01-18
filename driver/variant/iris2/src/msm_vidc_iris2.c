@@ -192,8 +192,9 @@ static int __disable_unprepare_clock_iris2(struct msm_vidc_core *core,
 		if (strcmp(cl->name, clk_name))
 			continue;
 		found = true;
-
 		clk_disable_unprepare(cl->clk);
+		if (cl->has_scaling)
+			__set_clk_rate(core, cl, 0);
 		cl->prev = 0;
 		d_vpr_h("%s: clock %s disable unprepared\n", __func__, cl->name);
 		break;
@@ -212,6 +213,7 @@ static int __prepare_enable_clock_iris2(struct msm_vidc_core *core,
 	int rc = 0;
 	struct clock_info *cl;
 	bool found;
+	u64 rate = 0;
 
 	if (!core || !clk_name) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -232,8 +234,16 @@ static int __prepare_enable_clock_iris2(struct msm_vidc_core *core,
 		 * them.  Since we don't really have a load at this point, scale
 		 * it to the lowest frequency possible
 		 */
-		if (cl->has_scaling)
-			__set_clk_rate(core, cl, clk_round_rate(cl->clk, 0));
+		if (cl->has_scaling) {
+			rate = clk_round_rate(cl->clk, 0);
+			/**
+			 * source clock is already multipled with scaling ratio and __set_clk_rate
+			 * attempts to multiply again. So divide scaling ratio before calling
+			 * __set_clk_rate.
+			 */
+			rate = rate / MSM_VIDC_CLOCK_SOURCE_SCALING_RATIO;
+			__set_clk_rate(core, cl, rate);
+		}
 
 		rc = clk_prepare_enable(cl->clk);
 		if (rc) {
@@ -245,6 +255,8 @@ static int __prepare_enable_clock_iris2(struct msm_vidc_core *core,
 			d_vpr_e("%s: clock %s not enabled\n",
 				__func__, cl->name);
 			clk_disable_unprepare(cl->clk);
+			if (cl->has_scaling)
+				__set_clk_rate(core, cl, 0);
 			return -EINVAL;
 		}
 		d_vpr_h("%s: clock %s prepare enabled\n", __func__, cl->name);
@@ -284,7 +296,7 @@ static int __disable_regulator_iris2(struct msm_vidc_core *core,
 		rc = __acquire_regulator(core, rinfo);
 		if (rc) {
 			d_vpr_e("%s: failed to acquire %s, rc = %d\n",
-				rinfo->name, rc);
+				__func__, rinfo->name, rc);
 			/* Bring attention to this issue */
 			WARN_ON(true);
 			return rc;
@@ -294,7 +306,7 @@ static int __disable_regulator_iris2(struct msm_vidc_core *core,
 		rc = regulator_disable(rinfo->regulator);
 		if (rc) {
 			d_vpr_e("%s: failed to disable %s, rc = %d\n",
-				rinfo->name, rc);
+				__func__, rinfo->name, rc);
 			return rc;
 		}
 		d_vpr_h("%s: disabled regulator %s\n", __func__, rinfo->name);
@@ -366,7 +378,9 @@ static int __interrupt_init_iris2(struct msm_vidc_core *vidc_core)
 	}
 
 	/* All interrupts should be disabled initially 0x1F6 : Reset value */
-	mask_val = __read_register(core, WRAPPER_INTR_MASK_IRIS2);
+	rc = __read_register(core, WRAPPER_INTR_MASK_IRIS2, &mask_val);
+	if (rc)
+		return rc;
 
 	/* Write 0 to unmask CPU and WD interrupts */
 	mask_val &= ~(WRAPPER_INTR_MASK_A2HWD_BMSK_IRIS2|
@@ -443,10 +457,12 @@ static int __power_off_iris2_hardware(struct msm_vidc_core *core)
 	 * check to make sure core clock branch enabled else
 	 * we cannot read vcodec top idle register
 	 */
-	value = __read_register(core, WRAPPER_CORE_CLOCK_CONFIG_IRIS2);
+	rc = __read_register(core, WRAPPER_CORE_CLOCK_CONFIG_IRIS2, &value);
+	if (rc)
+		return rc;
+
 	if (value) {
-		d_vpr_h(
-			"%s: core clock config not enabled, enabling it to read vcodec registers\n",
+		d_vpr_h("%s: core clock config not enabled, enabling it to read vcodec registers\n",
 			__func__);
 		rc = __write_register(core, WRAPPER_CORE_CLOCK_CONFIG_IRIS2, 0);
 		if (rc)
@@ -558,10 +574,10 @@ static int __power_off_iris2_controller(struct msm_vidc_core *core)
 	if (rc)
 		d_vpr_h("%s: debug bridge release failed\n", __func__);
 
-	/* power down process */
-	rc = __disable_regulator_iris2(core, "iris-ctl");
+	/* Turn off MVP MVS0C core clock */
+	rc = __disable_unprepare_clock_iris2(core, "core_clk");
 	if (rc) {
-		d_vpr_e("%s: disable regulator iris-ctl failed\n", __func__);
+		d_vpr_e("%s: disable unprepare core_clk failed\n", __func__);
 		rc = 0;
 	}
 
@@ -572,10 +588,16 @@ static int __power_off_iris2_controller(struct msm_vidc_core *core)
 		rc = 0;
 	}
 
-	/* Turn off MVP MVS0C core clock */
-	rc = __disable_unprepare_clock_iris2(core, "core_clk");
+	rc = call_venus_op(core, reset_ahb2axi_bridge, core);
 	if (rc) {
-		d_vpr_e("%s: disable unprepare core_clk failed\n", __func__);
+		d_vpr_e("%s: reset ahb2axi bridge failed\n", __func__);
+		rc = 0;
+	}
+
+	/* power down process */
+	rc = __disable_regulator_iris2(core, "iris-ctl");
+	if (rc) {
+		d_vpr_e("%s: disable regulator iris-ctl failed\n", __func__);
 		rc = 0;
 	}
 
@@ -593,6 +615,14 @@ static int __power_off_iris2(struct msm_vidc_core *core)
 
 	if (!core->power_enabled)
 		return 0;
+
+	/**
+	 * Reset video_cc_mvs0_clk_src value to resolve MMRM high video
+	 * clock projection issue.
+	 */
+	rc = __set_clocks(core, 0);
+	if (rc)
+		d_vpr_e("%s: resetting clocks failed\n", __func__);
 
 	if (__power_off_iris2_hardware(core))
 		d_vpr_e("%s: failed to power off hardware\n", __func__);
@@ -729,7 +759,10 @@ static int __prepare_pc_iris2(struct msm_vidc_core *vidc_core)
 		return -EINVAL;
 	}
 
-	ctrl_status = __read_register(core, CTRL_STATUS_IRIS2);
+	rc = __read_register(core, CTRL_STATUS_IRIS2, &ctrl_status);
+	if (rc)
+		return rc;
+
 	pc_ready = ctrl_status & CTRL_STATUS_PC_READY_IRIS2;
 	idle_status = ctrl_status & BIT(30);
 
@@ -737,8 +770,11 @@ static int __prepare_pc_iris2(struct msm_vidc_core *vidc_core)
 		d_vpr_h("Already in pc_ready state\n");
 		return 0;
 	}
+	rc = __read_register(core, WRAPPER_TZ_CPU_STATUS, &wfi_status);
+	if (rc)
+		return rc;
 
-	wfi_status = BIT(0) & __read_register(core, WRAPPER_TZ_CPU_STATUS);
+	wfi_status &= BIT(0);
 	if (!wfi_status || !idle_status) {
 		d_vpr_e("Skipping PC, wfi status not set\n");
 		goto skip_power_off;
@@ -766,9 +802,13 @@ static int __prepare_pc_iris2(struct msm_vidc_core *vidc_core)
 	return rc;
 
 skip_power_off:
-	wfi_status = BIT(0) & __read_register(core, WRAPPER_TZ_CPU_STATUS);
-	ctrl_status = __read_register(core, CTRL_STATUS_IRIS2);
-
+	rc = __read_register(core, CTRL_STATUS_IRIS2, &ctrl_status);
+	if (rc)
+		return rc;
+	rc = __read_register(core, WRAPPER_TZ_CPU_STATUS, &wfi_status);
+	if (rc)
+		return rc;
+	wfi_status &= BIT(0);
 	d_vpr_e("Skip PC, wfi=%#x, idle=%#x, pcr=%#x, ctrl=%#x)\n",
 		wfi_status, idle_status, pc_ready, ctrl_status);
 	return -EAGAIN;
@@ -868,7 +908,10 @@ static int __clear_interrupt_iris2(struct msm_vidc_core *vidc_core)
 		return 0;
 	}
 
-	intr_status = __read_register(core, WRAPPER_INTR_STATUS_IRIS2);
+	rc = __read_register(core, WRAPPER_INTR_STATUS_IRIS2, &intr_status);
+	if (rc)
+		return rc;
+
 	mask = (WRAPPER_INTR_STATUS_A2H_BMSK_IRIS2|
 		WRAPPER_INTR_STATUS_A2HWD_BMSK_IRIS2|
 		CTRL_INIT_IDLE_MSG_BMSK_IRIS2);
@@ -907,7 +950,10 @@ static int __boot_firmware_iris2(struct msm_vidc_core *vidc_core)
 		return rc;
 
 	while (!ctrl_status && count < max_tries) {
-		ctrl_status = __read_register(core, CTRL_STATUS_IRIS2);
+		rc = __read_register(core, CTRL_STATUS_IRIS2, &ctrl_status);
+		if (rc)
+			return rc;
+
 		if ((ctrl_status & CTRL_ERROR_STATUS__M_IRIS2) == 0x4) {
 			d_vpr_e("invalid setting for UC_REGION\n");
 			break;
@@ -1013,12 +1059,8 @@ int msm_vidc_decide_work_route_iris2(struct msm_vidc_inst* inst)
 				CODED_FRAMES_INTERLACE)
 			work_route = MSM_VIDC_PIPE_1;
 	} else if (is_encode_session(inst)) {
-		u32 slice_mode, width, height;
-		struct v4l2_format* f;
+		u32 slice_mode;
 
-		f = &inst->fmts[INPUT_PORT];
-		height = f->fmt.pix_mp.height;
-		width = f->fmt.pix_mp.width;
 		slice_mode = inst->capabilities->cap[SLICE_MODE].value;
 
 		/*TODO Pipe=1 for legacy CBR*/

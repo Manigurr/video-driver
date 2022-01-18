@@ -259,7 +259,7 @@ static bool check_for_packet_payload(struct msm_vidc_inst *inst,
 	u32 payload_size = 0;
 
 	if (!inst || !pkt) {
-		d_vpr_e("%s: invalid params %d\n", __func__);
+		d_vpr_e("%s: invalid params\n", __func__);
 		return false;
 	}
 
@@ -307,7 +307,7 @@ static bool check_last_flag(struct msm_vidc_inst *inst,
 	struct hfi_buffer *buffer;
 
 	if (!inst || !pkt) {
-		d_vpr_e("%s: invalid params %d\n", __func__);
+		d_vpr_e("%s: invalid params\n", __func__);
 		return false;
 	}
 
@@ -742,12 +742,24 @@ static int handle_input_buffer(struct msm_vidc_inst *inst,
 		}
 	}
 
+	if (!(buf->attr & MSM_VIDC_ATTR_QUEUED)) {
+		print_vidc_buffer(VIDC_ERR, "err ", "not queued", inst, buf);
+		return 0;
+	}
+
 	buf->data_size = buffer->data_size;
 	buf->attr &= ~MSM_VIDC_ATTR_QUEUED;
 	buf->attr |= MSM_VIDC_ATTR_DEQUEUED;
 
 	buf->flags = 0;
 	buf->flags = get_driver_buffer_flags(inst, buffer->flags);
+
+	/* handle ts_reorder for no_output prop attached input buffer */
+	if (is_ts_reorder_allowed(inst) && inst->hfi_frame_info.no_output) {
+		i_vpr_h(inst, "%s: received no_output buffer. remove timestamp %lld\n",
+			__func__, buf->timestamp);
+		msm_vidc_ts_reorder_remove_timestamp(inst, buf->timestamp);
+	}
 
 	print_vidc_buffer(VIDC_HIGH, "high", "dqbuf", inst, buf);
 	msm_vidc_update_stats(inst, buf, MSM_VIDC_DEBUGFS_EVENT_EBD);
@@ -793,6 +805,11 @@ static int handle_output_buffer(struct msm_vidc_inst *inst,
 	}
 	if (!found)
 		return 0;
+
+	if (!(buf->attr & MSM_VIDC_ATTR_QUEUED)) {
+		print_vidc_buffer(VIDC_ERR, "err ", "not queued", inst, buf);
+		return 0;
+	}
 
 	buf->data_offset = buffer->data_offset;
 	buf->data_size = buffer->data_size;
@@ -875,6 +892,10 @@ static int handle_output_buffer(struct msm_vidc_inst *inst,
 	if (!is_image_session(inst) && is_decode_session(inst) && buf->data_size)
 		msm_vidc_update_timestamp(inst, buf->timestamp);
 
+	/* update output buffer timestamp, if ts_reorder is enabled */
+	if (is_ts_reorder_allowed(inst) && buf->data_size)
+		msm_vidc_ts_reorder_get_first_timestamp(inst, &buf->timestamp);
+
 	print_vidc_buffer(VIDC_HIGH, "high", "dqbuf", inst, buf);
 	msm_vidc_update_stats(inst, buf, MSM_VIDC_DEBUGFS_EVENT_FBD);
 
@@ -928,6 +949,12 @@ static int handle_input_metadata_buffer(struct msm_vidc_inst *inst,
 			return 0;
 		}
 	}
+
+	if (!(buf->attr & MSM_VIDC_ATTR_QUEUED)) {
+		print_vidc_buffer(VIDC_ERR, "err ", "not queued", inst, buf);
+		return 0;
+	}
+
 	buf->data_size = buffer->data_size;
 	buf->attr &= ~MSM_VIDC_ATTR_QUEUED;
 	buf->attr |= MSM_VIDC_ATTR_DEQUEUED;
@@ -963,6 +990,11 @@ static int handle_output_metadata_buffer(struct msm_vidc_inst *inst,
 			__func__, buffer->index, buffer->base_address,
 			buffer->data_offset);
 		return -EINVAL;
+	}
+
+	if (!(buf->attr & MSM_VIDC_ATTR_QUEUED)) {
+		print_vidc_buffer(VIDC_ERR, "err ", "not queued", inst, buf);
+		return 0;
 	}
 
 	buf->data_size = buffer->data_size;
@@ -1232,6 +1264,14 @@ static int handle_session_resume(struct msm_vidc_inst *inst,
 	return 0;
 }
 
+static int handle_session_stability(struct msm_vidc_inst *inst,
+	struct hfi_packet *pkt)
+{
+	if (pkt->flags & HFI_FW_FLAGS_SUCCESS)
+		i_vpr_h(inst, "%s: successful\n", __func__);
+	return 0;
+}
+
 static int handle_session_command(struct msm_vidc_inst *inst,
 	struct hfi_packet *pkt)
 {
@@ -1247,6 +1287,7 @@ static int handle_session_command(struct msm_vidc_inst *inst,
 		{HFI_CMD_SUBSCRIBE_MODE,    handle_session_subscribe_mode     },
 		{HFI_CMD_DELIVERY_MODE,     handle_session_delivery_mode      },
 		{HFI_CMD_RESUME,            handle_session_resume             },
+		{HFI_CMD_STABILITY,         handle_session_stability          },
 	};
 
 	/* handle session pkt */
@@ -1411,20 +1452,23 @@ static int handle_session_property(struct msm_vidc_inst *inst,
 		}
 		break;
 	case HFI_PROP_QUALITY_MODE:
-		if (inst->capabilities->cap[QUALITY_MODE].value !=  payload_ptr[0])
+		if (payload_ptr &&
+			inst->capabilities->cap[QUALITY_MODE].value !=  payload_ptr[0])
 			i_vpr_e(inst,
 				"%s: fw quality mode(%d) not matching the capability value(%d)\n",
 				__func__,  payload_ptr[0],
 				inst->capabilities->cap[QUALITY_MODE].value);
 		break;
 	case HFI_PROP_STAGE:
-		if (inst->capabilities->cap[STAGE].value !=  payload_ptr[0])
+		if (payload_ptr &&
+			inst->capabilities->cap[STAGE].value !=  payload_ptr[0])
 			i_vpr_e(inst,
 				"%s: fw stage mode(%d) not matching the capability value(%d)\n",
 				__func__,  payload_ptr[0], inst->capabilities->cap[STAGE].value);
 		break;
 	case HFI_PROP_PIPE:
-		if (inst->capabilities->cap[PIPE].value !=  payload_ptr[0])
+		if (payload_ptr &&
+			inst->capabilities->cap[PIPE].value !=  payload_ptr[0])
 			i_vpr_e(inst,
 				"%s: fw pipe mode(%d) not matching the capability value(%d)\n",
 				__func__,  payload_ptr[0], inst->capabilities->cap[PIPE].value);
@@ -1713,6 +1757,17 @@ int cancel_response_work(struct msm_vidc_inst *inst)
 		kfree(work->data);
 		kfree(work);
 	}
+
+	return 0;
+}
+
+int cancel_response_work_sync(struct msm_vidc_inst *inst)
+{
+	if (!inst) {
+		d_vpr_e("%s: Invalid arguments\n", __func__);
+		return -EINVAL;
+	}
+	cancel_delayed_work_sync(&inst->response_work);
 
 	return 0;
 }

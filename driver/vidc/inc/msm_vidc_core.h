@@ -99,7 +99,8 @@ struct msm_vidc_core {
 	u32                                    packet_size;
 	u8                                    *response_packet;
 	struct v4l2_file_operations           *v4l2_file_ops;
-	struct v4l2_ioctl_ops                 *v4l2_ioctl_ops;
+	struct v4l2_ioctl_ops                 *v4l2_ioctl_ops_enc;
+	struct v4l2_ioctl_ops                 *v4l2_ioctl_ops_dec;
 	struct v4l2_ctrl_ops                  *v4l2_ctrl_ops;
 	struct vb2_ops                        *vb2_ops;
 	struct vb2_mem_ops                    *vb2_mem_ops;
@@ -111,6 +112,7 @@ struct msm_vidc_core {
 	struct completion                      init_done;
 	bool                                   handoff_done;
 	bool                                   hw_power_control;
+	bool                                   pm_suspended;
 };
 
 #endif // _MSM_VIDC_CORE_H_

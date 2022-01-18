@@ -42,8 +42,9 @@
 #define V4L2_XFER_FUNC_VIDC_ST428            208
 #define V4L2_XFER_FUNC_VIDC_HLG              209
 
-#define V4L2_YCBCR_VIDC_SRGB_OR_SMPTE_ST428  301
-#define V4L2_YCBCR_VIDC_FCC47_73_682         302
+/* should be 255 or below due to u8 limitation */
+#define V4L2_YCBCR_VIDC_SRGB_OR_SMPTE_ST428  241
+#define V4L2_YCBCR_VIDC_FCC47_73_682         242
 
 /* end of vidc specific colorspace definitions */
 #ifndef V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10_STILL_PICTURE
@@ -138,6 +139,8 @@ enum v4l2_mpeg_vidc_blur_types {
 /* Decoder Max Number of Reorder Frames */
 #define V4L2_CID_MPEG_VIDC_METADATA_MAX_NUM_REORDER_FRAMES                   \
 	(V4L2_CID_MPEG_VIDC_BASE + 0x30)
+/* Decoder Timestamp Reorder control */
+#define V4L2_CID_MPEG_VIDC_TS_REORDER           (V4L2_CID_MPEG_VIDC_BASE + 0x31)
 
 /* Deprecate below controls once availble in gki and gsi bionic header */
 #ifndef V4L2_CID_MPEG_VIDEO_BASELAYER_PRIORITY_ID

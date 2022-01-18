@@ -67,6 +67,12 @@ static inline is_output_meta_buffer(enum msm_vidc_buffer_type buffer_type)
 	return buffer_type == MSM_VIDC_BUF_OUTPUT_META;
 }
 
+static inline is_ts_reorder_allowed(struct msm_vidc_inst *inst)
+{
+	return !!(inst->capabilities->cap[TS_REORDER].value &&
+		is_decode_session(inst) && !is_image_session(inst));
+}
+
 static inline is_scaling_enabled(struct msm_vidc_inst *inst)
 {
 	return inst->crop.left != inst->compose.left ||
@@ -189,11 +195,6 @@ static inline bool is_rgba_colorformat(enum msm_vidc_colorformat_type colorforma
 		colorformat == MSM_VIDC_FMT_RGBA8888C;
 }
 
-static inline bool is_secondary_output_mode(struct msm_vidc_inst *inst)
-{
-	return false; // TODO: inst->stream_output_mode == HAL_VIDEO_DECODER_SECONDARY;
-}
-
 static inline bool is_thumbnail_session(struct msm_vidc_inst *inst)
 {
 	return !!(inst->capabilities->cap[THUMBNAIL_MODE].value);
@@ -282,6 +283,8 @@ const char *allow_name(enum msm_vidc_allow allow);
 const char *state_name(enum msm_vidc_inst_state state);
 int msm_vidc_change_inst_state(struct msm_vidc_inst *inst,
 	enum msm_vidc_inst_state request_state, const char *func);
+int msm_vidc_create_internal_buffer(struct msm_vidc_inst *inst,
+	enum msm_vidc_buffer_type buffer_type, u32 index);
 int msm_vidc_get_internal_buffers(struct msm_vidc_inst *inst,
 	enum msm_vidc_buffer_type buffer_type);
 int msm_vidc_create_internal_buffers(struct msm_vidc_inst *inst,
@@ -320,8 +323,12 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 		u64 trigger_ssr_val);
 void msm_vidc_ssr_handler(struct work_struct *work);
-void msm_vidc_pm_work_handler(struct work_struct *work);
+int msm_vidc_trigger_stability(struct msm_vidc_core *core,
+		u64 trigger_stability_val);
+void msm_vidc_stability_handler(struct work_struct *work);
+int cancel_stability_work_sync(struct msm_vidc_inst *inst);
 void msm_vidc_fw_unload_handler(struct work_struct *work);
+int msm_vidc_suspend(struct msm_vidc_core *core);
 void msm_vidc_batch_handler(struct work_struct *work);
 int msm_vidc_event_queue_init(struct msm_vidc_inst *inst);
 int msm_vidc_event_queue_deinit(struct msm_vidc_inst *inst);
@@ -353,7 +360,8 @@ void msm_vidc_update_stats(struct msm_vidc_inst *inst,
 	struct msm_vidc_buffer *buf, enum msm_vidc_debugfs_event etype);
 void msm_vidc_stats_handler(struct work_struct *work);
 int schedule_stats_work(struct msm_vidc_inst *inst);
-int cancel_stats_work(struct msm_vidc_inst *inst);
+int cancel_stats_work_sync(struct msm_vidc_inst *inst);
+void msm_vidc_print_stats(struct msm_vidc_inst *inst);
 enum msm_vidc_buffer_type v4l2_type_to_driver(u32 type,
 	const char *func);
 int msm_vidc_queue_buffer_single(struct msm_vidc_inst *inst,
@@ -418,15 +426,22 @@ void msm_vidc_allow_dcvs(struct msm_vidc_inst *inst);
 bool msm_vidc_allow_decode_batch(struct msm_vidc_inst *inst);
 int msm_vidc_check_session_supported(struct msm_vidc_inst *inst);
 int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst);
+int msm_vidc_check_core_mbpf(struct msm_vidc_inst *inst);
 int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst);
 int msm_vidc_update_timestamp(struct msm_vidc_inst *inst, u64 timestamp);
 int msm_vidc_set_auto_framerate(struct msm_vidc_inst *inst, u64 timestamp);
 int msm_vidc_calc_window_avg_framerate(struct msm_vidc_inst *inst);
 int msm_vidc_flush_ts(struct msm_vidc_inst *inst);
+int msm_vidc_ts_reorder_insert_timestamp(struct msm_vidc_inst *inst, u64 timestamp);
+int msm_vidc_ts_reorder_remove_timestamp(struct msm_vidc_inst *inst, u64 timestamp);
+int msm_vidc_ts_reorder_get_first_timestamp(struct msm_vidc_inst *inst, u64 *timestamp);
+int msm_vidc_ts_reorder_flush(struct msm_vidc_inst *inst);
 const char *buf_name(enum msm_vidc_buffer_type type);
 void msm_vidc_free_capabililty_list(struct msm_vidc_inst *inst,
 	enum msm_vidc_ctrl_list_type list_type);
 bool res_is_greater_than(u32 width, u32 height,
+	u32 ref_width, u32 ref_height);
+bool res_is_greater_than_or_equal_to(u32 width, u32 height,
 	u32 ref_width, u32 ref_height);
 bool res_is_less_than(u32 width, u32 height,
 	u32 ref_width, u32 ref_height);
