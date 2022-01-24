@@ -120,7 +120,8 @@ static const struct msm_vidc_cap_name cap_name_arr[] = {
 	{USE_LTR,                        "USE_LTR"                    },
 	{MARK_LTR,                       "MARK_LTR"                   },
 	{BASELAYER_PRIORITY,             "BASELAYER_PRIORITY"         },
-	{IR_RANDOM,                      "IR_RANDOM"                  },
+	{IR_PERIOD,                      "IR_PERIOD"                  },
+	{IR_TYPE,                        "IR_TYPE"                    },
 	{AU_DELIMITER,                   "AU_DELIMITER"               },
 	{TIME_DELTA_BASED_RC,            "TIME_DELTA_BASED_RC"        },
 	{CONTENT_ADAPTIVE_CODING,        "CONTENT_ADAPTIVE_CODING"    },
@@ -1499,6 +1500,7 @@ bool msm_vidc_allow_s_ctrl(struct msm_vidc_inst *inst, u32 id)
 			case V4L2_CID_MPEG_VIDC_ENC_INPUT_COMPRESSION_RATIO:
 			case V4L2_CID_MPEG_VIDEO_BITRATE_PEAK:
 			case V4L2_CID_MPEG_VIDC_PRIORITY:
+			case V4L2_CID_MPEG_VIDC_INTRA_REFRESH_PERIOD:
 				allow = true;
 				break;
 			default:
