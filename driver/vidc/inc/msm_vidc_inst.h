@@ -163,5 +163,6 @@ struct msm_vidc_inst {
 	u32                                max_map_output_count;
 	u32                                auto_framerate;
 	bool                               has_bframe;
+	bool                               ir_enabled;
 };
 #endif // _MSM_VIDC_INST_H_

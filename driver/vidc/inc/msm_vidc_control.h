@@ -23,7 +23,7 @@ int msm_vidc_adjust_profile(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_ltr_count(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_use_ltr(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_mark_ltr(void *instance, struct v4l2_ctrl *ctrl);
-int msm_vidc_adjust_ir_random(void *instance, struct v4l2_ctrl *ctrl);
+int msm_vidc_adjust_ir_period(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_delta_based_rc(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_transform_8x8(void *instance, struct v4l2_ctrl *ctrl);
 int msm_vidc_adjust_chroma_qp_index_offset(void *instance,
@@ -105,6 +105,8 @@ int msm_vidc_set_csc_custom_matrix(void *instance,
 	enum msm_vidc_inst_capability_type cap_id);
 int msm_vidc_set_session_priority(void* instance,
 	enum msm_vidc_inst_capability_type cap_id);
+int msm_vidc_set_ir_period(void *instance,
+	enum msm_vidc_inst_capability_type cap_id);
 int msm_vidc_set_level(void *instance,
 	enum msm_vidc_inst_capability_type cap_id);
 int msm_vidc_set_s32(void *instance,
@@ -119,6 +121,8 @@ int msm_vidc_v4l2_to_hfi_enum(struct msm_vidc_inst *inst,
 int msm_vidc_update_cap_value(struct msm_vidc_inst *inst, u32 cap,
 	s32 adjusted_val, const char *func);
 int msm_vidc_set_vui_timing_info(void *instance,
+	enum msm_vidc_inst_capability_type cap_id);
+u32 msm_vidc_get_port_info(struct msm_vidc_inst *inst,
 	enum msm_vidc_inst_capability_type cap_id);
 
 #endif
