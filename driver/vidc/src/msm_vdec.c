@@ -1095,9 +1095,11 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 	struct msm_vidc_inst_capability *capability;
 	static const u32 metadata_input_list[] = {
 		META_BUF_TAG,
+		META_IN_OUT_PAIR_BUFFER_ID,
 	};
 	static const u32 metadata_output_list[] = {
 		META_OUTPUT_BUF_TAG,
+		META_IN_OUT_PAIR_BUFFER_ID,
 	};
 
 	if (!inst || !inst->capabilities) {

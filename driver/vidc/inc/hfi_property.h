@@ -495,6 +495,8 @@ enum hfi_nal_length_field_type {
 
 #define HFI_PROP_SYNX_HANDLES                                   0x03000188
 
+#define HFI_PROP_IN_OUT_PAIR_BUFID                              0x03000185
+
 #define HFI_PROP_END                                            0x03FFFFFF
 
 #define HFI_SESSION_ERROR_BEGIN                                 0x04000000
