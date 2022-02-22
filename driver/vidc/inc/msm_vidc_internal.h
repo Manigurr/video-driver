@@ -621,9 +621,11 @@ struct hfi_queue_header {
 	u32 qhdr_write_idx;
 };
 
+/* VIDC_IFACEQ_TABLE_SIZE (456) = 288 + 56 * 3 */
 #define VIDC_IFACEQ_TABLE_SIZE (sizeof(struct hfi_queue_table_header) \
 	+ sizeof(struct hfi_queue_header) * VIDC_IFACEQ_NUMQ)
 
+/* VIDC_IFACEQ_QUEUE_SIZE (819200) = 1024 * 50 * 16 */
 #define VIDC_IFACEQ_QUEUE_SIZE	(VIDC_IFACEQ_MAX_PKT_SIZE *  \
 	VIDC_IFACEQ_MAX_BUF_COUNT * VIDC_IFACE_MAX_PARALLEL_CLNTS)
 
@@ -634,15 +636,19 @@ struct hfi_queue_header {
 #define QDSS_SIZE 4096
 #define SFR_SIZE 4096
 
+/* QUEUE_SIZE (2458056) = 456 + (819200 * 3) */
 #define QUEUE_SIZE (VIDC_IFACEQ_TABLE_SIZE + \
 	(VIDC_IFACEQ_QUEUE_SIZE * VIDC_IFACEQ_NUMQ))
 
 #define ALIGNED_QDSS_SIZE ALIGN(QDSS_SIZE, SZ_4K)
 #define ALIGNED_SFR_SIZE ALIGN(SFR_SIZE, SZ_4K)
-#define ALIGNED_QUEUE_SIZE ALIGN(QUEUE_SIZE, SZ_4K)
-#define SHARED_QSIZE ALIGN(ALIGNED_SFR_SIZE + ALIGNED_QUEUE_SIZE + \
-			ALIGNED_QDSS_SIZE, SZ_1M)
-#define TOTAL_QSIZE (SHARED_QSIZE - ALIGNED_SFR_SIZE - ALIGNED_QDSS_SIZE)
+#define ALIGNED_QUEUE_SIZE ALIGN(QUEUE_SIZE, SZ_1M)
+
+/*
+ * ALIGNED_QUEUE_SIZE is 3MB (> 2^21) but due to alignment requirement
+ * mapped memory size will be next power of 2 i.e 2^22 = 4MB
+ */
+#define MAPPED_QUEUE_SIZE 0x400000
 
 struct profile_data {
 	u64                    start;
@@ -787,6 +793,8 @@ struct msm_vidc_map {
 	struct sg_table            *table;
 	struct dma_buf_attachment  *attach;
 	u32                         skip_delayed_unmap:1;
+	u32                         size;
+	phys_addr_t                 phys_addr;
 };
 
 struct msm_vidc_mappings {

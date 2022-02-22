@@ -215,6 +215,7 @@ struct msm_vidc_dt {
 	struct mutex cb_lock;
 	const char *fw_name;
 	int fw_cookie;
+	struct addr_range *uc_region;
 };
 
 int msm_vidc_init_dt(struct platform_device *pdev);

@@ -400,7 +400,7 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	u32 value;
 	int rc = 0;
 
-	if (!core) {
+	if (!core || !core->dt || !core->dt->uc_region) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
@@ -410,7 +410,7 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	if (rc)
 		return rc;
 
-	value = SHARED_QSIZE;
+	value = core->dt->uc_region->size;
 	rc = __write_register(core, UC_REGION_SIZE_IRIS2, value);
 	if (rc)
 		return rc;

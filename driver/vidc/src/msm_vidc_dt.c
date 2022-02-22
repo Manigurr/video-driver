@@ -663,6 +663,30 @@ static int msm_vidc_load_reset_table(struct msm_vidc_core *core)
 	return 0;
 }
 
+static int msm_vidc_load_uc_region_mapping(struct msm_vidc_core *core)
+{
+	int rc = 0;
+	struct platform_device *pdev = core->pdev;
+	struct msm_vidc_dt *dt = core->dt;
+
+	/* uncached region */
+	dt->uc_region = devm_kzalloc(&pdev->dev, sizeof(struct addr_range), GFP_KERNEL);
+	if (!dt->uc_region) {
+		d_vpr_e("Failed to allocate memory for uc_region\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "uncached-region",
+		(u32 *)dt->uc_region, (sizeof(struct addr_range)/sizeof(u32)));
+	if (rc) {
+		d_vpr_e("Failed to read uncached-region mapping: %d\n", rc);
+		return rc;
+	}
+	d_vpr_h("uc_region start 0x%x size 0x%x\n",
+		dt->uc_region->start, dt->uc_region->size);
+
+	return rc;
+}
+
 static int msm_vidc_read_resources_from_dt(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -749,6 +773,12 @@ static int msm_vidc_read_resources_from_dt(struct platform_device *pdev)
 	rc = msm_vidc_load_reset_table(core);
 	if (rc) {
 		d_vpr_e("Failed to load reset table: %d\n", rc);
+		goto err_load_reset_table;
+	}
+
+	rc = msm_vidc_load_uc_region_mapping(core);
+	if (rc) {
+		d_vpr_e("Failed to load uc_region mapping: %d\n", rc);
 		goto err_load_reset_table;
 	}
 

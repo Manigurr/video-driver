@@ -2148,7 +2148,11 @@ static int __resume(struct msm_vidc_core *core)
 	 */
 	__hand_off_regulators(core);
 
-	call_venus_op(core, setup_ucregion_memmap, core);
+	rc = call_venus_op(core, setup_ucregion_memmap, core);
+	if (rc) {
+		d_vpr_e("Failed to setup ucregion\n");
+		goto err_reset_core;
+	}
 
 	/* Wait for boot completion */
 	rc = call_venus_op(core, boot_firmware, core);
@@ -2210,9 +2214,9 @@ static void __interface_queues_deinit(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
-	msm_vidc_memory_unmap(core, &core->iface_q_table.map);
+	msm_vidc_iommu_unmap(core, &core->iface_q_table.map);
 	msm_vidc_memory_free(core, &core->iface_q_table.alloc);
-	msm_vidc_memory_unmap(core, &core->sfr.map);
+	msm_vidc_iommu_unmap(core, &core->sfr.map);
 	msm_vidc_memory_free(core, &core->sfr.alloc);
 
 	for (i = 0; i < VIDC_IFACEQ_NUMQ; i++) {
@@ -2236,15 +2240,22 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	struct msm_vidc_iface_q_info *iface_q;
 	struct msm_vidc_alloc alloc;
 	struct msm_vidc_map map;
+	struct msm_vidc_dt *dt;
 	int offset = 0;
 	u32 i;
 
 	d_vpr_h("%s()\n", __func__);
 
+	if (!core || !core->dt || !core->dt->uc_region) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	dt = core->dt;
 	memset(&alloc, 0, sizeof(alloc));
 	alloc.type       = MSM_VIDC_BUF_QUEUE;
 	alloc.region     = MSM_VIDC_NON_SECURE;
-	alloc.size       = TOTAL_QSIZE;
+	alloc.size       = ALIGNED_QUEUE_SIZE;
 	alloc.secure     = false;
 	alloc.map_kernel = true;
 	rc = msm_vidc_memory_alloc(core, &alloc);
@@ -2257,9 +2268,11 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	map.type         = alloc.type;
 	map.region       = alloc.region;
 	map.dmabuf       = alloc.dmabuf;
-	rc = msm_vidc_memory_map(core, &map);
+	map.size         = alloc.size;
+	map.device_addr  = dt->uc_region->start;
+	rc = msm_vidc_iommu_map(core, &map);
 	if (rc) {
-		d_vpr_e("%s: alloc failed\n", __func__);
+		d_vpr_e("%s: map failed\n", __func__);
 		goto fail_alloc_queue;
 	}
 
@@ -2328,7 +2341,9 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	map.type         = alloc.type;
 	map.region       = alloc.region;
 	map.dmabuf       = alloc.dmabuf;
-	rc = msm_vidc_memory_map(core, &map);
+	map.size         = alloc.size;
+	map.device_addr  = dt->uc_region->start + MAPPED_QUEUE_SIZE;
+	rc = msm_vidc_iommu_map(core, &map);
 	if (rc) {
 		d_vpr_e("%s: sfr map failed\n", __func__);
 		goto fail_alloc_queue;
@@ -2340,6 +2355,7 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	core->sfr.map = map;
 	/* write sfr buffer size in first word */
 	*((u32 *)core->sfr.align_virtual_addr) = ALIGNED_SFR_SIZE;
+	offset += core->sfr.mem_size;
 
 	rc = call_venus_op(core, setup_ucregion_memmap, core);
 	if (rc)
