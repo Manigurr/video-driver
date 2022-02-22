@@ -9,6 +9,8 @@
 #include "msm_vidc_core.h"
 
 #if defined(CONFIG_MSM_VIDC_NEO)
+#define LLCC_BASE_ADDR 0x19a00000
+#define LLCC_REG_SIZE 0x1000
 int msm_vidc_init_platform_neo(struct msm_vidc_core *core, struct device *dev);
 int msm_vidc_deinit_platform_neo(struct msm_vidc_core *core, struct device *dev);
 #else

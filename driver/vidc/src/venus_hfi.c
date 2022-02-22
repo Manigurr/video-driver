@@ -26,6 +26,9 @@
 #include "hfi_packet.h"
 #include "venus_hfi_response.h"
 #include "msm_vidc_events.h"
+#if defined(CONFIG_MSM_VIDC_NEO)
+#include "msm_vidc_neo.h"
+#endif
 
 #define MAX_FIRMWARE_NAME_SIZE 128
 
@@ -1742,6 +1745,12 @@ static int __init_subcaches(struct msm_vidc_core *core)
 			sinfo->subcache = llcc_slice_getd(LLCC_VIDSC1);
 		} else if (!strcmp("vidscfw", sinfo->name)) {
 			sinfo->subcache = llcc_slice_getd(LLCC_VIDFW);
+		} else if (!strcmp("vidsc_left", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIEYE);
+		} else if (!strcmp("vidsc_right", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIDPTH);
+		} else if (!strcmp("vidsc_depth", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIPTH);
 		} else {
 			d_vpr_e("Invalid subcache name %s\n",
 					sinfo->name);
@@ -1976,6 +1985,7 @@ static int __set_subcaches(struct msm_vidc_core *core)
 		if (sinfo->isactive) {
 			buf.index = sinfo->subcache->slice_id;
 			buf.buffer_size = sinfo->subcache->slice_size;
+			buf.base_address = sinfo->mapped_va;
 
 			rc = hfi_create_packet(core->packet,
 				core->packet_size,
@@ -2151,6 +2161,12 @@ static int __resume(struct msm_vidc_core *core)
 	rc = call_venus_op(core, setup_ucregion_memmap, core);
 	if (rc) {
 		d_vpr_e("Failed to setup ucregion\n");
+		goto err_reset_core;
+	}
+
+	rc = call_venus_op(core, setup_device_region_memmap, core);
+	if (rc) {
+		d_vpr_e("Failed to setup device_region\n");
 		goto err_reset_core;
 	}
 
@@ -2364,6 +2380,93 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	return 0;
 fail_alloc_queue:
 	return -ENOMEM;
+}
+
+static void __device_region_deinit(struct msm_vidc_core *core)
+{
+	int c, num_subcaches;
+
+	d_vpr_h("%s()\n", __func__);
+
+	if (!core || !core->dt || !core->dt->device_region) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return;
+	}
+
+	if (!core->dt->device_region->start) {
+		d_vpr_h("%s: device_region not available\n", __func__);
+		return;
+	}
+
+	num_subcaches = core->dt->subcache_set.count;
+	for (c = 0; c < num_subcaches; ++c) {
+		struct subcache_info *sc = &core->dt->subcache_set.subcache_tbl[c];
+		struct msm_vidc_mem_addr *llcc = &core->llcc[c];
+
+		if (!strcmp("vidsc_left", sc->name) || !strcmp("vidsc_right", sc->name)) {
+			msm_vidc_iommu_unmap(core, &llcc->map);
+			llcc->align_device_addr = 0;
+			llcc->align_virtual_addr = NULL;
+		}
+	}
+}
+
+static int __device_region_init(struct msm_vidc_core *core)
+{
+	int rc = 0, num_subcaches, c;
+	phys_addr_t phys;
+	struct msm_vidc_map map;
+
+	d_vpr_h("%s()\n", __func__);
+
+	if (!core || !core->dt || !core->dt->device_region) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!core->dt->device_region->start) {
+		d_vpr_h("%s: device_region not available\n", __func__);
+		return 0;
+	}
+
+	num_subcaches = core->dt->subcache_set.count;
+	core->llcc = devm_kzalloc(&core->pdev->dev, sizeof(struct msm_vidc_mem_addr)
+		* num_subcaches, GFP_KERNEL);
+	if (!core->llcc) {
+		d_vpr_e("%s: llcc allocation failed\n", __func__);
+		return -ENOMEM;
+	}
+
+	for (c = 0; c < num_subcaches; ++c) {
+		struct subcache_info *sc = &core->dt->subcache_set.subcache_tbl[c];
+		struct msm_vidc_mem_addr *llcc = &core->llcc[c];
+
+		if (!strcmp("vidsc_left", sc->name) || !strcmp("vidsc_right", sc->name)) {
+			phys = LLCC_BASE_ADDR + (sc->subcache->slice_id * 0x1000);
+			memset(&map, 0, sizeof(map));
+			map.region       = MSM_VIDC_NON_SECURE;
+			map.size         = LLCC_REG_SIZE;
+			map.phys_addr    = phys;
+			map.device_addr  = sc->mapped_va;
+			rc = msm_vidc_iommu_map(core, &map);
+			if (rc) {
+				d_vpr_e("%s: device region map failed\n", __func__);
+				return rc;
+			}
+
+			llcc->align_device_addr = map.device_addr;
+			llcc->mem_size = LLCC_REG_SIZE;
+			llcc->map = map;
+		}
+	}
+
+	rc = call_venus_op(core, setup_device_region_memmap, core);
+	if (rc) {
+		d_vpr_e("%s: failed to setup device region\n", __func__);
+		return rc;
+	}
+
+	return rc;
 }
 
 static int __load_fw_to_memory(struct platform_device *pdev,
@@ -2723,6 +2826,10 @@ int venus_hfi_core_init(struct msm_vidc_core *core)
 	if (rc)
 		goto error;
 
+	rc = __device_region_init(core);
+	if (rc)
+		goto error;
+
 	rc = call_venus_op(core, boot_firmware, core);
 	if (rc)
 		goto error;
@@ -2787,6 +2894,7 @@ int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force)
 	 */
 	if (msm_vidc_fw_dump)
 		fw_coredump(core);
+	__device_region_deinit(core);
 	__interface_queues_deinit(core);
 
 	return 0;

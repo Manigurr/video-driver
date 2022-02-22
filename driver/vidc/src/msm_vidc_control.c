@@ -123,6 +123,14 @@ static const char *const mpeg_video_hevc_profile[] = {
 	NULL,
 };
 
+static const char *const mpeg_video_vidc_stream_type[] = {
+	"Left Eye",
+	"Right Eye",
+	"Left Depth",
+	"Right Depth",
+	NULL,
+};
+
 static u32 msm_vidc_get_port_info(struct msm_vidc_inst *inst,
 	enum msm_vidc_inst_capability_type cap_id)
 {
@@ -158,6 +166,8 @@ static const char * const * msm_vidc_get_qmenu_type(
 		return mpeg_video_avc_coding_layer;
 	case V4L2_CID_MPEG_VIDEO_HEVC_PROFILE:
 		return mpeg_video_hevc_profile;
+	case V4L2_CID_MPEG_VIDC_VIDEO_STREAM_TYPE:
+		return mpeg_video_vidc_stream_type;
 	default:
 		i_vpr_e(inst, "%s: No available qmenu for ctrl %#x\n",
 			__func__, control_id);
@@ -3447,6 +3457,32 @@ int msm_vidc_set_level(void *instance,
 		hfi_value = HFI_LEVEL_NONE;
 
 	rc = msm_vidc_packetize_control(inst, cap_id, HFI_PAYLOAD_U32_ENUM,
+		&hfi_value, sizeof(u32), __func__);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+int msm_vidc_set_stream_type(void *instance,
+	enum msm_vidc_inst_capability_type cap_id)
+{
+	int rc = 0;
+	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
+	u32 hfi_value = 0, stream_type = 0;
+	struct msm_vidc_core *core;
+
+	if (!inst || !inst->capabilities) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	core = inst->core;
+	stream_type = inst->capabilities->cap[cap_id].value;
+
+	hfi_value = core->platform->data.llcc_data[stream_type].llcc_slice_id;
+
+	rc = msm_vidc_packetize_control(inst, cap_id, HFI_PAYLOAD_U32,
 		&hfi_value, sizeof(u32), __func__);
 	if (rc)
 		return rc;

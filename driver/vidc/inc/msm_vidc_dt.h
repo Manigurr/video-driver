@@ -186,6 +186,7 @@ struct subcache_info {
 	bool isactive;
 	bool isset;
 	struct llcc_slice_desc *subcache;
+	unsigned int mapped_va;
 };
 
 struct subcache_set {
@@ -216,6 +217,7 @@ struct msm_vidc_dt {
 	const char *fw_name;
 	int fw_cookie;
 	struct addr_range *uc_region;
+	struct addr_range *device_region;
 };
 
 int msm_vidc_init_dt(struct platform_device *pdev);

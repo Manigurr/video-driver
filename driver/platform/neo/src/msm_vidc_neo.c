@@ -1419,6 +1419,20 @@ static struct msm_platform_inst_capability instance_data_neo[] = {
 		{LTR_COUNT, IR_RANDOM, SLICE_MODE},
 		msm_vidc_adjust_all_intra, NULL},
 
+	{STREAM_TYPE, DEC, H264|HEVC,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH,
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_EYE) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_DEPTH) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH),
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_TYPE,
+		HFI_PROP_DPB_SCID,
+		CAP_FLAG_ROOT | CAP_FLAG_MENU,
+		{0}, {0},
+		NULL, msm_vidc_set_stream_type},
+
 	{META_LTR_MARK_USE, ENC, H264|HEVC,
 		V4L2_MPEG_MSM_VIDC_DISABLE, V4L2_MPEG_MSM_VIDC_ENABLE,
 		1, V4L2_MPEG_MSM_VIDC_DISABLE,
@@ -1685,6 +1699,13 @@ static u32 bus_bw_nrt[] = {
 	11000000,
 };
 
+static struct msm_vidc_llcc_data llcc_data_neo[] = {
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,     7},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_EYE,    8},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_DEPTH,  29},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH, 29},
+};
+
 static struct msm_vidc_platform_data neo_data = {
 	.core_data = core_data_neo,
 	.core_data_size = ARRAY_SIZE(core_data_neo),
@@ -1695,6 +1716,7 @@ static struct msm_vidc_platform_data neo_data = {
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
 	.ubwc_config = ubwc_config_neo,
 	.bus_bw_nrt = bus_bw_nrt,
+	.llcc_data = llcc_data_neo,
 };
 
 static int msm_vidc_init_data(struct msm_vidc_core *core)
