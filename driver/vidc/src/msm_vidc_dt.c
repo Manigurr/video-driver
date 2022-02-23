@@ -698,6 +698,22 @@ static int msm_vidc_load_uc_region_mapping(struct msm_vidc_core *core)
 	d_vpr_h("uc_region start 0x%x size 0x%x\n",
 		dt->uc_region->start, dt->uc_region->size);
 
+	/* ipclite mem region */
+	dt->ipclite_mem = devm_kzalloc(&pdev->dev, sizeof(struct addr_map), GFP_KERNEL);
+	if (!dt->ipclite_mem) {
+		d_vpr_e("Failed to allocate memory for ipclite-mem mapping\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "ipclite-map",
+		(u32 *)dt->ipclite_mem, (sizeof(struct addr_map)/sizeof(u32)));
+	if (rc) {
+		d_vpr_h("ipclite-map not available: %d\n", rc);
+		return 0;
+	}
+	d_vpr_h("ipclite_mem start 0x%x size 0x%x phys addr 0x%x\n",
+		dt->ipclite_mem->virt_addr, dt->ipclite_mem->size,
+		dt->ipclite_mem->phys_addr);
+
 	return rc;
 }
 
@@ -721,6 +737,22 @@ static int msm_vidc_load_device_region_mapping(struct msm_vidc_core *core)
 	}
 	d_vpr_h("device_region start 0x%x size 0x%x\n",
 		dt->device_region->start, dt->device_region->size);
+
+	/* hw mutex register */
+	dt->hw_mutex = devm_kzalloc(&pdev->dev, sizeof(struct addr_map), GFP_KERNEL);
+	if (!dt->hw_mutex) {
+		d_vpr_e("Failed to allocate memory for hw_mutex register mapping\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "hw-mutex-map",
+		(u32 *)dt->hw_mutex, (sizeof(struct addr_map)/sizeof(u32)));
+	if (rc) {
+		d_vpr_h("hw-mutex-map not available: %d\n", rc);
+		return 0;
+	}
+	d_vpr_h("hw_mutex start 0x%x size 0x%x phys addr 0x%x\n",
+		dt->hw_mutex->virt_addr, dt->hw_mutex->size,
+		dt->hw_mutex->phys_addr);
 
 	return rc;
 }

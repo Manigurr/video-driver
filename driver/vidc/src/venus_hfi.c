@@ -2246,6 +2246,12 @@ static void __interface_queues_deinit(struct msm_vidc_core *core)
 
 	core->sfr.align_virtual_addr = NULL;
 	core->sfr.align_device_addr = 0;
+
+	if (core->ipcc_mem.map.device_addr) {
+		msm_vidc_iommu_unmap(core, &core->ipcc_mem.map);
+		core->ipcc_mem.align_virtual_addr = NULL;
+		core->ipcc_mem.align_device_addr = 0;
+	}
 }
 
 static int __interface_queues_init(struct msm_vidc_core *core)
@@ -2262,7 +2268,7 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
-	if (!core || !core->dt || !core->dt->uc_region) {
+	if (!core || !core->dt || !core->dt->uc_region || !core->dt->ipclite_mem) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
@@ -2373,9 +2379,30 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	*((u32 *)core->sfr.align_virtual_addr) = ALIGNED_SFR_SIZE;
 	offset += core->sfr.mem_size;
 
+	if (dt->ipclite_mem->virt_addr) {
+		/* mapping ipc lite memory */
+		memset(&map, 0, sizeof(map));
+		map.type        = MSM_VIDC_BUF_QUEUE;
+		map.region      = MSM_VIDC_NON_SECURE;
+		map.size        = dt->ipclite_mem->size;
+		map.phys_addr   = dt->ipclite_mem->phys_addr;
+		map.device_addr = dt->ipclite_mem->virt_addr;
+		rc = msm_vidc_iommu_map(core, &map);
+		if (rc) {
+			d_vpr_e("%s: ipclite_mem map failed\n", __func__);
+			goto fail_alloc_queue;
+		}
+		core->ipcc_mem.align_device_addr = map.device_addr;
+		core->ipcc_mem.mem_size = map.size;
+		core->ipcc_mem.map = map;
+		offset += core->ipcc_mem.mem_size;
+	}
+
 	rc = call_venus_op(core, setup_ucregion_memmap, core);
-	if (rc)
+	if (rc) {
+		d_vpr_e("%s: setup ucregion failed\n", __func__);
 		return rc;
+	}
 
 	return 0;
 fail_alloc_queue:
@@ -2385,10 +2412,11 @@ fail_alloc_queue:
 static void __device_region_deinit(struct msm_vidc_core *core)
 {
 	int c, num_subcaches;
+	u32 hw_mutex_base;
 
 	d_vpr_h("%s()\n", __func__);
 
-	if (!core || !core->dt || !core->dt->device_region) {
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return;
 	}
@@ -2409,6 +2437,13 @@ static void __device_region_deinit(struct msm_vidc_core *core)
 			llcc->align_virtual_addr = NULL;
 		}
 	}
+
+	hw_mutex_base = core->dt->hw_mutex->virt_addr;
+	if (hw_mutex_base) {
+		msm_vidc_iommu_unmap(core, &core->hw_mutex.map);
+		core->hw_mutex.align_virtual_addr = NULL;
+		core->hw_mutex.align_device_addr = 0;
+	}
 }
 
 static int __device_region_init(struct msm_vidc_core *core)
@@ -2416,10 +2451,12 @@ static int __device_region_init(struct msm_vidc_core *core)
 	int rc = 0, num_subcaches, c;
 	phys_addr_t phys;
 	struct msm_vidc_map map;
+	struct msm_vidc_dt *dt;
+	u32 hw_mutex_base;
 
 	d_vpr_h("%s()\n", __func__);
 
-	if (!core || !core->dt || !core->dt->device_region) {
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
@@ -2458,6 +2495,24 @@ static int __device_region_init(struct msm_vidc_core *core)
 			llcc->mem_size = LLCC_REG_SIZE;
 			llcc->map = map;
 		}
+	}
+
+	dt = core->dt;
+	hw_mutex_base = dt->hw_mutex->virt_addr;
+	if (hw_mutex_base) {
+		memset(&map, 0, sizeof(map));
+		map.region       = MSM_VIDC_NON_SECURE;
+		map.size         = dt->hw_mutex->size;
+		map.phys_addr    = dt->hw_mutex->phys_addr;
+		map.device_addr  = dt->hw_mutex->virt_addr;
+		rc = msm_vidc_iommu_map(core, &map);
+		if (rc) {
+			d_vpr_e("%s: hw mutex map failed\n", __func__);
+			return rc;
+		}
+		core->hw_mutex.align_device_addr = map.device_addr;
+		core->hw_mutex.mem_size = map.size;
+		core->hw_mutex.map = map;
 	}
 
 	rc = call_venus_op(core, setup_device_region_memmap, core);
