@@ -27,6 +27,9 @@
 #include "hfi_packet.h"
 #include "venus_hfi_response.h"
 #include "msm_vidc_events.h"
+#if defined(CONFIG_MSM_VIDC_NEO)
+#include "msm_vidc_neo.h"
+#endif
 
 #define MAX_FIRMWARE_NAME_SIZE 128
 
@@ -1743,6 +1746,12 @@ static int __init_subcaches(struct msm_vidc_core *core)
 			sinfo->subcache = llcc_slice_getd(LLCC_VIDSC1);
 		} else if (!strcmp("vidscfw", sinfo->name)) {
 			sinfo->subcache = llcc_slice_getd(LLCC_VIDFW);
+		} else if (!strcmp("vidsc_left", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIEYE);
+		} else if (!strcmp("vidsc_right", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIDPTH);
+		} else if (!strcmp("vidsc_depth", sinfo->name)) {
+			sinfo->subcache = llcc_slice_getd(LLCC_VIPTH);
 		} else {
 			d_vpr_e("Invalid subcache name %s\n",
 					sinfo->name);
@@ -1977,6 +1986,7 @@ static int __set_subcaches(struct msm_vidc_core *core)
 		if (sinfo->isactive) {
 			buf.index = sinfo->subcache->slice_id;
 			buf.buffer_size = sinfo->subcache->slice_size;
+			buf.base_address = sinfo->mapped_va;
 
 			rc = hfi_create_packet(core->packet,
 				core->packet_size,
@@ -2149,7 +2159,17 @@ static int __resume(struct msm_vidc_core *core)
 	 */
 	__hand_off_regulators(core);
 
-	call_venus_op(core, setup_ucregion_memmap, core);
+	rc = call_venus_op(core, setup_ucregion_memmap, core);
+	if (rc) {
+		d_vpr_e("Failed to setup ucregion\n");
+		goto err_reset_core;
+	}
+
+	rc = call_venus_op(core, setup_device_region_memmap, core);
+	if (rc) {
+		d_vpr_e("Failed to setup device_region\n");
+		goto err_reset_core;
+	}
 
 	/* Wait for boot completion */
 	rc = call_venus_op(core, boot_firmware, core);
@@ -2211,9 +2231,9 @@ static void __interface_queues_deinit(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
-	msm_vidc_memory_unmap(core, &core->iface_q_table.map);
+	msm_vidc_iommu_unmap(core, &core->iface_q_table.map);
 	msm_vidc_memory_free(core, &core->iface_q_table.alloc);
-	msm_vidc_memory_unmap(core, &core->sfr.map);
+	msm_vidc_iommu_unmap(core, &core->sfr.map);
 	msm_vidc_memory_free(core, &core->sfr.alloc);
 
 	for (i = 0; i < VIDC_IFACEQ_NUMQ; i++) {
@@ -2227,6 +2247,12 @@ static void __interface_queues_deinit(struct msm_vidc_core *core)
 
 	core->sfr.align_virtual_addr = NULL;
 	core->sfr.align_device_addr = 0;
+
+	if (core->ipcc_mem.map.device_addr) {
+		msm_vidc_iommu_unmap(core, &core->ipcc_mem.map);
+		core->ipcc_mem.align_virtual_addr = NULL;
+		core->ipcc_mem.align_device_addr = 0;
+	}
 }
 
 static int __interface_queues_init(struct msm_vidc_core *core)
@@ -2237,15 +2263,22 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	struct msm_vidc_iface_q_info *iface_q;
 	struct msm_vidc_alloc alloc;
 	struct msm_vidc_map map;
+	struct msm_vidc_dt *dt;
 	int offset = 0;
 	u32 i;
 
 	d_vpr_h("%s()\n", __func__);
 
+	if (!core || !core->dt || !core->dt->uc_region || !core->dt->ipclite_mem) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	dt = core->dt;
 	memset(&alloc, 0, sizeof(alloc));
 	alloc.type       = MSM_VIDC_BUF_QUEUE;
 	alloc.region     = MSM_VIDC_NON_SECURE;
-	alloc.size       = TOTAL_QSIZE;
+	alloc.size       = ALIGNED_QUEUE_SIZE;
 	alloc.secure     = false;
 	alloc.map_kernel = true;
 	rc = msm_vidc_memory_alloc(core, &alloc);
@@ -2258,9 +2291,11 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	map.type         = alloc.type;
 	map.region       = alloc.region;
 	map.dmabuf       = alloc.dmabuf;
-	rc = msm_vidc_memory_map(core, &map);
+	map.size         = alloc.size;
+	map.device_addr  = dt->uc_region->start;
+	rc = msm_vidc_iommu_map(core, &map);
 	if (rc) {
-		d_vpr_e("%s: alloc failed\n", __func__);
+		d_vpr_e("%s: map failed\n", __func__);
 		goto fail_alloc_queue;
 	}
 
@@ -2329,7 +2364,9 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	map.type         = alloc.type;
 	map.region       = alloc.region;
 	map.dmabuf       = alloc.dmabuf;
-	rc = msm_vidc_memory_map(core, &map);
+	map.size         = alloc.size;
+	map.device_addr  = dt->uc_region->start + MAPPED_QUEUE_SIZE;
+	rc = msm_vidc_iommu_map(core, &map);
 	if (rc) {
 		d_vpr_e("%s: sfr map failed\n", __func__);
 		goto fail_alloc_queue;
@@ -2341,14 +2378,151 @@ static int __interface_queues_init(struct msm_vidc_core *core)
 	core->sfr.map = map;
 	/* write sfr buffer size in first word */
 	*((u32 *)core->sfr.align_virtual_addr) = ALIGNED_SFR_SIZE;
+	offset += core->sfr.mem_size;
+
+	if (dt->ipclite_mem->virt_addr) {
+		/* mapping ipc lite memory */
+		memset(&map, 0, sizeof(map));
+		map.type        = MSM_VIDC_BUF_QUEUE;
+		map.region      = MSM_VIDC_NON_SECURE;
+		map.size        = dt->ipclite_mem->size;
+		map.phys_addr   = dt->ipclite_mem->phys_addr;
+		map.device_addr = dt->ipclite_mem->virt_addr;
+		rc = msm_vidc_iommu_map(core, &map);
+		if (rc) {
+			d_vpr_e("%s: ipclite_mem map failed\n", __func__);
+			goto fail_alloc_queue;
+		}
+		core->ipcc_mem.align_device_addr = map.device_addr;
+		core->ipcc_mem.mem_size = map.size;
+		core->ipcc_mem.map = map;
+		offset += core->ipcc_mem.mem_size;
+	}
 
 	rc = call_venus_op(core, setup_ucregion_memmap, core);
-	if (rc)
+	if (rc) {
+		d_vpr_e("%s: setup ucregion failed\n", __func__);
 		return rc;
+	}
 
 	return 0;
 fail_alloc_queue:
 	return -ENOMEM;
+}
+
+static void __device_region_deinit(struct msm_vidc_core *core)
+{
+	int c, num_subcaches;
+	u32 hw_mutex_base;
+
+	d_vpr_h("%s()\n", __func__);
+
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return;
+	}
+
+	if (!core->dt->device_region->start) {
+		d_vpr_h("%s: device_region not available\n", __func__);
+		return;
+	}
+
+	num_subcaches = core->dt->subcache_set.count;
+	for (c = 0; c < num_subcaches; ++c) {
+		struct subcache_info *sc = &core->dt->subcache_set.subcache_tbl[c];
+		struct msm_vidc_mem_addr *llcc = &core->llcc[c];
+
+		if (!strcmp("vidsc_left", sc->name) || !strcmp("vidsc_right", sc->name)) {
+			msm_vidc_iommu_unmap(core, &llcc->map);
+			llcc->align_device_addr = 0;
+			llcc->align_virtual_addr = NULL;
+		}
+	}
+
+	hw_mutex_base = core->dt->hw_mutex->virt_addr;
+	if (hw_mutex_base) {
+		msm_vidc_iommu_unmap(core, &core->hw_mutex.map);
+		core->hw_mutex.align_virtual_addr = NULL;
+		core->hw_mutex.align_device_addr = 0;
+	}
+}
+
+static int __device_region_init(struct msm_vidc_core *core)
+{
+	int rc = 0, num_subcaches, c;
+	phys_addr_t phys;
+	struct msm_vidc_map map;
+	struct msm_vidc_dt *dt;
+	u32 hw_mutex_base;
+
+	d_vpr_h("%s()\n", __func__);
+
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!core->dt->device_region->start) {
+		d_vpr_h("%s: device_region not available\n", __func__);
+		return 0;
+	}
+
+	num_subcaches = core->dt->subcache_set.count;
+	core->llcc = devm_kzalloc(&core->pdev->dev, sizeof(struct msm_vidc_mem_addr)
+		* num_subcaches, GFP_KERNEL);
+	if (!core->llcc) {
+		d_vpr_e("%s: llcc allocation failed\n", __func__);
+		return -ENOMEM;
+	}
+
+	for (c = 0; c < num_subcaches; ++c) {
+		struct subcache_info *sc = &core->dt->subcache_set.subcache_tbl[c];
+		struct msm_vidc_mem_addr *llcc = &core->llcc[c];
+
+		if (!strcmp("vidsc_left", sc->name) || !strcmp("vidsc_right", sc->name)) {
+			phys = LLCC_BASE_ADDR + (sc->subcache->slice_id * 0x1000);
+			memset(&map, 0, sizeof(map));
+			map.region       = MSM_VIDC_NON_SECURE;
+			map.size         = LLCC_REG_SIZE;
+			map.phys_addr    = phys;
+			map.device_addr  = sc->mapped_va;
+			rc = msm_vidc_iommu_map(core, &map);
+			if (rc) {
+				d_vpr_e("%s: device region map failed\n", __func__);
+				return rc;
+			}
+
+			llcc->align_device_addr = map.device_addr;
+			llcc->mem_size = LLCC_REG_SIZE;
+			llcc->map = map;
+		}
+	}
+
+	dt = core->dt;
+	hw_mutex_base = dt->hw_mutex->virt_addr;
+	if (hw_mutex_base) {
+		memset(&map, 0, sizeof(map));
+		map.region       = MSM_VIDC_NON_SECURE;
+		map.size         = dt->hw_mutex->size;
+		map.phys_addr    = dt->hw_mutex->phys_addr;
+		map.device_addr  = dt->hw_mutex->virt_addr;
+		rc = msm_vidc_iommu_map(core, &map);
+		if (rc) {
+			d_vpr_e("%s: hw mutex map failed\n", __func__);
+			return rc;
+		}
+		core->hw_mutex.align_device_addr = map.device_addr;
+		core->hw_mutex.mem_size = map.size;
+		core->hw_mutex.map = map;
+	}
+
+	rc = call_venus_op(core, setup_device_region_memmap, core);
+	if (rc) {
+		d_vpr_e("%s: failed to setup device region\n", __func__);
+		return rc;
+	}
+
+	return rc;
 }
 
 static int __load_fw_to_memory(struct platform_device *pdev,
@@ -2708,6 +2882,10 @@ int venus_hfi_core_init(struct msm_vidc_core *core)
 	if (rc)
 		goto error;
 
+	rc = __device_region_init(core);
+	if (rc)
+		goto error;
+
 	rc = call_venus_op(core, boot_firmware, core);
 	if (rc)
 		goto error;
@@ -2772,6 +2950,7 @@ int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force)
 	 */
 	if (msm_vidc_fw_dump)
 		fw_coredump(core);
+	__device_region_deinit(core);
 	__interface_queues_deinit(core);
 
 	return 0;

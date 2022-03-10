@@ -253,6 +253,7 @@ static int msm_vidc_load_subcache_info(struct msm_vidc_core *core)
 	struct platform_device *pdev = core->pdev;
 	struct msm_vidc_dt *dt = core->dt;
 	struct subcache_set *subcaches = &dt->subcache_set;
+	unsigned int *mapped_va = NULL;
 
 	num_subcaches = of_property_count_strings(pdev->dev.of_node,
 		"cache-slice-names");
@@ -272,11 +273,24 @@ static int msm_vidc_load_subcache_info(struct msm_vidc_core *core)
 	subcaches->count = num_subcaches;
 	d_vpr_h("Found %d subcaches\n", num_subcaches);
 
+	mapped_va = devm_kzalloc(&pdev->dev, num_subcaches *
+		sizeof(*mapped_va), GFP_KERNEL);
+	if (!mapped_va) {
+		d_vpr_e("No memory to read subcache VA\n");
+		goto err_load_subcache_table_fail;
+	}
+
+	of_property_read_u32_array(pdev->dev.of_node,
+		"cache-slice-va", mapped_va, num_subcaches);
+
 	for (c = 0; c < num_subcaches; ++c) {
 		struct subcache_info *vsc = &dt->subcache_set.subcache_tbl[c];
 
 		of_property_read_string_index(pdev->dev.of_node,
 			"cache-slice-names", c, &vsc->name);
+
+		vsc->mapped_va = mapped_va[c];
+		d_vpr_h("subcache name %s addr 0x%x\n", vsc->name, vsc->mapped_va);
 	}
 
 	dt->sys_cache_present = true;
@@ -663,6 +677,86 @@ static int msm_vidc_load_reset_table(struct msm_vidc_core *core)
 	return 0;
 }
 
+static int msm_vidc_load_uc_region_mapping(struct msm_vidc_core *core)
+{
+	int rc = 0;
+	struct platform_device *pdev = core->pdev;
+	struct msm_vidc_dt *dt = core->dt;
+
+	/* uncached region */
+	dt->uc_region = devm_kzalloc(&pdev->dev, sizeof(struct addr_range), GFP_KERNEL);
+	if (!dt->uc_region) {
+		d_vpr_e("Failed to allocate memory for uc_region\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "uncached-region",
+		(u32 *)dt->uc_region, (sizeof(struct addr_range)/sizeof(u32)));
+	if (rc) {
+		d_vpr_e("Failed to read uncached-region mapping: %d\n", rc);
+		return rc;
+	}
+	d_vpr_h("uc_region start 0x%x size 0x%x\n",
+		dt->uc_region->start, dt->uc_region->size);
+
+	/* ipclite mem region */
+	dt->ipclite_mem = devm_kzalloc(&pdev->dev, sizeof(struct addr_map), GFP_KERNEL);
+	if (!dt->ipclite_mem) {
+		d_vpr_e("Failed to allocate memory for ipclite-mem mapping\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "ipclite-map",
+		(u32 *)dt->ipclite_mem, (sizeof(struct addr_map)/sizeof(u32)));
+	if (rc) {
+		d_vpr_h("ipclite-map not available: %d\n", rc);
+		return 0;
+	}
+	d_vpr_h("ipclite_mem start 0x%x size 0x%x phys addr 0x%x\n",
+		dt->ipclite_mem->virt_addr, dt->ipclite_mem->size,
+		dt->ipclite_mem->phys_addr);
+
+	return rc;
+}
+
+static int msm_vidc_load_device_region_mapping(struct msm_vidc_core *core)
+{
+	int rc = 0;
+	struct platform_device *pdev = core->pdev;
+	struct msm_vidc_dt *dt = core->dt;
+
+	/* device region */
+	dt->device_region = devm_kzalloc(&pdev->dev, sizeof(struct addr_range), GFP_KERNEL);
+	if (!dt->device_region) {
+		d_vpr_e("Failed to allocate memory for device_region\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "device-region",
+		(u32 *)dt->device_region, (sizeof(struct addr_range)/sizeof(u32)));
+	if (rc) {
+		d_vpr_h("device_region not available: %d\n", rc);
+		return 0;
+	}
+	d_vpr_h("device_region start 0x%x size 0x%x\n",
+		dt->device_region->start, dt->device_region->size);
+
+	/* hw mutex register */
+	dt->hw_mutex = devm_kzalloc(&pdev->dev, sizeof(struct addr_map), GFP_KERNEL);
+	if (!dt->hw_mutex) {
+		d_vpr_e("Failed to allocate memory for hw_mutex register mapping\n");
+		return -ENOMEM;
+	}
+	rc = of_property_read_u32_array(pdev->dev.of_node, "hw-mutex-map",
+		(u32 *)dt->hw_mutex, (sizeof(struct addr_map)/sizeof(u32)));
+	if (rc) {
+		d_vpr_h("hw-mutex-map not available: %d\n", rc);
+		return 0;
+	}
+	d_vpr_h("hw_mutex start 0x%x size 0x%x phys addr 0x%x\n",
+		dt->hw_mutex->virt_addr, dt->hw_mutex->size,
+		dt->hw_mutex->phys_addr);
+
+	return rc;
+}
+
 static int msm_vidc_read_resources_from_dt(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -749,6 +843,18 @@ static int msm_vidc_read_resources_from_dt(struct platform_device *pdev)
 	rc = msm_vidc_load_reset_table(core);
 	if (rc) {
 		d_vpr_e("Failed to load reset table: %d\n", rc);
+		goto err_load_reset_table;
+	}
+
+	rc = msm_vidc_load_uc_region_mapping(core);
+	if (rc) {
+		d_vpr_e("Failed to load uc_region mapping: %d\n", rc);
+		goto err_load_reset_table;
+	}
+
+	rc = msm_vidc_load_device_region_mapping(core);
+	if (rc) {
+		d_vpr_e("Failed to load device region mapping: %d\n", rc);
 		goto err_load_reset_table;
 	}
 

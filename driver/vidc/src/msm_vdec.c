@@ -743,6 +743,10 @@ static int msm_vdec_set_input_properties(struct msm_vidc_inst *inst)
 	if (rc)
 		return rc;
 
+	rc = msm_vidc_set_stream_type(inst, STREAM_TYPE);
+	if (rc)
+		return rc;
+
 	rc = msm_vdec_set_output_order(inst, INPUT_PORT);
 	if (rc)
 		return rc;

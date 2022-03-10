@@ -22,6 +22,7 @@ struct msm_vidc_venus_ops {
 	int (*clock_config_on_enable)(struct msm_vidc_core *core);
 	int (*interrupt_init)(struct msm_vidc_core *core);
 	int (*setup_ucregion_memmap)(struct msm_vidc_core *core);
+	int (*setup_device_region_memmap)(struct msm_vidc_core *core);
 	int (*raise_interrupt)(struct msm_vidc_core *core);
 	int (*clear_interrupt)(struct msm_vidc_core *core);
 	int (*prepare_pc)(struct msm_vidc_core *core);
@@ -85,6 +86,9 @@ struct msm_vidc_core {
 	struct msm_vidc_mem_addr               sfr;
 	struct msm_vidc_mem_addr               iface_q_table;
 	struct msm_vidc_iface_q_info           iface_queues[VIDC_IFACEQ_NUMQ];
+	struct msm_vidc_mem_addr               ipcc_mem;
+	struct msm_vidc_mem_addr              *llcc;
+	struct msm_vidc_mem_addr               hw_mutex;
 	struct delayed_work                    pm_work;
 	struct workqueue_struct               *pm_workq;
 	struct workqueue_struct               *batch_workq;

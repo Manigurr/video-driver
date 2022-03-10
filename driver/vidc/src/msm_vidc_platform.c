@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_platform.h>
@@ -16,9 +17,16 @@
 #if defined(CONFIG_MSM_VIDC_DIWALI)
 #include "msm_vidc_diwali.h"
 #endif
+#if defined(CONFIG_MSM_VIDC_NEO)
+#include "msm_vidc_neo.h"
+#endif
 #if defined(CONFIG_MSM_VIDC_IRIS2)
 #include "msm_vidc_iris2.h"
 #endif
+#if defined(CONFIG_MSM_VIDC_IRIS3)
+#include "msm_vidc_iris2.h"
+#endif
+
 
 static struct v4l2_file_operations msm_v4l2_file_operations = {
 	.owner                          = THIS_MODULE,
@@ -164,11 +172,22 @@ static int msm_vidc_deinit_platform_variant(struct msm_vidc_core *core, struct d
 		return rc;
 	}
 #endif
+
 #if defined(CONFIG_MSM_VIDC_DIWALI)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-diwali")) {
 		rc = msm_vidc_deinit_platform_diwali(core, dev);
 		if (rc)
 			d_vpr_e("%s: failed msm-vidc-diwali with %d\n",
+                                __func__, rc);
+                return rc;
+        }
+#endif
+
+#if defined(CONFIG_MSM_VIDC_NEO)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-neo")) {
+		rc = msm_vidc_deinit_platform_neo(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-neo with %d\n",
 				__func__, rc);
 		return rc;
 	}
@@ -197,11 +216,22 @@ static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct dev
 		return rc;
 	}
 #endif
+
 #if defined(CONFIG_MSM_VIDC_DIWALI)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-diwali")) {
 		rc = msm_vidc_init_platform_diwali(core, dev);
 		if (rc)
 			d_vpr_e("%s: failed msm-vidc-diwali with %d\n",
+                                __func__, rc);
+                return rc;
+        }
+#endif
+
+#if defined(CONFIG_MSM_VIDC_NEO)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-neo")) {
+		rc = msm_vidc_init_platform_neo(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-neo with %d\n",
 				__func__, rc);
 		return rc;
 	}
@@ -229,6 +259,16 @@ static int msm_vidc_deinit_vpu(struct msm_vidc_core *core, struct device *dev)
 				__func__, rc);
 	}
 #endif
+
+#if defined(CONFIG_MSM_VIDC_IRIS3)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-iris3")) {
+		rc = msm_vidc_deinit_iris2(core);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-iris2 with %d\n",
+				__func__, rc);
+	}
+#endif
+
 	return rc;
 }
 
@@ -241,6 +281,8 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 		return -EINVAL;
 	}
 
+	d_vpr_h("%s()\n", __func__);
+
 #if defined(CONFIG_MSM_VIDC_IRIS2)
 	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-iris2")) {
 		rc = msm_vidc_init_iris2(core);
@@ -249,6 +291,16 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 				__func__, rc);
 	}
 #endif
+
+#if defined(CONFIG_MSM_VIDC_IRIS3)
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-iris3")) {
+		rc = msm_vidc_init_iris2(core);
+		if (rc)
+			d_vpr_e("%s: failed msm-vidc-iris2 with %d\n",
+				__func__, rc);
+	}
+#endif
+
 	return rc;
 }
 
