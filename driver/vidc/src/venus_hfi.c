@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -2439,6 +2440,10 @@ static void __device_region_deinit(struct msm_vidc_core *core)
 		}
 	}
 
+	msm_vidc_iommu_unmap(core, &core->aoss_timer.map);
+	core->aoss_timer.align_virtual_addr = NULL;
+	core->aoss_timer.align_device_addr = 0;
+
 	hw_mutex_base = core->dt->hw_mutex->virt_addr;
 	if (hw_mutex_base) {
 		msm_vidc_iommu_unmap(core, &core->hw_mutex.map);
@@ -2497,6 +2502,21 @@ static int __device_region_init(struct msm_vidc_core *core)
 			llcc->map = map;
 		}
 	}
+
+	/* map AOSS timer registers for profiling */
+	memset(&map, 0, sizeof(map));
+	map.region       = MSM_VIDC_NON_SECURE;
+	map.size         = AOSS_TS_REG_SIZE;
+	map.phys_addr    = AOSS_TS_REG_PA;
+	map.device_addr  = AOSS_TS_REG_VA;
+	rc = msm_vidc_iommu_map(core, &map);
+	if (rc) {
+		d_vpr_e("%s: aoss timer reg map failed\n", __func__);
+		return rc;
+	}
+	core->aoss_timer.align_device_addr = map.device_addr;
+	core->aoss_timer.mem_size = map.size;
+	core->aoss_timer.map = map;
 
 	dt = core->dt;
 	hw_mutex_base = dt->hw_mutex->virt_addr;

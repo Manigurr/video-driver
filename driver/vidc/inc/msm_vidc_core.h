@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_CORE_H_
@@ -88,6 +89,7 @@ struct msm_vidc_core {
 	struct msm_vidc_iface_q_info           iface_queues[VIDC_IFACEQ_NUMQ];
 	struct msm_vidc_mem_addr               ipcc_mem;
 	struct msm_vidc_mem_addr              *llcc;
+	struct msm_vidc_mem_addr               aoss_timer;
 	struct msm_vidc_mem_addr               hw_mutex;
 	struct delayed_work                    pm_work;
 	struct workqueue_struct               *pm_workq;
