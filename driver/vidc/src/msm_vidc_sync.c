@@ -121,32 +121,6 @@ static bool msm_vidc_sync_fence_enable_signaling(struct dma_fence *fence)
 	return true;
 }
 
-static bool msm_vidc_sync_fence_signaled(struct dma_fence *fence)
-{
-	struct msm_vidc_sync_fence *f = to_msm_vidc_sync_fence(fence);
-	struct msm_vidc_inst *inst = to_msm_vidc_inst(fence);
-	bool signal = false;
-
-	/* take inst->kref to avoid use-after-free issues */
-	inst = get_inst_ref(g_core, inst);
-	if (!inst) {
-		d_vpr_e("%s: invalid instance\n", __func__);
-		return false;
-	}
-
-	/**
-	 * Incase of session_error frame processing willnot be continued.
-	 * So enable signaled flag to wakeup other running devices/co-processors
-	 * to avoid deadlock issues.
-	 */
-	signal = is_session_error(inst);
-	if (signal)
-		d_vpr_e("%s: signaled due to session error\n", f->name);
-
-	put_inst(inst);
-	return signal;
-}
-
 static void msm_vidc_sync_fence_release(struct dma_fence *fence)
 {
 	struct msm_vidc_sync_fence_timeline *tl;
@@ -201,7 +175,6 @@ static struct dma_fence_ops msm_vidc_sync_fence_ops = {
 	.get_driver_name     = msm_vidc_sync_fence_get_driver_name,
 	.get_timeline_name   = msm_vidc_sync_fence_get_timeline_name,
 	.enable_signaling    = msm_vidc_sync_fence_enable_signaling,
-	.signaled            = msm_vidc_sync_fence_signaled,
 	.wait                = dma_fence_default_wait,
 	.release             = msm_vidc_sync_fence_release,
 	.fence_value_str     = msm_vidc_sync_fence_value_str,
