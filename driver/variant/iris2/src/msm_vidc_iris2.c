@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_vidc_iris2.h"
@@ -107,6 +108,8 @@
 
 #define WRAPPER_DEBUG_BRIDGE_LPI_CONTROL_IRIS2	(WRAPPER_BASE_OFFS_IRIS2 + 0x54)
 #define WRAPPER_DEBUG_BRIDGE_LPI_STATUS_IRIS2	(WRAPPER_BASE_OFFS_IRIS2 + 0x58)
+#define WRAPPER_IRIS_CPU_NOC_LPI_CONTROL	(WRAPPER_BASE_OFFS_IRIS2 + 0x5C)
+#define WRAPPER_IRIS_CPU_NOC_LPI_STATUS		(WRAPPER_BASE_OFFS_IRIS2 + 0x60)
 #define WRAPPER_CORE_CLOCK_CONFIG_IRIS2		(WRAPPER_BASE_OFFS_IRIS2 + 0x88)
 
 /*
@@ -539,14 +542,14 @@ static int __power_off_iris2_hardware(struct msm_vidc_core *core)
 
 disable_power:
 	/* power down process */
-	rc = __disable_regulator_iris2(core, "vcodec");
-	if (rc) {
-		d_vpr_e("%s: disable regulator vcodec failed\n", __func__);
-		rc = 0;
-	}
 	rc = __disable_unprepare_clock_iris2(core, "vcodec_clk");
 	if (rc) {
 		d_vpr_e("%s: disable unprepare vcodec_clk failed\n", __func__);
+		rc = 0;
+	}
+	rc = __disable_regulator_iris2(core, "vcodec");
+	if (rc) {
+		d_vpr_e("%s: disable regulator vcodec failed\n", __func__);
 		rc = 0;
 	}
 
@@ -575,6 +578,17 @@ static int __power_off_iris2_controller(struct msm_vidc_core *core)
 			0x1, 0x1, 200, 2000);
 	if (rc)
 		d_vpr_h("%s: AON_WRAPPER_MVP_NOC_LPI_CONTROL failed\n", __func__);
+
+	/* Set Iris CPU NoC to Low power */
+	rc = __write_register_masked(core, WRAPPER_IRIS_CPU_NOC_LPI_CONTROL,
+			0x1, BIT(0));
+	if (rc)
+		return rc;
+
+	rc = __read_register_with_poll_timeout(core, WRAPPER_IRIS_CPU_NOC_LPI_STATUS,
+			0x1, 0x1, 200, 2000);
+	if (rc)
+		d_vpr_h("%s: WRAPPER_IRIS_CPU_NOC_LPI_CONTROL failed\n", __func__);
 
 	/* Set Debug bridge Low power */
 	rc = __write_register(core, WRAPPER_DEBUG_BRIDGE_LPI_CONTROL_IRIS2, 0x7);
