@@ -16,7 +16,6 @@ void print_synx_buffer(u32 tag, const char *tag_str, const char *str, struct msm
 {
 	struct msm_vidc_sync_fence *wfence = NULL, *sfence = NULL;
 	struct dma_fence *wbase = NULL, *sbase = NULL;
-	long wref = -1, sref = -1;
 
 	if (!inst || !sbuf || !tag_str || !str)
 		return;
@@ -24,37 +23,35 @@ void print_synx_buffer(u32 tag, const char *tag_str, const char *str, struct msm
 	if (sbuf->wfence) {
 		wfence = sbuf->wfence;
 		wbase = &wfence->base;
-		wref = wfence->sync ? file_count(wfence->sync->file) : -1;
 	}
 
 	if (sbuf->sfence) {
 		sfence = sbuf->sfence;
 		sbase = &sfence->base;
-		sref = sfence->sync ? file_count(sfence->sync->file) : -1;
 	}
 
 	if (wfence && sfence) {
 		dprintk_inst(tag, tag_str, inst,
-			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u, signal: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u, sflag %u\n",
+			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, signal: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, sflag %u\n",
 			str, sbuf->index,
 			wbase->context, wbase->seqno, kref_read(&wbase->refcount),
-			wref, wfence->fd, wfence->h_synx, wfence->flag,
+			wfence->fd, wfence->h_synx, wfence->flag,
 			sbase->context, sbase->seqno, kref_read(&sbase->refcount),
-			sref, sfence->fd, sfence->h_synx, sfence->flag,
+			sfence->fd, sfence->h_synx, sfence->flag,
 			sbuf->flag);
 	} else if (wfence) {
 		dprintk_inst(tag, tag_str, inst,
-			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u, sflag %u\n",
+			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, sflag %u\n",
 			str, sbuf->index,
 			sbase->context, sbase->seqno, kref_read(&sbase->refcount),
-			wref, wfence->fd, wfence->h_synx, wfence->flag,
+			wfence->fd, wfence->h_synx, wfence->flag,
 			sbuf->flag);
 	} else if (sfence) {
 		dprintk_inst(tag, tag_str, inst,
-			"synx: %s: idx %2d, signal: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u, sflag %u\n",
+			"synx: %s: idx %2d, signal: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, sflag %u\n",
 			str, sbuf->index,
 			sbase->context, sbase->seqno, kref_read(&sbase->refcount),
-			sref, sfence->fd, sfence->h_synx, sfence->flag,
+			sfence->fd, sfence->h_synx, sfence->flag,
 			sbuf->flag);
 	}
 }
@@ -288,7 +285,12 @@ static int msm_vidc_sync_put_sync_file_fd(struct msm_vidc_inst *inst,
 	sync_file = fence->sync;
 
 	/* decr file->refcount to release sync_file */
-	fput(sync_file->file);
+	/**
+	 * todo: calling fput from driver is leading to double free crash
+	 * sometimes. So until resolving that issue skip doing fput from
+	 * driver and instead call close(fd) from userspace.
+	 */
+	// fput(sync_file->file);
 	fence->sync = NULL;
 
 	return 0;
@@ -596,7 +598,6 @@ int msm_vidc_sync_create_queue_fences(struct msm_vidc_inst *inst,
 {
 	struct msm_vidc_sync_fence *wfence, *sfence;
 	struct dma_fence *wbase, *sbase;
-	long wref = -1, sref = -1;
 	int rc = 0;
 
 	if (!inst || !f) {
@@ -633,16 +634,14 @@ int msm_vidc_sync_create_queue_fences(struct msm_vidc_inst *inst,
 	sbase = &sfence->base;
 	f->wait_fd = wfence->fd;
 	f->signal_fd = sfence->fd;
-	wref = wfence->sync ? file_count(wfence->sync->file) : -1;
-	sref = sfence->sync ? file_count(sfence->sync->file) : -1;
 
 	i_vpr_h(inst,
-		"synx: create: idx %2d, wait: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u, signal: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u\n",
+		"synx: create: idx %2d, wait: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, signal: ctx %llu seq %llu ref %u fd %d synx %llu flag %u\n",
 		f->index,
 		wbase->context, wbase->seqno, kref_read(&wbase->refcount),
-		wref, wfence->fd, wfence->h_synx, wfence->flag,
+		wfence->fd, wfence->h_synx, wfence->flag,
 		sbase->context, sbase->seqno, kref_read(&sbase->refcount),
-		sref, sfence->fd, sfence->h_synx, sfence->flag);
+		sfence->fd, sfence->h_synx, sfence->flag);
 
 	return 0;
 put_sfence:
@@ -793,7 +792,6 @@ void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
 	struct msm_vidc_sync_fence_timeline *tl;
 	struct dma_fence *base;
 	struct list_head fence_list;
-	long sync_ref = -1;
 
 	if (!inst || !tag_str) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -830,11 +828,10 @@ void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
 		list_for_each_entry_safe(fence, dummy_fence, &fence_list, list) {
 			list_del_init(&fence->list);
 			base = &fence->base;
-			sync_ref = fence->sync ? file_count(fence->sync->file) : -1;
 			dprintk_inst(tag, tag_str, inst,
-				"synx: destroy: wait_submit: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u\n",
+				"synx: destroy: wait_submit: ctx %llu seq %llu ref %u fd %d synx %llu flag %u\n",
 				base->context, base->seqno, kref_read(&base->refcount),
-				sync_ref, fence->fd, fence->h_synx, fence->flag);
+				fence->fd, fence->h_synx, fence->flag);
 			msm_vidc_sync_destroy_sync_fence(inst, fence);
 		}
 
@@ -842,11 +839,10 @@ void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
 		mutex_lock(&tl->lock);
 		list_for_each_entry(fence, &tl->fence_tracker.release_list, list) {
 			base = &fence->base;
-			sync_ref = fence->sync ? file_count(fence->sync->file) : -1;
 			dprintk_inst(tag, tag_str, inst,
-				"synx: destroy: wait_release: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u\n",
+				"synx: destroy: wait_release: ctx %llu seq %llu ref %u fd %d synx %llu flag %u\n",
 				base->context, base->seqno, kref_read(&base->refcount),
-				sync_ref, fence->fd, fence->h_synx, fence->flag);
+				fence->fd, fence->h_synx, fence->flag);
 		}
 		mutex_unlock(&tl->lock);
 	}
@@ -864,11 +860,10 @@ void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
 			list_del_init(&fence->list);
 			fence->flag |= MSM_VIDC_SYNC_FLAG_ERROR;
 			base = &fence->base;
-			sync_ref = fence->sync ? file_count(fence->sync->file) : -1;
 			dprintk_inst(tag, tag_str, inst,
-				"synx: destroy: signal_submit: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u\n",
+				"synx: destroy: signal_submit: ctx %llu seq %llu ref %u fd %d synx %llu flag %u\n",
 				base->context, base->seqno, kref_read(&base->refcount),
-				sync_ref, fence->fd, fence->h_synx, fence->flag);
+				fence->fd, fence->h_synx, fence->flag);
 			msm_vidc_sync_destroy_sync_fence(inst, fence);
 		}
 
@@ -876,11 +871,10 @@ void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
 		mutex_lock(&tl->lock);
 		list_for_each_entry(fence, &tl->fence_tracker.release_list, list) {
 			base = &fence->base;
-			sync_ref = fence->sync ? file_count(fence->sync->file) : -1;
 			dprintk_inst(tag, tag_str, inst,
-				"synx: destroy: signal_release: ctx %llu seq %llu ref %u sref %ld fd %d synx %llu flag %u\n",
+				"synx: destroy: signal_release: ctx %llu seq %llu ref %u fd %d synx %llu flag %u\n",
 				base->context, base->seqno, kref_read(&base->refcount),
-				sync_ref, fence->fd, fence->h_synx, fence->flag);
+				fence->fd, fence->h_synx, fence->flag);
 		}
 		mutex_unlock(&tl->lock);
 	}
