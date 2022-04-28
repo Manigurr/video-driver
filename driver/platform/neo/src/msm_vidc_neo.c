@@ -94,7 +94,7 @@ static struct msm_platform_core_capability core_data_neo[] = {
 		 */
 	{PAGEFAULT_NON_FATAL, 1},
 	{PAGETABLE_CACHING, 0},
-	{DCVS, 1},
+	{DCVS, 0},
 	{DECODE_BATCH, 1},
 	{DECODE_BATCH_TIMEOUT, 200},
 	{STATS_TIMEOUT_MS, 2000},
