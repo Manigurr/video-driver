@@ -75,7 +75,7 @@ static struct msm_platform_core_capability core_data_neo[] = {
 	{MAX_MBPS_ALL_INTRA, 1958400}, /* 3840x2176/256 MBs@60fps */
 	{MAX_ENH_LAYER_COUNT, 5},
 	{NUM_VPP_PIPE, 4},
-	{SW_PC, 1},
+	{SW_PC, 0},
 	{FW_UNLOAD, 0},
 	{HW_RESPONSE_TIMEOUT, HW_RESPONSE_TIMEOUT_VALUE}, /* 1000 ms */
 	{SW_PC_DELAY,         SW_PC_DELAY_VALUE        }, /* 1500 ms (>HW_RESPONSE_TIMEOUT)*/
@@ -94,7 +94,7 @@ static struct msm_platform_core_capability core_data_neo[] = {
 		 */
 	{PAGEFAULT_NON_FATAL, 1},
 	{PAGETABLE_CACHING, 0},
-	{DCVS, 1},
+	{DCVS, 0},
 	{DECODE_BATCH, 1},
 	{DECODE_BATCH_TIMEOUT, 200},
 	{STATS_TIMEOUT_MS, 2000},

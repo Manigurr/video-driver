@@ -536,6 +536,8 @@ static int msm_vidc_load_regulator_table(struct msm_vidc_core *core)
 		rinfo->has_hw_power_collapse = of_property_read_bool(
 			regulator_node, "qcom,support-hw-trigger");
 
+		rinfo->has_hw_power_collapse = false;
+
 		d_vpr_h("Found regulator %s: h/w collapse = %s\n",
 				rinfo->name,
 				rinfo->has_hw_power_collapse ? "yes" : "no");
