@@ -23,6 +23,8 @@ enum msm_memory_pool_type {
 	MSM_MEM_POOL_ALLOC,
 	MSM_MEM_POOL_TIMESTAMP,
 	MSM_MEM_POOL_DMABUF,
+	MSM_MEM_POOL_SYNC_FENCE,
+	MSM_MEM_POOL_SYNX_BUFFER,
 	MSM_MEM_POOL_MAX,
 };
 
@@ -47,6 +49,10 @@ int msm_vidc_memory_free(struct msm_vidc_core *core,
 int msm_vidc_memory_map(struct msm_vidc_core *core,
 	struct msm_vidc_map *map);
 int msm_vidc_memory_unmap(struct msm_vidc_core *core,
+	struct msm_vidc_map *map);
+int msm_vidc_iommu_map(struct msm_vidc_core *core,
+	struct msm_vidc_map *map);
+int msm_vidc_iommu_unmap(struct msm_vidc_core *core,
 	struct msm_vidc_map *map);
 struct dma_buf *msm_vidc_memory_get_dmabuf(struct msm_vidc_inst *inst,
 	int fd);

@@ -206,9 +206,11 @@ enum hfi_hevc_tier_type {
 #define HFI_BITMASK_LUMA_BIT_DEPTH     0xffff0000
 #define HFI_BITMASK_CHROMA_BIT_DEPTH   0x0000ffff
 #define HFI_PROP_LUMA_CHROMA_BIT_DEPTH                          0x0300010f
+#define HFI_PROP_DPB_SCID                                       0x03000110
 
 #define HFI_BITMASK_FRAME_MBS_ONLY_FLAG           0x00000001
 #define HFI_BITMASK_MB_ADAPTIVE_FRAME_FIELD_FLAG  0x00000002
+
 #define HFI_PROP_CODED_FRAMES                                   0x03000120
 
 #define HFI_PROP_CABAC_SESSION                                  0x03000121
@@ -490,6 +492,10 @@ enum hfi_nal_length_field_type {
 #define HFI_PROP_TOTAL_PEAK_BITRATE                             0x0300017C
 
 #define HFI_PROP_MAINTAIN_MIN_QUALITY                           0x0300017D
+
+#define HFI_PROP_SYNX_HANDLES                                   0x03000188
+
+#define HFI_PROP_IN_OUT_PAIR_BUFID                              0x03000185
 
 #define HFI_PROP_END                                            0x03FFFFFF
 

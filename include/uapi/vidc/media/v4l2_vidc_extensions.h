@@ -61,6 +61,16 @@
 #define V4L2_CID_MPEG_VIDC_LOWLATENCY_REQUEST   (V4L2_CID_MPEG_VIDC_BASE + 0x3)
 /* FIXme: */
 #define V4L2_CID_MPEG_VIDC_CODEC_CONFIG         (V4L2_CID_MPEG_VIDC_BASE + 0x4)
+
+#define V4L2_CID_MPEG_VIDC_VIDEO_STREAM_TYPE                                \
+	(V4L2_CID_MPEG_VIDC_BASE + 0x5)
+enum v4l2_mpeg_vidc_stream_type {
+	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE    = 0x0,
+	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_EYE   = 0x1,
+	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_DEPTH  = 0x2,
+	V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH = 0x3,
+};
+
 /* Encoder Intra refresh period */
 #define V4L2_CID_MPEG_VIDC_INTRA_REFRESH_PERIOD (V4L2_CID_MPEG_VIDC_BASE + 0xB)
 #define V4L2_CID_MPEG_VIDC_TIME_DELTA_BASED_RC  (V4L2_CID_MPEG_VIDC_BASE + 0xD)
@@ -118,6 +128,8 @@ enum v4l2_mpeg_vidc_blur_types {
 	(V4L2_CID_MPEG_VIDC_BASE + 0x22)
 #define V4L2_CID_MPEG_VIDC_MIN_BITSTREAM_SIZE_OVERWRITE                       \
 	(V4L2_CID_MPEG_VIDC_BASE + 0x23)
+#define V4L2_CID_MPEG_VIDC_METADATA_IN_OUT_BUFFER_PAIR_ID                     \
+	(V4L2_CID_MPEG_VIDC_BASE + 0x24)
 
 /* Encoder Super frame control */
 #define V4L2_CID_MPEG_VIDC_SUPERFRAME           (V4L2_CID_MPEG_VIDC_BASE + 0x28)
@@ -141,6 +153,25 @@ enum v4l2_mpeg_vidc_blur_types {
 	(V4L2_CID_MPEG_VIDC_BASE + 0x30)
 /* Decoder Timestamp Reorder control */
 #define V4L2_CID_MPEG_VIDC_TS_REORDER           (V4L2_CID_MPEG_VIDC_BASE + 0x31)
+
+/*
+ * struct msm_v4l2_synx_fence - v4l2 buffer fence info
+ * @index: id number of the buffer
+ * @type: enum v4l2_buf_type; buffer type
+ * @wait_fd: file descriptor of the wait fence associated with this buffer
+ * @signal_fd: file descriptor of the signal fence associated with this buffer
+ */
+struct msm_v4l2_synx_fence {
+	__u32 index;
+	__u32 type;
+	__s32 wait_fd;
+	__s32 signal_fd;
+	__u32 reserved[4];
+};
+
+/* Create and queue wait fence and signal fence */
+#define VIDIOC_CREATE_QUEUE_FENCES                                           \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 0, struct msm_v4l2_synx_fence)
 
 /* Deprecate below controls once availble in gki and gsi bionic header */
 #ifndef V4L2_CID_MPEG_VIDEO_BASELAYER_PRIORITY_ID
@@ -270,6 +301,7 @@ enum v4l2_mpeg_vidc_metadata {
 	METADATA_DEC_QP_METADATA              = 0x0300016f,
 	METADATA_ROI_INFO                     = 0x03000173,
 	METADATA_DPB_TAG_LIST                 = 0x03000179,
+	METADATA_IN_OUT_PAIR_BUFFER_ID        = 0x03000185,
 	METADATA_MAX_NUM_REORDER_FRAMES       = 0x03000127,
 };
 enum meta_interlace_info {

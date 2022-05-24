@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 KBUILD_OPTIONS+= VIDEO_ROOT=$(KERNEL_SRC)/$(M)
+KBUILD_OPTIONS+= KERNEL_ROOT=$(ROOT_DIR)/$(KERNEL_DIR)
 
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)

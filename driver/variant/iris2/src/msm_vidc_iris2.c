@@ -117,6 +117,8 @@
 #define WRAPPER_TZ_BASE_OFFS	0x000C0000
 #define WRAPPER_TZ_CPU_CLOCK_CONFIG	(WRAPPER_TZ_BASE_OFFS)
 #define WRAPPER_TZ_CPU_STATUS	(WRAPPER_TZ_BASE_OFFS + 0x10)
+#define WRAPPER_TZ_CTL_AXI_CLOCK_CONFIG	(WRAPPER_TZ_BASE_OFFS + 0x14)
+#define WRAPPER_TZ_QNS4PDXFIFO_RESET	(WRAPPER_TZ_BASE_OFFS + 0x18)
 
 #define CTRL_INIT_IRIS2		CPU_CS_SCIACMD_IRIS2
 
@@ -139,6 +141,8 @@
 #define MMAP_ADDR_IRIS2		CPU_CS_SCIBCMDARG0_IRIS2
 #define UC_REGION_ADDR_IRIS2	CPU_CS_SCIBARG1_IRIS2
 #define UC_REGION_SIZE_IRIS2	CPU_CS_SCIBARG2_IRIS2
+#define DEVICE_REGION_ADDR_IRIS2	CPU_CS_VCICMDARG0_IRIS2
+#define DEVICE_REGION_SIZE_IRIS2	CPU_CS_VCICMDARG1_IRIS2
 
 #define AON_WRAPPER_MVP_NOC_LPI_CONTROL	(AON_BASE_OFFS)
 #define AON_WRAPPER_MVP_NOC_LPI_STATUS	(AON_BASE_OFFS + 0x4)
@@ -398,7 +402,7 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	u32 value;
 	int rc = 0;
 
-	if (!core) {
+	if (!core || !core->dt || !core->dt->uc_region) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
@@ -408,7 +412,7 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	if (rc)
 		return rc;
 
-	value = SHARED_QSIZE;
+	value = core->dt->uc_region->size;
 	rc = __write_register(core, UC_REGION_SIZE_IRIS2, value);
 	if (rc)
 		return rc;
@@ -422,17 +426,6 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	if (rc)
 		return rc;
 
-	/* update queues vaddr for debug purpose */
-	value = (u32)((u64)core->iface_q_table.align_virtual_addr);
-	rc = __write_register(core, CPU_CS_VCICMDARG0_IRIS2, value);
-	if (rc)
-		return rc;
-
-	value = (u32)((u64)core->iface_q_table.align_virtual_addr >> 32);
-	rc = __write_register(core, CPU_CS_VCICMDARG1_IRIS2, value);
-	if (rc)
-		return rc;
-
 	if (core->sfr.align_device_addr) {
 		value = (u32)core->sfr.align_device_addr + VIDEO_ARCH_LX;
 		rc = __write_register(core, SFR_ADDR_IRIS2, value);
@@ -441,6 +434,35 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *vidc_core)
 	}
 
 	return 0;
+}
+
+static int __setup_device_region_memory_map_iris2(struct msm_vidc_core *vidc_core)
+{
+	struct msm_vidc_core *core = vidc_core;
+	u32 value;
+	int rc = 0;
+
+	if (!core || !core->dt || !core->dt->device_region) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!core->dt->device_region->start) {
+		d_vpr_h("%s: device_region not available\n", __func__);
+		return 0;
+	}
+
+	value = core->dt->device_region->start;
+	rc = __write_register(core, DEVICE_REGION_ADDR_IRIS2, value);
+	if (rc)
+		return rc;
+
+	value = core->dt->device_region->size;
+	rc = __write_register(core, DEVICE_REGION_SIZE_IRIS2, value);
+	if (rc)
+		return rc;
+
+	return rc;
 }
 
 static int __power_off_iris2_hardware(struct msm_vidc_core *core)
@@ -573,6 +595,25 @@ static int __power_off_iris2_controller(struct msm_vidc_core *core)
 			0xffffffff, 0x0, 200, 2000);
 	if (rc)
 		d_vpr_h("%s: debug bridge release failed\n", __func__);
+
+#if defined(CONFIG_MSM_VIDC_NEO)
+	/* Reset MVP QNS4PDXFIFO */
+	rc = __write_register(core, WRAPPER_TZ_CTL_AXI_CLOCK_CONFIG, 0x3);
+	if (rc)
+		return rc;
+
+	rc = __write_register(core, WRAPPER_TZ_QNS4PDXFIFO_RESET, 0x1);
+	if (rc)
+		return rc;
+
+	rc = __write_register(core, WRAPPER_TZ_QNS4PDXFIFO_RESET, 0x0);
+	if (rc)
+		return rc;
+
+	rc = __write_register(core, WRAPPER_TZ_CTL_AXI_CLOCK_CONFIG, 0x0);
+	if (rc)
+		return rc;
+#endif
 
 	/* Turn off MVP MVS0C core clock */
 	rc = __disable_unprepare_clock_iris2(core, "core_clk");
@@ -1133,6 +1174,7 @@ static struct msm_vidc_venus_ops iris2_ops = {
 	.raise_interrupt = __raise_interrupt_iris2,
 	.clear_interrupt = __clear_interrupt_iris2,
 	.setup_ucregion_memmap = __setup_ucregion_memory_map_iris2,
+	.setup_device_region_memmap = __setup_device_region_memory_map_iris2,
 	.clock_config_on_enable = NULL,
 	.reset_ahb2axi_bridge = __reset_ahb2axi_bridge,
 	.power_on = __power_on_iris2,

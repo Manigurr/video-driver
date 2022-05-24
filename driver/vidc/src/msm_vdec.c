@@ -743,6 +743,10 @@ static int msm_vdec_set_input_properties(struct msm_vidc_inst *inst)
 	if (rc)
 		return rc;
 
+	rc = msm_vidc_set_stream_type(inst, STREAM_TYPE);
+	if (rc)
+		return rc;
+
 	rc = msm_vdec_set_output_order(inst, INPUT_PORT);
 	if (rc)
 		return rc;
@@ -1091,9 +1095,11 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 	struct msm_vidc_inst_capability *capability;
 	static const u32 metadata_input_list[] = {
 		META_BUF_TAG,
+		META_IN_OUT_PAIR_BUFFER_ID,
 	};
 	static const u32 metadata_output_list[] = {
 		META_OUTPUT_BUF_TAG,
+		META_IN_OUT_PAIR_BUFFER_ID,
 	};
 
 	if (!inst || !inst->capabilities) {
@@ -1119,6 +1125,56 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 				msm_vidc_allow_metadata(inst, metadata_output_list[i])) {
 				payload[count + 1] =
 					capability->cap[metadata_output_list[i]].hfi_id;
+				count++;
+			}
+		}
+	} else {
+		i_vpr_e(inst, "%s: invalid port: %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	rc = venus_hfi_session_command(inst,
+			HFI_CMD_DELIVERY_MODE,
+			port,
+			HFI_PAYLOAD_U32_ARRAY,
+			&payload[0],
+			(count + 1) * sizeof(u32));
+
+	return rc;
+}
+
+static int msm_vdec_set_delivery_mode_property(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 payload[32] = {0};
+	u32 i, count = 0;
+	struct msm_vidc_inst_capability *capability;
+	static const u32 property_input_list[] = { };
+	static const u32 property_output_list[] = {
+		HFI_PROP_SYNX_HANDLES,
+	};
+
+	if (!inst || !inst->capabilities) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+	i_vpr_h(inst, "%s()\n", __func__);
+
+	capability = inst->capabilities;
+	payload[0] = HFI_MODE_PROPERTY;
+
+	if (port == INPUT_PORT) {
+		for (i = 0; i < ARRAY_SIZE(property_input_list); i++) {
+			if (msm_vidc_allow_property(inst, property_input_list[i])) {
+				payload[count + 1] = property_input_list[i];
+				count++;
+			}
+		}
+	} else if (port == OUTPUT_PORT) {
+		for (i = 0; i < ARRAY_SIZE(property_output_list); i++) {
+			if (msm_vidc_allow_property(inst, property_output_list[i])) {
+				payload[count + 1] = property_output_list[i];
 				count++;
 			}
 		}
@@ -1745,6 +1801,10 @@ int msm_vdec_streamon_output(struct msm_vidc_inst *inst)
 		goto error;
 
 	rc = msm_vdec_set_delivery_mode_metadata(inst, OUTPUT_PORT);
+	if (rc)
+		return rc;
+
+	rc = msm_vdec_set_delivery_mode_property(inst, OUTPUT_PORT);
 	if (rc)
 		return rc;
 

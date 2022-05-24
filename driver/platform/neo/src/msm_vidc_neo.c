@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
 
-#include "msm_vidc_waipio.h"
+#include "msm_vidc_neo.h"
 #include "msm_vidc_platform.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_internal.h"
@@ -50,7 +50,7 @@
 #define HEIC    MSM_VIDC_HEIC
 #define CODECS_ALL     (H264 | HEVC | VP9 | HEIC)
 
-static struct msm_platform_core_capability core_data_waipio[] = {
+static struct msm_platform_core_capability core_data_neo[] = {
 	/* {type, value} */
 	{ENC_CODECS, H264|HEVC|HEIC},
 	{DEC_CODECS, H264|HEVC|VP9|HEIC},
@@ -75,7 +75,7 @@ static struct msm_platform_core_capability core_data_waipio[] = {
 	{MAX_MBPS_ALL_INTRA, 1958400}, /* 3840x2176/256 MBs@60fps */
 	{MAX_ENH_LAYER_COUNT, 5},
 	{NUM_VPP_PIPE, 4},
-	{SW_PC, 1},
+	{SW_PC, 0},
 	{FW_UNLOAD, 0},
 	{HW_RESPONSE_TIMEOUT, HW_RESPONSE_TIMEOUT_VALUE}, /* 1000 ms */
 	{SW_PC_DELAY,         SW_PC_DELAY_VALUE        }, /* 1500 ms (>HW_RESPONSE_TIMEOUT)*/
@@ -94,17 +94,17 @@ static struct msm_platform_core_capability core_data_waipio[] = {
 		 */
 	{PAGEFAULT_NON_FATAL, 1},
 	{PAGETABLE_CACHING, 0},
-	{DCVS, 1},
+	{DCVS, 0},
 	{DECODE_BATCH, 1},
 	{DECODE_BATCH_TIMEOUT, 200},
 	{STATS_TIMEOUT_MS, 2000},
 	{AV_SYNC_WINDOW_SIZE, 40},
 	{NON_FATAL_FAULTS, 1},
 	{ENC_AUTO_FRAMERATE, 1},
-	{MMRM, 1},
+	{MMRM, 0},
 };
 
-static struct msm_platform_inst_capability instance_data_waipio[] = {
+static struct msm_platform_inst_capability instance_data_neo[] = {
 	/* {cap, domain, codec,
 	 *      min, max, step_or_mask, value,
 	 *      v4l2_id,
@@ -1419,6 +1419,20 @@ static struct msm_platform_inst_capability instance_data_waipio[] = {
 		{LTR_COUNT, IR_RANDOM, SLICE_MODE},
 		msm_vidc_adjust_all_intra, NULL},
 
+	{STREAM_TYPE, DEC, H264|HEVC,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH,
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_EYE) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_DEPTH) |
+		BIT(V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH),
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,
+		V4L2_CID_MPEG_VIDC_VIDEO_STREAM_TYPE,
+		HFI_PROP_DPB_SCID,
+		CAP_FLAG_ROOT | CAP_FLAG_MENU,
+		{0}, {0},
+		NULL, msm_vidc_set_stream_type},
+
 	{META_LTR_MARK_USE, ENC, H264|HEVC,
 		V4L2_MPEG_MSM_VIDC_DISABLE, V4L2_MPEG_MSM_VIDC_ENABLE,
 		1, V4L2_MPEG_MSM_VIDC_DISABLE,
@@ -1680,9 +1694,9 @@ static u32 vpe_csc_custom_limit_coeff[MAX_LIMIT_COEFFS] = {
 	16, 235, 16, 240, 16, 240
 };
 
-/* Default UBWC config for LPDDR5 */
-static struct msm_vidc_ubwc_config_data ubwc_config_waipio[] = {
-	UBWC_CONFIG(8, 32, 16, 0, 1, 1, 1),
+/* Default UBWC config for neo */
+static struct msm_vidc_ubwc_config_data ubwc_config_neo[] = {
+	UBWC_CONFIG(8, 32, 13, 0, 1, 1, 1),
 };
 
 /* Default bus bandwidth for non_real time session based on priority */
@@ -1691,16 +1705,24 @@ static u32 bus_bw_nrt[] = {
 	11000000,
 };
 
-static struct msm_vidc_platform_data waipio_data = {
-	.core_data = core_data_waipio,
-	.core_data_size = ARRAY_SIZE(core_data_waipio),
-	.instance_data = instance_data_waipio,
-	.instance_data_size = ARRAY_SIZE(instance_data_waipio),
+static struct msm_vidc_llcc_data llcc_data_neo[] = {
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_EYE,     7},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_EYE,    8},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_LEFT_DEPTH,  29},
+	{V4L2_CID_MPEG_VIDC_VIDEO_STREAM_RIGHT_DEPTH, 29},
+};
+
+static struct msm_vidc_platform_data neo_data = {
+	.core_data = core_data_neo,
+	.core_data_size = ARRAY_SIZE(core_data_neo),
+	.instance_data = instance_data_neo,
+	.instance_data_size = ARRAY_SIZE(instance_data_neo),
 	.csc_data.vpe_csc_custom_bias_coeff = vpe_csc_custom_bias_coeff,
 	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
-	.ubwc_config = ubwc_config_waipio,
+	.ubwc_config = ubwc_config_neo,
 	.bus_bw_nrt = bus_bw_nrt,
+	.llcc_data = llcc_data_neo,
 };
 
 static int msm_vidc_init_data(struct msm_vidc_core *core)
@@ -1711,14 +1733,14 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
-	d_vpr_h("%s: initialize waipio data\n", __func__);
+	d_vpr_h("%s: initialize neo data\n", __func__);
 
-	core->platform->data = waipio_data;
+	core->platform->data = neo_data;
 
 	return rc;
 }
 
-int msm_vidc_init_platform_waipio(struct msm_vidc_core *core, struct device *dev)
+int msm_vidc_init_platform_neo(struct msm_vidc_core *core, struct device *dev)
 {
 	int rc = 0;
 
@@ -1729,7 +1751,7 @@ int msm_vidc_init_platform_waipio(struct msm_vidc_core *core, struct device *dev
 	return 0;
 }
 
-int msm_vidc_deinit_platform_waipio(struct msm_vidc_core *core, struct device *dev)
+int msm_vidc_deinit_platform_neo(struct msm_vidc_core *core, struct device *dev)
 {
 	/* do nothing */
 	return 0;

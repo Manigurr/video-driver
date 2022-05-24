@@ -104,8 +104,8 @@ static inline bool is_input_meta_enabled(struct msm_vidc_inst *inst)
 	bool enabled = false;
 
 	if (is_decode_session(inst)) {
-		enabled = inst->capabilities->cap[META_BUF_TAG].value ?
-			true : false;
+		enabled = (inst->capabilities->cap[META_BUF_TAG].value ||
+			inst->capabilities->cap[META_IN_OUT_PAIR_BUFFER_ID].value);
 	} else if (is_encode_session(inst)) {
 		enabled = (inst->capabilities->cap[META_SEQ_HDR_NAL].value ||
 			inst->capabilities->cap[META_EVA_STATS].value ||
@@ -128,6 +128,7 @@ static inline bool is_output_meta_enabled(struct msm_vidc_inst *inst)
 			inst->capabilities->cap[META_SEI_MASTERING_DISP].value ||
 			inst->capabilities->cap[META_SEI_CLL].value ||
 			inst->capabilities->cap[META_BUF_TAG].value ||
+			inst->capabilities->cap[META_IN_OUT_PAIR_BUFFER_ID].value ||
 			inst->capabilities->cap[META_DPB_TAG_LIST].value ||
 			inst->capabilities->cap[META_SUBFRAME_OUTPUT].value ||
 			inst->capabilities->cap[META_MAX_NUM_REORDER_FRAMES].value);

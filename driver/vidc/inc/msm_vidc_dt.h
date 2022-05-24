@@ -97,6 +97,12 @@ struct addr_set {
 	u32 count;
 };
 
+struct addr_map {
+	u32 virt_addr;
+	u32 size;
+	u32 phys_addr;
+};
+
 struct context_bank_info {
 	struct list_head list;
 	const char *name;
@@ -186,6 +192,7 @@ struct subcache_info {
 	bool isactive;
 	bool isset;
 	struct llcc_slice_desc *subcache;
+	unsigned int mapped_va;
 };
 
 struct subcache_set {
@@ -215,6 +222,10 @@ struct msm_vidc_dt {
 	struct mutex cb_lock;
 	const char *fw_name;
 	int fw_cookie;
+	struct addr_range *uc_region;
+	struct addr_range *device_region;
+	struct addr_map *ipclite_mem;
+	struct addr_map *hw_mutex;
 };
 
 int msm_vidc_init_dt(struct platform_device *pdev);

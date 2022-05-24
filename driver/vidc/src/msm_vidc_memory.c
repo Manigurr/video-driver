@@ -9,11 +9,13 @@
 #include <linux/qcom-dma-mapping.h>
 #include <linux/mem-buf.h>
 #include <soc/qcom/secure_buffer.h>
+#include <../drivers/dma-buf/heaps/qcom_sg_ops.h>
 
 #include "msm_vidc_memory.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc_sync.h"
 #include "msm_vidc_dt.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_events.h"
@@ -313,6 +315,75 @@ exit:
 	return rc;
 }
 
+int msm_vidc_iommu_unmap(struct msm_vidc_core *core,
+	struct msm_vidc_map *map)
+{
+	int rc = 0;
+	struct context_bank_info *cb = NULL;
+
+	if (!core || !map) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	cb = get_context_bank(core, map->region);
+	if (!cb) {
+		d_vpr_e("%s: Failed to get context bank device\n",
+			__func__);
+		rc = -EIO;
+		goto exit;
+	}
+
+	iommu_unmap(cb->domain, map->device_addr, map->size);
+	d_vpr_l("%s: type %11s, device_addr %#x, region %d\n",
+		__func__, buf_name(map->type), map->device_addr, map->region);
+
+	map->device_addr = 0x0;
+
+exit:
+	return rc;
+}
+
+int msm_vidc_iommu_map(struct msm_vidc_core *core, struct msm_vidc_map *map)
+{
+	int rc = 0;
+	struct qcom_sg_buffer *sg_buffer;
+	phys_addr_t phys_addr;
+	struct context_bank_info *cb = NULL;
+
+	if (!core || !map) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (map->dmabuf) {
+		sg_buffer = (struct qcom_sg_buffer *)map->dmabuf->priv;
+		phys_addr = sg_phys(sg_buffer->sg_table.sgl);
+	} else {
+		phys_addr = map->phys_addr;
+	}
+
+	cb = get_context_bank(core, map->region);
+	if (!cb) {
+		d_vpr_e("%s: Failed to get context bank device\n", __func__);
+		return -EIO;
+	}
+
+	rc = iommu_map(cb->domain, map->device_addr, phys_addr,
+		map->size, IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE);
+	if (rc) {
+		d_vpr_e(
+			"iommu_map failed for device_addr 0x%x, size %d, rc:%d\n",
+			map->device_addr, map->size, rc);
+		return rc;
+	}
+
+	d_vpr_l("%s: device_addr %#x, region %d\n",
+		__func__, map->device_addr, map->region);
+
+	return rc;
+}
+
 int msm_vidc_memory_alloc(struct msm_vidc_core *core, struct msm_vidc_alloc *mem)
 {
 	int rc = 0;
@@ -574,6 +645,8 @@ static struct msm_vidc_type_size_name buftype_size_name_arr[] = {
 	{MSM_MEM_POOL_ALLOC,      sizeof(struct msm_vidc_alloc),      "MSM_MEM_POOL_ALLOC"      },
 	{MSM_MEM_POOL_TIMESTAMP,  sizeof(struct msm_vidc_timestamp),  "MSM_MEM_POOL_TIMESTAMP"  },
 	{MSM_MEM_POOL_DMABUF,     sizeof(struct msm_memory_dmabuf),   "MSM_MEM_POOL_DMABUF"     },
+	{MSM_MEM_POOL_SYNC_FENCE, sizeof(struct msm_vidc_sync_fence), "MSM_MEM_POOL_SYNC_FENCE" },
+	{MSM_MEM_POOL_SYNX_BUFFER, sizeof(struct msm_vidc_synx_buffer), "MSM_MEM_POOL_SYNX_BUFFER"},
 };
 
 int msm_memory_pools_init(struct msm_vidc_inst *inst)

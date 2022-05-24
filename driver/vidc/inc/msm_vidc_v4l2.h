@@ -64,5 +64,7 @@ int msm_v4l2_querymenu(struct file *file, void *fh,
 		struct v4l2_querymenu *qmenu);
 unsigned int msm_v4l2_poll(struct file *filp,
 	struct poll_table_struct *pt);
+long msm_v4l2_private_ctrl(struct file *file, void *fh,
+		bool valid_prio, unsigned int cmd, void *arg);
 
 #endif // _MSM_VIDC_V4L2_H_

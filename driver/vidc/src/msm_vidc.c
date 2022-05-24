@@ -11,6 +11,7 @@
 #include "msm_venc.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc_sync.h"
 #include "msm_vidc_vb2.h"
 #include "msm_vidc_v4l2.h"
 #include "msm_vidc_debug.h"
@@ -27,6 +28,13 @@
 #define MSM_VIDC_VERSION     ((5 << 16) + (10 << 8) + 0)
 
 #define MAX_EVENTS 30
+
+#define IOCTL_INFO(_ioctl, _func)                   \
+	[_IOC_NR(_ioctl) - BASE_VIDIOC_PRIVATE] = {     \
+		.ioctl = _ioctl,                            \
+		.func = _func,                              \
+		.name = #_ioctl,                            \
+	}
 
 static inline bool valid_v4l2_buffer(struct v4l2_buffer *b,
 		struct msm_vidc_inst *inst)
@@ -379,6 +387,43 @@ int msm_vidc_g_param(void *instance, struct v4l2_streamparm *param)
 	return rc;
 }
 EXPORT_SYMBOL(msm_vidc_g_param);
+
+static const struct msm_vidc_sync_private_ioctl_info msm_v4l2_private_ioctls[] = {
+	IOCTL_INFO(VIDIOC_CREATE_QUEUE_FENCES,       msm_vidc_sync_create_queue_fences),
+};
+
+int msm_vidc_handle_fence(void *instance, u32 cmd, struct msm_v4l2_synx_fence *fence)
+{
+	struct msm_vidc_inst *inst = instance;
+	const struct msm_vidc_sync_private_ioctl_info *info;
+	int index = 0, rc = 0;
+
+	if (!inst || !fence)
+		return -EINVAL;
+
+	if (_IOC_NR(cmd) < BASE_VIDIOC_PRIVATE) {
+		d_vpr_e("%s: invalid private cmd %u\n", __func__, cmd);
+		return -EINVAL;
+	}
+	index = _IOC_NR(cmd) - BASE_VIDIOC_PRIVATE;
+	if (index >= ARRAY_SIZE(msm_v4l2_private_ioctls)) {
+		d_vpr_e("%s: invalid cmd %u, index %d, size %d\n", __func__,
+			cmd, index, ARRAY_SIZE(msm_v4l2_private_ioctls));
+		return -EINVAL;
+	}
+	info = &msm_v4l2_private_ioctls[index];
+
+	i_vpr_h(inst, "%s: received %s, index %d, type %d, wait_fd %d, signal_fd %d\n", __func__,
+		info->name, fence->index, fence->type,
+		fence->wait_fd, fence->signal_fd);
+
+	rc = info->func(inst, fence);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+EXPORT_SYMBOL(msm_vidc_handle_fence);
 
 int msm_vidc_s_ctrl(void *instance, struct v4l2_control *control)
 {
@@ -892,6 +937,8 @@ void *msm_vidc_open(void *vidc_core, u32 session_type)
 	INIT_LIST_HEAD(&inst->firmware.list);
 	INIT_LIST_HEAD(&inst->enc_input_crs);
 	INIT_LIST_HEAD(&inst->dmabuf_tracker);
+	INIT_LIST_HEAD(&inst->synx_tracker.submit_list);
+	INIT_LIST_HEAD(&inst->synx_tracker.release_list);
 	for (i = 0; i < MAX_SIGNAL; i++)
 		init_completion(&inst->completions[i]);
 
@@ -924,6 +971,14 @@ void *msm_vidc_open(void *vidc_core, u32 session_type)
 		goto error;
 
 	rc = msm_vidc_event_queue_init(inst);
+	if (rc)
+		goto error;
+
+	rc = msm_vidc_sync_init_timeline(inst);
+	if (rc)
+		goto error;
+
+	rc = msm_vidc_sync_update_timeline_name(inst);
 	if (rc)
 		goto error;
 
