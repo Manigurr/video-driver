@@ -5106,7 +5106,6 @@ static void msm_vidc_close_helper(struct kref *kref)
 		struct msm_vidc_inst, kref);
 
 	i_vpr_h(inst, "%s()\n", __func__);
-	msm_vidc_sync_deinit_timeline(inst);
 	msm_vidc_event_queue_deinit(inst);
 	msm_vidc_vb2_queue_deinit(inst);
 	msm_vidc_debugfs_deinit_inst(inst);
@@ -5118,6 +5117,7 @@ static void msm_vidc_close_helper(struct kref *kref)
 	msm_vidc_free_capabililty_list(inst, CHILD_LIST | FW_LIST);
 	if (inst->response_workq)
 		destroy_workqueue(inst->response_workq);
+	msm_vidc_sync_deinit_timeline(inst);
 	msm_vidc_remove_dangling_session(inst);
 	kfree(inst->capabilities);
 	kfree(inst);
