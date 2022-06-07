@@ -497,6 +497,8 @@ enum hfi_nal_length_field_type {
 
 #define HFI_PROP_IN_OUT_PAIR_BUFID                              0x03000185
 
+#define HFI_PROP_EVA_LSR_METADATA                               0x0300018F
+
 #define HFI_PROP_END                                            0x03FFFFFF
 
 #define HFI_SESSION_ERROR_BEGIN                                 0x04000000
