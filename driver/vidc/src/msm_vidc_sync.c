@@ -772,6 +772,7 @@ void msm_vidc_sync_deinit_timeline(struct msm_vidc_inst *inst)
 		/* deinit wait sync_fence_timeline */
 		sync_fence_timeline_put(tl);
 	}
+	inst->wait_timeline = NULL;
 
 	tl = inst->signal_timeline;
 	if (tl) {
@@ -782,6 +783,7 @@ void msm_vidc_sync_deinit_timeline(struct msm_vidc_inst *inst)
 		/* deinit signal sync_fence_timeline */
 		sync_fence_timeline_put(tl);
 	}
+	inst->signal_timeline = NULL;
 }
 
 void msm_vidc_sync_cleanup_synx_buffers(struct msm_vidc_inst *inst,
