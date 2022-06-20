@@ -101,7 +101,7 @@ static struct msm_platform_core_capability core_data_neo[] = {
 	{AV_SYNC_WINDOW_SIZE, 40},
 	{NON_FATAL_FAULTS, 1},
 	{ENC_AUTO_FRAMERATE, 1},
-	{MMRM, 0},
+	{MMRM, 1},
 };
 
 static struct msm_platform_inst_capability instance_data_neo[] = {
