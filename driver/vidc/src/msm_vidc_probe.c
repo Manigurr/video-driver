@@ -274,7 +274,7 @@ static int msm_vidc_initialize_core(struct msm_vidc_core *core)
 		goto exit;
 	}
 
-	core->packet_size = 4096;
+	core->packet_size = VIDC_IFACEQ_VAR_HUGE_PKT_SIZE;
 	core->packet = kzalloc(core->packet_size, GFP_KERNEL);
 	if (!core->packet) {
 		d_vpr_e("%s(): core packet allocation failed\n", __func__);
