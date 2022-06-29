@@ -160,11 +160,12 @@ static void msm_vidc_sync_fence_value_str(struct dma_fence *fence, char *str, in
 static void msm_vidc_sync_fence_timeline_value_str(struct dma_fence *fence, char *str,
 		int size)
 {
-	struct msm_vidc_sync_fence_timeline *tl = to_msm_vidc_sync_fence_timeline(fence);
+	struct msm_vidc_sync_fence_timeline *tl;
 
 	if (!fence || !str)
 		return;
 
+	tl = to_msm_vidc_sync_fence_timeline(fence);
 	snprintf(str, size, "%d", tl->next_value);
 }
 
