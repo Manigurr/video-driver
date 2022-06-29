@@ -43,7 +43,7 @@ void print_synx_buffer(u32 tag, const char *tag_str, const char *str, struct msm
 		dprintk_inst(tag, tag_str, inst,
 			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, sflag %u\n",
 			str, sbuf->index,
-			sbase->context, sbase->seqno, kref_read(&sbase->refcount),
+			wbase->context, wbase->seqno, kref_read(&wbase->refcount),
 			wfence->fd, wfence->h_synx, wfence->flag,
 			sbuf->flag);
 	} else if (sfence) {
