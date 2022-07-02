@@ -43,7 +43,7 @@ void print_synx_buffer(u32 tag, const char *tag_str, const char *str, struct msm
 		dprintk_inst(tag, tag_str, inst,
 			"synx: %s: idx %2d, wait: ctx %llu seq %llu ref %u fd %d synx %llu flag %u, sflag %u\n",
 			str, sbuf->index,
-			sbase->context, sbase->seqno, kref_read(&sbase->refcount),
+			wbase->context, wbase->seqno, kref_read(&wbase->refcount),
 			wfence->fd, wfence->h_synx, wfence->flag,
 			sbuf->flag);
 	} else if (sfence) {
@@ -160,11 +160,12 @@ static void msm_vidc_sync_fence_value_str(struct dma_fence *fence, char *str, in
 static void msm_vidc_sync_fence_timeline_value_str(struct dma_fence *fence, char *str,
 		int size)
 {
-	struct msm_vidc_sync_fence_timeline *tl = to_msm_vidc_sync_fence_timeline(fence);
+	struct msm_vidc_sync_fence_timeline *tl;
 
 	if (!fence || !str)
 		return;
 
+	tl = to_msm_vidc_sync_fence_timeline(fence);
 	snprintf(str, size, "%d", tl->next_value);
 }
 
