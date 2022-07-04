@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_vidc_power_iris2.h"
@@ -225,14 +226,25 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 	} ddr = {0};
 
 	struct {
-		fp_t dpb_read, line_buffer_read, line_buffer_write, total;
+		fp_t vsp_read, vsp_write, dpb_read, dpb_write,
+			line_buffer_read, line_buffer_write, total;
 	} llc = {0};
 
 	unsigned long ret = 0;
 	unsigned int integer_part, frac_part;
+	bool is_target_variant_neo = false;
+
+	#if defined(CONFIG_MSM_VIDC_NEO)
+		is_target_variant_neo = true;
+	#endif
 
 	width = max(d->input_width, BASELINE_DIMENSIONS.width);
 	height = max(d->input_height, BASELINE_DIMENSIONS.height);
+
+	if (is_target_variant_neo) {
+		width = d->input_width;
+		height = d->input_height;
+	}
 
 	fps = d->fps;
 
@@ -309,6 +321,12 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 	ddr.vsp_write = fp_div(fp_mult(FP_INT(bitrate),
 				vsp_write_factor), FP_INT(8));
 
+	/* bin buffers alloted to sys cache in aurora */
+	if (is_target_variant_neo) {
+		llc.vsp_write = ddr.vsp_write;
+		ddr.vsp_write = FP_ZERO;
+	}
+
 	ddr.collocated_read = fp_div(FP_INT(lcu_per_frame *
 			collocated_bytes_per_lcu * fps), FP_INT(bps(1)));
 	ddr.collocated_write = ddr.collocated_read;
@@ -341,6 +359,15 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 		llc.dpb_read = dpb_total - ddr.dpb_write - ddr.dpb_read;
 	}
 
+	/* dpbs are in sys cache for aurora */
+	if (is_target_variant_neo) {
+		llc.dpb_read = ddr.dpb_read;
+		llc.dpb_write = ddr.dpb_write;
+		ddr.dpb_read = FP_ZERO;
+		ddr.dpb_write = FP_ZERO;
+		dpb_total = FP_ZERO;
+	}
+
 	ddr.opb_read = FP_ZERO;
 	ddr.opb_write = unified_dpb_opb ? FP_ZERO : (dpb_bpp == 8 ?
 		y_bw_no_ubwc_8bpp : (opb_compression_enabled ?
@@ -352,7 +379,7 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 		fp_div(FP_INT(tnbr_per_lcu * lcu_per_frame * fps),
 			FP_INT(bps(1)));
 	ddr.line_buffer_write = ddr.line_buffer_read;
-	if (llc_top_line_buf_enabled) {
+	if (llc_top_line_buf_enabled || is_target_variant_neo) {
 		llc.line_buffer_read = ddr.line_buffer_read;
 		llc.line_buffer_write = ddr.line_buffer_write;
 		ddr.line_buffer_write = ddr.line_buffer_read = FP_ZERO;
@@ -369,6 +396,14 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 	ddr.total = fp_mult(ddr.total, qsmmu_bw_overhead_factor);
 	llc.total = llc.dpb_read + llc.line_buffer_read +
 			llc.line_buffer_write + ddr.total;
+
+	if (is_target_variant_neo) {
+		llc.total = llc.vsp_read + llc.vsp_write +
+					llc.dpb_read + llc.dpb_write +
+					llc.line_buffer_read +
+					llc.line_buffer_write + ddr.total;
+		llc.total = fp_mult(llc.total, qsmmu_bw_overhead_factor);
+	}
 
 	/* Add 25 percent extra for 960fps use case */
 	if (fps >= 960) {
@@ -419,6 +454,7 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 		{"INTERMEDIATE DDR B/W", "", DUMP_HEADER_MAGIC},
 		{"vsp read", DUMP_FP_FMT, ddr.vsp_read},
 		{"vsp write", DUMP_FP_FMT, ddr.vsp_write},
+		{"llc vsp write", DUMP_FP_FMT, llc.vsp_write},
 		{"collocated read", DUMP_FP_FMT, ddr.collocated_read},
 		{"collocated write", DUMP_FP_FMT, ddr.collocated_write},
 		{"line buffer read", DUMP_FP_FMT, ddr.line_buffer_read},
@@ -428,6 +464,8 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 		{"dpb read", DUMP_FP_FMT, ddr.dpb_read},
 		{"dpb write", DUMP_FP_FMT, ddr.dpb_write},
 		{"dpb total", DUMP_FP_FMT, dpb_total},
+		{"llc read", DUMP_FP_FMT, llc.dpb_read},
+		{"llc write", DUMP_FP_FMT, llc.dpb_write},
 		{"INTERMEDIATE LLC B/W", "", DUMP_HEADER_MAGIC},
 		{"llc dpb read", DUMP_FP_FMT, llc.dpb_read},
 		{"llc line buffer read", DUMP_FP_FMT, llc.line_buffer_read},
