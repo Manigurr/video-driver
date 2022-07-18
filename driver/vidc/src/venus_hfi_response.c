@@ -469,6 +469,14 @@ int handle_system_error(struct msm_vidc_core *core,
 			d_vpr_e("%s: force bugon for type %#x\n", __func__, pkt->type);
 			MSM_VIDC_FATAL(true);
 		}
+
+		/**
+		 * if xtensa HW is non-responsive/hung then call synx_recover(),
+		 * it will force release all synx handles acquired by xtensa to
+		 * avoid resource leak.
+		 */
+		if (pkt->type == HFI_SYS_ERROR_WD_TIMEOUT)
+			synx_recover(SYNX_CLIENT_VID_CTX0);
 	}
 
 	msm_vidc_core_deinit(core, true);
