@@ -259,9 +259,24 @@ int msm_vidc_memory_map(struct msm_vidc_core *core, struct msm_vidc_map *map)
 		goto error_sg;
 	}
 
-	map->device_addr = table->sgl->dma_address;
-	map->table = table;
-	map->attach = attach;
+	if (map->device_addr) {
+		map->size = iommu_map_sgtable(cb->domain, map->device_addr,
+			table, IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE);
+		if (!map->size) {
+			d_vpr_e("%s: map sgtable failed\n", __func__);
+			rc = -ENOMEM;
+			goto error_sg;
+		}
+		dma_buf_unmap_attachment(attach, table, DMA_BIDIRECTIONAL);
+		dma_buf_detach(map->dmabuf, attach);
+		map->table = NULL;
+		map->attach = NULL;
+	} else {
+		map->device_addr = table->sgl->dma_address;
+		map->table = table;
+		map->attach = attach;
+	}
+
 	map->refcount++;
 
 exit:
@@ -283,11 +298,19 @@ error_cb:
 int msm_vidc_memory_unmap(struct msm_vidc_core *core,
 	struct msm_vidc_map *map)
 {
+	struct context_bank_info *cb = NULL;
 	int rc = 0;
 
 	if (!core || !map) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
+	}
+
+	cb = get_context_bank(core, map->region);
+	if (!cb) {
+		d_vpr_e("%s: Failed to get context bank device\n", __func__);
+		rc = -EIO;
+		goto exit;
 	}
 
 	if (map->refcount) {
@@ -304,8 +327,12 @@ int msm_vidc_memory_unmap(struct msm_vidc_core *core,
 	if (map->refcount)
 		goto exit;
 
-	dma_buf_unmap_attachment(map->attach, map->table, DMA_BIDIRECTIONAL);
-	dma_buf_detach(map->dmabuf, map->attach);
+	if (!map->table && !map->attach) {
+		iommu_unmap(cb->domain, map->device_addr, map->size);
+	} else {
+		dma_buf_unmap_attachment(map->attach, map->table, DMA_BIDIRECTIONAL);
+		dma_buf_detach(map->dmabuf, map->attach);
+	}
 
 	map->device_addr = 0x0;
 	map->attach = NULL;
