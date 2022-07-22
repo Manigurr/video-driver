@@ -228,12 +228,6 @@ static int msm_vidc_sync_put_sync_fence(struct msm_vidc_inst *inst,
 		return -EINVAL;
 	}
 
-	/* send signal with fence error for other clients to recover */
-	if (fence->flag & MSM_VIDC_SYNC_FLAG_ERROR) {
-		dma_fence_set_error(&fence->base, -ENOENT);
-		dma_fence_signal(&fence->base);
-	}
-
 	/* decr native dma_fence refcount */
 	dma_fence_put(&fence->base);
 
@@ -362,6 +356,13 @@ static int msm_vidc_sync_put_synx_handle(struct msm_vidc_inst *inst,
 		return -EINVAL;
 	}
 	tl = to_msm_vidc_sync_fence_timeline(&fence->base);
+
+	/* send signal with fence error for other clients to recover */
+	if (fence->flag & MSM_VIDC_SYNC_FLAG_ERROR) {
+		rc = synx_signal(tl->synx_session, fence->h_synx, SYNX_STATE_SIGNALED_CANCEL);
+		if (rc)
+			i_vpr_e(inst, "%s: synx_signal failed. rc %d\n", __func__, rc);
+	}
 
 	/* release synx handle */
 	rc = synx_release(tl->synx_session, fence->h_synx);
