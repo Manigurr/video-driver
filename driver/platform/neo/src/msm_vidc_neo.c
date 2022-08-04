@@ -26,6 +26,7 @@
 #define DEFAULT_QP              20
 #define MAX_CONSTANT_QUALITY    100
 #define MIN_SLICE_BYTE_SIZE     512
+#define DEFAULT_FPS_NEO         48
 #define MAX_SLICE_BYTE_SIZE       \
 	((MAX_BITRATE) >> 3)
 #define MAX_SLICE_MB_SIZE         \
@@ -217,7 +218,7 @@ static struct msm_platform_inst_capability instance_data_neo[] = {
 
 	{FRAME_RATE, ENC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
-		1, (DEFAULT_FPS << 16),
+		1, (DEFAULT_FPS_NEO << 16),
 		0,
 		HFI_PROP_FRAME_RATE,
 		CAP_FLAG_ROOT | CAP_FLAG_OUTPUT_PORT,
@@ -226,19 +227,19 @@ static struct msm_platform_inst_capability instance_data_neo[] = {
 
 	{FRAME_RATE, DEC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
-		1, (DEFAULT_FPS << 16)},
+		1, (DEFAULT_FPS_NEO << 16)},
 
 	{FRAME_RATE, DEC, VP9,
 		(MINIMUM_FPS << 16), (MAXIMUM_VP9_FPS << 16),
-		1, (DEFAULT_FPS << 16)},
+		1, (DEFAULT_FPS_NEO << 16)},
 
 	{OPERATING_RATE, ENC|DEC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
-		1, (DEFAULT_FPS << 16)},
+		1, (DEFAULT_FPS_NEO << 16)},
 
 	{OPERATING_RATE, DEC, VP9,
 		(MINIMUM_FPS << 16), (MAXIMUM_VP9_FPS << 16),
-		1, (DEFAULT_FPS << 16)},
+		1, (DEFAULT_FPS_NEO << 16)},
 
 	{SCALE_FACTOR, ENC, H264|HEVC, 1, 8, 1, 8},
 
@@ -443,7 +444,7 @@ static struct msm_platform_inst_capability instance_data_neo[] = {
 		NULL, msm_vidc_set_constant_quality},
 
 	{GOP_SIZE, ENC, CODECS_ALL,
-		0, INT_MAX, 1, 2 * DEFAULT_FPS - 1,
+		0, INT_MAX, 1, 2 * DEFAULT_FPS_NEO - 1,
 		V4L2_CID_MPEG_VIDEO_GOP_SIZE,
 		HFI_PROP_MAX_GOP_FRAMES,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_INPUT_PORT |
