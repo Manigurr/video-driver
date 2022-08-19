@@ -2420,7 +2420,7 @@ static void __device_region_deinit(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
-	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex || !core->llcc) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return;
 	}
