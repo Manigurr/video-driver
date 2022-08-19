@@ -2964,6 +2964,7 @@ int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force)
 		return 0;
 	__resume(core);
 	__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
+	__release_subcaches(core);
 	__disable_subcaches(core);
 	__unload_fw(core);
 	/**
