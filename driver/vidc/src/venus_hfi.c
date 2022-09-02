@@ -2420,7 +2420,7 @@ static void __device_region_deinit(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
-	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex) {
+	if (!core || !core->dt || !core->dt->device_region || !core->dt->hw_mutex || !core->llcc) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return;
 	}
@@ -2964,6 +2964,7 @@ int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force)
 		return 0;
 	__resume(core);
 	__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
+	__release_subcaches(core);
 	__disable_subcaches(core);
 	__unload_fw(core);
 	/**
