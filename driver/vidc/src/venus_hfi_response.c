@@ -475,8 +475,7 @@ int handle_system_error(struct msm_vidc_core *core,
 		 * it will force release all synx handles acquired by xtensa to
 		 * avoid resource leak.
 		 */
-		if (pkt->type == HFI_SYS_ERROR_WD_TIMEOUT)
-			synx_recover(SYNX_CLIENT_VID_CTX0);
+		synx_recover(SYNX_CLIENT_VID_CTX0);
 	}
 
 	msm_vidc_core_deinit(core, true);
