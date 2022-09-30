@@ -190,6 +190,7 @@ static const struct msm_vidc_cap_name cap_name_arr[] = {
 	{META_IN_OUT_PAIR_BUFFER_ID,     "META_IN_OUT_PAIR_BUFFER_ID" },
 	{META_EVA_LSR_INFO,              "META_EVA_LSR_INFO"          },
 	{META_LSR_TIMER_STATS,           "META_LSR_TIMER_STATS"       },
+	{META_NO_INPUT_INFO,             "META_NO_INPUT_INFO"         },
 	{META_DPB_TAG_LIST,              "META_DPB_TAG_LIST"          },
 	{META_OUTPUT_BUF_TAG,            "META_OUTPUT_BUF_TAG"        },
 	{META_SUBFRAME_OUTPUT,           "META_SUBFRAME_OUTPUT"       },

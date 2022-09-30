@@ -134,6 +134,8 @@ enum v4l2_mpeg_vidc_blur_types {
 	(V4L2_CID_MPEG_VIDC_BASE + 0x25)
 #define V4L2_CID_MPEG_VIDC_METADATA_LSR_TIMER_STATS                              \
 	(V4L2_CID_MPEG_VIDC_BASE + 0x26)
+#define V4L2_CID_MPEG_VIDC_METADATA_NO_INPUT_INFO                              \
+	(V4L2_CID_MPEG_VIDC_BASE + 0x27)
 
 /* Encoder Super frame control */
 #define V4L2_CID_MPEG_VIDC_SUPERFRAME           (V4L2_CID_MPEG_VIDC_BASE + 0x28)
@@ -308,6 +310,7 @@ enum v4l2_mpeg_vidc_metadata {
 	METADATA_IN_OUT_PAIR_BUFFER_ID        = 0x03000185,
 	METADATA_EVA_LSR_INFO                 = 0x0300018F,
 	METADATA_LSR_TIMER_STATS              = 0x03000195,
+        METADATA_NO_INPUT_INFO                = 0x0300019B,
 	METADATA_MAX_NUM_REORDER_FRAMES       = 0x03000127,
 };
 enum meta_interlace_info {

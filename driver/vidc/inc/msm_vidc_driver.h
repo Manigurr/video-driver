@@ -107,7 +107,9 @@ static inline bool is_input_meta_enabled(struct msm_vidc_inst *inst)
 		enabled = (inst->capabilities->cap[META_BUF_TAG].value ||
 			inst->capabilities->cap[META_IN_OUT_PAIR_BUFFER_ID].value ||
 			inst->capabilities->cap[META_EVA_LSR_INFO].value ||
-			inst->capabilities->cap[META_LSR_TIMER_STATS].value);
+			inst->capabilities->cap[META_LSR_TIMER_STATS].value ||
+			inst->capabilities->cap[META_NO_INPUT_INFO].value);
+
 	} else if (is_encode_session(inst)) {
 		enabled = (inst->capabilities->cap[META_SEQ_HDR_NAL].value ||
 			inst->capabilities->cap[META_EVA_STATS].value ||
@@ -130,6 +132,7 @@ static inline bool is_output_meta_enabled(struct msm_vidc_inst *inst)
 			inst->capabilities->cap[META_SEI_MASTERING_DISP].value ||
 			inst->capabilities->cap[META_SEI_CLL].value ||
 			inst->capabilities->cap[META_BUF_TAG].value ||
+			inst->capabilities->cap[META_NO_INPUT_INFO].value ||
 			inst->capabilities->cap[META_IN_OUT_PAIR_BUFFER_ID].value ||
 			inst->capabilities->cap[META_EVA_LSR_INFO].value ||
 			inst->capabilities->cap[META_LSR_TIMER_STATS].value ||

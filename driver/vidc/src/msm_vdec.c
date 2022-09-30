@@ -1099,6 +1099,7 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 		META_BUF_TAG,
 		META_IN_OUT_PAIR_BUFFER_ID,
 		META_EVA_LSR_INFO,
+		META_NO_INPUT_INFO,
 	};
 	static const u32 metadata_output_list[] = {
 		META_OUTPUT_BUF_TAG,
