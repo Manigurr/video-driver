@@ -3593,6 +3593,7 @@ int venus_hfi_queue_buffer(struct msm_vidc_inst *inst,
 	struct msm_vidc_core *core;
 	struct hfi_buffer hfi_buffer;
 	u32 payload[2] = {0};
+	u32 stream_type = 0;
 
 	if (!inst || !inst->core || !inst->packet) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -3645,8 +3646,13 @@ int venus_hfi_queue_buffer(struct msm_vidc_inst *inst,
 	}
 
 	if (sbuf) {
-		if (sbuf->wfence)
-			payload[0] = sbuf->wfence->h_synx;
+		if (sbuf->wfence) {
+			stream_type = inst->capabilities->cap[STREAM_TYPE].value;
+			if ((stream_type == 0) || (stream_type == 1))
+				payload[0] = sbuf->wfence->h_synx;
+			else
+				payload[0] = 0;
+		}
 		if (sbuf->sfence)
 			payload[1] = sbuf->sfence->h_synx;
 		rc = hfi_create_packet(inst->packet,
