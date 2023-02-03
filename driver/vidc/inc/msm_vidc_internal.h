@@ -367,6 +367,7 @@ enum msm_vidc_metadata_bits {
 	CAP(DELIVERY_MODE)                        \
 	CAP(VUI_TIMING_INFO)                      \
 	CAP(SLICE_DECODE)                         \
+	CAP(SIGNAL_COLOR_INFO)                    \
 	CAP(INST_CAP_MAX)                         \
 }
 
