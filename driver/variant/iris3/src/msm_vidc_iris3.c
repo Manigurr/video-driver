@@ -448,6 +448,13 @@ static int __power_off_iris3_controller(struct msm_vidc_core *core)
 		rc = 0;
 	}
 
+	/* Turn off GCC AXI clock */
+	rc = call_res_op(core, clk_disable, core, "gcc_video_axi0");
+	if (rc) {
+		d_vpr_e("%s: disable unprepare gcc_video_axi0 failed\n", __func__);
+		rc = 0;
+	}
+
 	/* power down process */
 	rc = call_res_op(core, gdsc_off, core, "iris-ctl");
 	if (rc) {
@@ -883,6 +890,7 @@ int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst* inst)
 		if (inst->capabilities->cap[CODED_FRAMES].value ==
 				CODED_FRAMES_INTERLACE ||
 			inst->capabilities->cap[LOWLATENCY_MODE].value ||
+			inst->codec == MSM_VIDC_MPEG2 ||
 			res_ok) {
 			work_mode = MSM_VIDC_STAGE_1;
 		}
@@ -935,8 +943,10 @@ int msm_vidc_decide_work_route_iris3(struct msm_vidc_inst* inst)
 
 	if (is_decode_session(inst)) {
 		if (inst->capabilities->cap[CODED_FRAMES].value ==
-				CODED_FRAMES_INTERLACE)
+				CODED_FRAMES_INTERLACE ||
+			inst->codec == MSM_VIDC_MPEG2) {
 			work_route = MSM_VIDC_PIPE_1;
+		}
 	} else if (is_encode_session(inst)) {
 		u32 slice_mode;
 
