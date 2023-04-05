@@ -1119,12 +1119,12 @@ static struct msm_vidc_codec_capability shima_capabilities_v2[] = {
 
 static struct msm_vidc_codec_capability kona_capabilities[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value,} */
-	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 8192, 1, 1920},
-	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 8192, 1, 1080},
+	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 4096, 1, 1920},
+	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 4096, 1, 1080},
 	/* (8192 * 4320) / 256 */
 	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 138240, 1, 138240},
-	/* ((1920 * 1088) / 256) * 960 fps */
-	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 64, 7833600, 1, 7833600},
+	/* ((4096 * 2176) / 256) * 60 fps */
+	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 64, 2088960, 1, 7833600},
 	{CAP_FRAMERATE, DOMAINS_ALL, CODECS_ALL, 1, 960, 1, 30},
 	//{CAP_OPERATINGRATE, DOMAINS_ALL, CODECS_ALL, 1, INT_MAX, 1, 30},
 	{CAP_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 220000000, 1, 20000000},
@@ -2379,13 +2379,7 @@ static struct msm_vidc_common_data kona_common_data[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 7833600,
-		/**
-		 * (7680x4320@60fps, 3840x2176@240fps
-		 * Greater than 4096x2176@120fps,
-		 *  8192x4320@48fps)
-		 */
-
+		.value = 2088960, /* 4096x2176@60fps */
 	},
 	{
 		.key = "qcom,max-image-load",
