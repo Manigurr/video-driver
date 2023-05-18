@@ -479,6 +479,10 @@ int msm_vidc_get_num_ref_frames(struct msm_vidc_inst *inst)
 	struct v4l2_ctrl *max_layer = NULL;
 	u32 codec;
 
+	codec = get_v4l2_codec(inst);
+	if (codec == V4L2_PIX_FMT_VP8)
+		num_ref = num_ref << 1;
+
 	bframe_ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_B_FRAMES);
 	num_bframes = bframe_ctrl->val;
 	if (num_bframes > 0)
@@ -495,7 +499,6 @@ int msm_vidc_get_num_ref_frames(struct msm_vidc_inst *inst)
 		V4L2_CID_MPEG_VIDC_VIDEO_HEVC_MAX_HIER_CODING_LAYER);
 	if (frame_t->val == V4L2_MPEG_VIDEO_HEVC_HIERARCHICAL_CODING_P &&
 		max_layer->val > 1) {
-		codec = get_v4l2_codec(inst);
 		/* LTR and B - frame not supported with hybrid HP */
 		if (inst->hybrid_hp)
 			num_ref = (max_layer->val + 1) >> 1;
@@ -1438,7 +1441,8 @@ static inline u32 calculate_enc_scratch_size(struct msm_vidc_inst *inst,
 		bitstream_size = aligned_width * aligned_height * 3;
 		bitbin_size = ALIGN(bitstream_size, VENUS_DMA_ALIGNMENT);
 	}
-	if (aligned_width * aligned_height >= 3840 * 2160)
+	//Resolution and division are modified for kona target
+	if (aligned_width * aligned_height >= 7680 * 4320)
 		size_singlePipe = bitbin_size / num_vpp_pipes;
 	else if (num_vpp_pipes > 2)
 		size_singlePipe = bitbin_size / 2;
