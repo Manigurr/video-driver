@@ -794,7 +794,7 @@ static void __exit msm_vidc_exit(void)
 	vidc_driver = NULL;
 }
 
-module_init(msm_vidc_init);
+early_module_init(msm_vidc_init, EARLY_SUBSYS_2, EARLY_INIT_LEVEL7);
 module_exit(msm_vidc_exit);
 
 MODULE_SOFTDEP("pre: subsys-pil-tz");
