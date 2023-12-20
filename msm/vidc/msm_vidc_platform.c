@@ -2496,6 +2496,10 @@ static struct msm_vidc_common_data trinket_common_data[] = {
 		.value = 1,
 	},
 	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
+	},
+	{
 		.key = "qcom,sw-power-collapse",
 		.value = 1,
 	},
@@ -2561,6 +2565,10 @@ static struct msm_vidc_common_data kona_common_data[] = {
 	{
 		.key = "qcom,never-unload-fw",
 		.value = 1,
+	},
+	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
 	},
 	{
 		.key = "qcom,sw-power-collapse",
