@@ -1142,7 +1142,7 @@ static struct msm_vidc_codec_capability trinket_capabilities[] = {
 	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 36, 1216800, 1, 1216800},
 	{CAP_FRAMERATE, DOMAINS_ALL, CODECS_ALL, 1, 240, 1, 30},
 	//{CAP_OPERATINGRATE, DOMAINS_ALL, CODECS_ALL, 1, INT_MAX, 1, 30},
-	{CAP_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 100000000, 1, 100000000},
+	{CAP_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 100000000, 1, 10000000},
 	{CAP_CABAC_BITRATE, ENC, H264, 1, 100000000, 1, 100000000},
 	{CAP_SCALE_X, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
 	{CAP_SCALE_Y, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
@@ -1519,7 +1519,7 @@ static struct msm_vidc_common_data lahaina_common_data[] = {
 	},
 	{
 		.key = "qcom,max-mbpf",
-		.value = 195840, /* 24x(1920x1088)/256 */
+		.value = 173056,	/* (8192x4320)/256 + (4096x2176)/256*/
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
@@ -2497,7 +2497,7 @@ static struct msm_vidc_common_data trinket_common_data[] = {
 	},
 	{
 		.key = "qcom,sw-power-collapse",
-		.value = 0,
+		.value = 1,
 	},
 	{
 		.key = "qcom,domain-attr-non-fatal-faults",
