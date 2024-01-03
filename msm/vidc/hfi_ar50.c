@@ -60,6 +60,7 @@
 #define VIDC_WRAPPER_INTR_STATUS_A2H_BMSK_AR50	0x4
 
 #define VIDC_WRAPPER_INTR_CLEAR_AR50		(VIDC_WRAPPER_BASE_OFFS_AR50 + 0x14)
+#define VIDC_WRAPPER_CPU_STATUS_AR50 (VIDC_WRAPPER_BASE_OFFS_AR50 + 0x2014)
 
 #define VIDC_CTRL_INIT_AR50		VIDC_CPU_CS_SCIACMD_AR50
 
@@ -68,6 +69,8 @@
 		VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_ERROR_STATUS_BMSK_AR50
 #define VIDC_CTRL_INIT_IDLE_MSG_BMSK_AR50 \
 		VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_INIT_IDLE_MSG_BMSK_AR50
+#define VIDC_CTRL_STATUS_PC_READY_AR50 \
+		VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_PC_READY_AR50
 
 #define VIDC_QTBL_INFO_AR50		VIDC_CPU_CS_SCIACMDARG1_AR50
 
@@ -100,16 +103,6 @@
 #define VCODEC_COREX_VIDEO_NOC_ERR_ERRLOG3_HIGH_OFFS	0x053C
 
 static inline int __prepare_enable_clks(struct venus_hfi_device *device, u32 sid);
-
-static void setup_dsp_uc_memmap_ar50(struct venus_hfi_device *device)
-{
-        /* initialize DSP QTBL & UCREGION with CPU queues */
-        __write_register(device, HFI_DSP_QTBL_ADDR,
-                        (u32)device->iface_q_table.align_device_addr, DEFAULT_SID);
-        __write_register(device, HFI_DSP_UC_REGION_ADDR,
-                        (u32)device->iface_q_table.align_device_addr, DEFAULT_SID);
-        __write_register(device, HFI_DSP_UC_REGION_SIZE, SHARED_QSIZE, DEFAULT_SID);
-}
 
 void __interrupt_init_ar50(struct venus_hfi_device *device, u32 sid)
 {
@@ -154,9 +147,8 @@ int __disable_regulators_ar50(struct venus_hfi_device *device)
 		rc = 0;
 	}
 	rc = __disable_regulator_by_name(device, "venus");
-	if (rc) {
+	if (rc)
 		d_vpr_e("%s: disable regulator venus failed, rc = %d\n", __func__, rc);
-	}
 
 	return rc;
 }
@@ -175,7 +167,7 @@ void __setup_ucregion_memory_map_ar50(struct venus_hfi_device *device, u32 sid)
 	if (device->qdss.align_device_addr)
 		__write_register(device, VIDC_MMAP_ADDR_AR50,
 				(u32)device->qdss.align_device_addr, sid);
-	setup_dsp_uc_memmap_ar50(device);
+
 }
 
 int __reset_ahb2axi_bridge_ar50(struct venus_hfi_device *device,
@@ -190,20 +182,20 @@ int __reset_ahb2axi_bridge_ar50(struct venus_hfi_device *device,
 
 	for (i = 0; i < device->res->reset_set.count; i++) {
 
-	    rc = __handle_reset_clk(device->res, i, ASSERT, sid);
-	    if (rc) {
-		    d_vpr_e("failed to assert reset clocks\n");
-		    return rc;
-	    }
+		rc = __handle_reset_clk(device->res, i, ASSERT, sid);
+		if (rc) {
+			d_vpr_e("failed to assert reset clocks\n");
+			return rc;
+		}
 
-	    /* wait for deassert */
-	    usleep_range(150, 250);
+		/* wait for deassert */
+		usleep_range(150, 250);
 
-	    rc = __handle_reset_clk(device->res, i, DEASSERT, sid);
-	    if (rc) {
-		    d_vpr_e("failed to deassert reset clocks\n");
-		    return rc;
-	    }
+		rc = __handle_reset_clk(device->res, i, DEASSERT, sid);
+		if (rc) {
+			d_vpr_e("failed to deassert reset clocks\n");
+			return rc;
+		}
 	}
 
 	return 0;
@@ -212,20 +204,58 @@ int __reset_ahb2axi_bridge_ar50(struct venus_hfi_device *device,
 int __prepare_pc_ar50(struct venus_hfi_device *device)
 {
 	int rc = 0;
-	struct hfi_cmd_sys_pc_prep_packet pkt;
+	u32 wfi_status = 0, idle_status = 0, pc_ready = 0;
+	u32 ctrl_status = 0;
+	int count = 0;
+	const int max_tries = 10;
+	u32 sid = DEFAULT_SID;
 
-	rc = call_hfi_pkt_op(device, sys_pc_prep, &pkt);
-	if (rc) {
-		d_vpr_e("Failed to create sys pc prep pkt\n");
-		goto err_pc_prep;
+	ctrl_status = __read_register(device, VIDC_CTRL_STATUS_AR50, sid);
+	pc_ready = ctrl_status & VIDC_CTRL_STATUS_PC_READY_AR50;
+	idle_status = ctrl_status & BIT(30);
+
+	if (pc_ready) {
+		d_vpr_h("Already in pc_ready state\n");
+		return 0;
 	}
 
-	if (__iface_cmdq_write(device, &pkt, DEFAULT_SID))
-		rc = -ENOTEMPTY;
-	if (rc)
-		d_vpr_e("Failed to prepare venus for power off");
-err_pc_prep:
+	wfi_status = BIT(0) & __read_register(device, VIDC_WRAPPER_CPU_STATUS_AR50, sid);
+
+	if (!wfi_status || !idle_status) {
+		d_vpr_e("Skipping PC, wfi status (0x%x), idle_status (0x%x)",
+			wfi_status, idle_status);
+		goto skip_power_off;
+	}
+
+	rc = __prepare_pc(device);
+	if (rc) {
+		d_vpr_e("%s:Failed PC %d\n", __func__, rc);
+		goto skip_power_off;
+	}
+
+	while (count < max_tries) {
+		wfi_status = BIT(0) &
+			__read_register(device, VIDC_WRAPPER_CPU_STATUS_AR50, sid);
+		ctrl_status = __read_register(device, VIDC_CTRL_STATUS_AR50, sid);
+		pc_ready = ctrl_status & VIDC_CTRL_STATUS_PC_READY_AR50;
+		if (wfi_status && pc_ready)
+			break;
+		usleep_range(150, 250);
+		count++;
+	}
+
+	if (count == max_tries) {
+		d_vpr_e("%s: Skip PC. Core is not in right state (%#x, %#x)\n",
+			__func__, wfi_status, pc_ready);
+		goto skip_power_off;
+	}
+
 	return rc;
+
+skip_power_off:
+	d_vpr_e("Skip PC, wfi=%#x, idle=%#x, pcr=%#x, ctrl=%#x)\n",
+		wfi_status, idle_status, pc_ready, ctrl_status);
+	return -EAGAIN;
 }
 
 void __noc_error_info_ar50(struct venus_hfi_device *device)
@@ -334,7 +364,7 @@ bool __watchdog_ar50(u32 intr_status)
 	if (intr_status & VIDC_WRAPPER_INTR_STATUS_A2HWD_BMSK_AR50)
 		rc = true;
 
-        return rc;
+	return rc;
 }
 
 static inline int __prepare_enable_clks(struct venus_hfi_device *device,
@@ -370,11 +400,11 @@ static inline int __prepare_enable_clks(struct venus_hfi_device *device,
 		}
 
 		if (!__clk_is_enabled(cl->clk))
-			s_vpr_e(sid, "%s: clock %s not enabled\n",
-				__func__, cl->name);
+			s_vpr_e(sid, "%s: clock %s not enabled\n", __func__, cl->name);
+		else
+			s_vpr_h(sid, "Clock: %s prepared and enabled\n", cl->name);
 
 		c++;
-		s_vpr_h(sid, "Clock: %s prepared and enabled\n", cl->name);
 	}
 
 	call_venus_op(device, clock_config_on_enable, device, sid);
@@ -399,64 +429,64 @@ void __raise_interrupt_ar50(struct venus_hfi_device *device, u32 sid)
 
 int __power_on_ar50(struct venus_hfi_device *device)
 {
-		int rc = 0;
-		u32 sid = DEFAULT_SID;
+	int rc = 0;
+	u32 sid = DEFAULT_SID;
 
-		if (device->power_enabled)
-			return 0;
+	if (device->power_enabled)
+		return 0;
 
-		device->power_enabled = true;
-		/* Vote for all hardware resources */
-		rc = __vote_buses(device, INT_MAX, INT_MAX, sid);
-		if (rc) {
-			d_vpr_e("Failed to vote buses, err: %d\n", rc);
-			goto fail_vote_buses;
-		}
+	device->power_enabled = true;
+	/* Vote for all hardware resources */
+	rc = __vote_buses(device, INT_MAX, INT_MAX, sid);
+	if (rc) {
+		d_vpr_e("Failed to vote buses, err: %d\n", rc);
+		goto fail_vote_buses;
+	}
 
-		rc = __enable_regulators_ar50(device);
-		if (rc) {
-			d_vpr_e("Failed to enable GDSC, err = %d\n", rc);
-			goto fail_enable_gdsc;
-		}
+	rc = __enable_regulators_ar50(device);
+	if (rc) {
+		d_vpr_e("Failed to enable GDSC, err = %d\n", rc);
+		goto fail_enable_gdsc;
+	}
 
-		rc = __reset_ahb2axi_bridge_ar50(device, sid);
-		if (rc) {
-			d_vpr_e("Failed to enable ahb2axi: %d\n", rc);
-			goto fail_enable_clks;
-		}
+	rc = __reset_ahb2axi_bridge_ar50(device, sid);
+	if (rc) {
+		d_vpr_e("Failed to enable ahb2axi: %d\n", rc);
+		goto fail_enable_clks;
+	}
 
-		rc = __prepare_enable_clks(device, sid);
-		if (rc) {
-			d_vpr_e("Failed to enable clocks: %d\n", rc);
-			goto fail_enable_clks;
-		}
+	rc = __prepare_enable_clks(device, sid);
+	if (rc) {
+		d_vpr_e("Failed to enable clocks: %d\n", rc);
+		goto fail_enable_clks;
+	}
 
-		rc = __scale_clocks(device, sid);
-		if (rc) {
-			d_vpr_l(
-					"Failed to scale clocks, performance might be affected\n");
-			rc = 0;
-		}
+	rc = __scale_clocks(device, sid);
+	if (rc) {
+		d_vpr_l(
+				"Failed to scale clocks, performance might be affected\n");
+		rc = 0;
+	}
 
-		/*
-		 * Re-program all of the registers that get reset as a result of
-		 * regulator_disable() and _enable()
-		 */
-		__set_registers(device, sid);
+	/*
+	 * Re-program all of the registers that get reset as a result of
+	 * regulator_disable() and _enable()
+	 */
+	__set_registers(device, sid);
 
-		call_venus_op(device, interrupt_init, device, sid);
-		device->intr_status = 0;
-		enable_irq(device->hal_data->irq);
+	call_venus_op(device, interrupt_init, device, sid);
+	device->intr_status = 0;
+	enable_irq(device->hal_data->irq);
 
-		return rc;
+	return rc;
 
-	fail_enable_clks:
-		__disable_regulators_ar50(device);
-	fail_enable_gdsc:
-		__unvote_buses(device, sid);
-	fail_vote_buses:
-		device->power_enabled = false;
-		return rc;
+fail_enable_clks:
+	__disable_regulators_ar50(device);
+fail_enable_gdsc:
+	__unvote_buses(device, sid);
+fail_vote_buses:
+	device->power_enabled = false;
+	return rc;
 
 }
 
