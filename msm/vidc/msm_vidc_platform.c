@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023. Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024. Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -35,19 +35,35 @@
 	.purpose = p	\
 }
 
-#define UBWC_CONFIG(mco, mlo, hbo, bslo, bso, rs, mc, ml, hbb, bsl, bsp) \
+#define UBWC_CONFIG(ver, mco, mlo, hbo, bslo, bso, rs, mc, ml, hbb, bsl, bsp) \
 {	\
-	.override_bit_info.max_channel_override = mco,	\
-	.override_bit_info.mal_length_override = mlo,	\
-	.override_bit_info.hb_override = hbo,	\
-	.override_bit_info.bank_swzl_level_override = bslo,	\
-	.override_bit_info.bank_spreading_override = bso,	\
-	.override_bit_info.reserved = rs,	\
-	.max_channels = mc,	\
-	.mal_length = ml,	\
-	.highest_bank_bit = hbb,	\
-	.bank_swzl_level = bsl,	\
-	.bank_spreading = bsp,	\
+	.version = ver, \
+	.ubwc_config_data_v1.override_bit_info.max_channel_override = mco,	\
+	.ubwc_config_data_v1.override_bit_info.mal_length_override = mlo,	\
+	.ubwc_config_data_v1.override_bit_info.hb_override = hbo,	\
+	.ubwc_config_data_v1.override_bit_info.bank_swzl_level_override = bslo,	\
+	.ubwc_config_data_v1.override_bit_info.bank_spreading_override = bso,	\
+	.ubwc_config_data_v1.override_bit_info.reserved = rs,	\
+	.ubwc_config_data_v1.max_channels = mc,	\
+	.ubwc_config_data_v1.mal_length = ml,	\
+	.ubwc_config_data_v1.highest_bank_bit = hbb,	\
+	.ubwc_config_data_v1.bank_swzl_level = bsl,	\
+	.ubwc_config_data_v1.bank_spreading = bsp,	\
+}
+
+#define UBWC_CONFIG_v2(ver, sz, type, mco, mlo, hbbo, rs1, mc, ml, hbb, rs2) \
+{	\
+	.version = ver, \
+	.ubwc_config_data_v2.nSize = sz, \
+	.ubwc_config_data_v2.ePacketType = type, \
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bMaxChannelsOverride = mco,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bMalLengthOverride = mlo,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bHBBOverride = hbbo,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.reserved1 = rs1,	\
+	.ubwc_config_data_v2.config_v2.nMaxChannels = mc,	\
+	.ubwc_config_data_v2.config_v2.nMalLength = ml,	\
+	.ubwc_config_data_v2.config_v2.nHighestBankBit = hbb,	\
+	.ubwc_config_data_v2.config_v2.reserved2 = {rs2}	\
 }
 
 static struct msm_vidc_codec_data default_codec_data[] =  {
@@ -2763,27 +2779,27 @@ static struct msm_vidc_efuse_data shima_efuse_data[] = {
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data lahaina_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data yupik_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data shima_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data trinket_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG_v2(2, sizeof(struct msm_vidc_ubwc_config_v2), HFI_PROPERTY_SYS_UBWC_CONFIG, 0, 1, 0, 0, 0, 64, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data kona_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG(1,1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
 };
 
 static struct msm_vidc_platform_data default_data = {
@@ -3136,11 +3152,11 @@ static inline void msm_vidc_ddr_ubwc_config(
 	if (driver_data->ubwc_config &&
 		(ddr_type == DDR_TYPE_LPDDR4 ||
 		 ddr_type == DDR_TYPE_LPDDR4X))
-		driver_data->ubwc_config->highest_bank_bit = hbb_override_val;
+		driver_data->ubwc_config->ubwc_config_data_v1.highest_bank_bit = hbb_override_val;
 
 	d_vpr_h("DDR Type 0x%x hbb 0x%x\n",
 		ddr_type, driver_data->ubwc_config ?
-		driver_data->ubwc_config->highest_bank_bit : -1);
+		driver_data->ubwc_config->ubwc_config_data_v1.highest_bank_bit : -1);
 }
 
 void *vidc_get_drv_data(struct device *dev)

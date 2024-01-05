@@ -273,7 +273,13 @@ enum vpu_version {
 	VPU_VERSION_AR50_LITE,
 };
 
-struct msm_vidc_ubwc_config_data {
+enum ubwc_version {
+	ubwc_version_1 = 1,
+	ubwc_version_2,
+};
+
+struct msm_vidc_ubwc_config_data_v1 {
+
 	struct {
 		u32 max_channel_override : 1;
 		u32 mal_length_override : 1;
@@ -288,6 +294,32 @@ struct msm_vidc_ubwc_config_data {
 	u32 highest_bank_bit;
 	u32 bank_swzl_level;
 	u32 bank_spreading;
+};
+
+struct msm_vidc_ubwc_config_v2 {
+	struct {
+		u32 bMaxChannelsOverride : 1;
+		u32 bMalLengthOverride : 1;
+		u32 bHBBOverride : 1;
+		u32 reserved1 : 29;
+	} sOverrideBitInfo;
+
+	u32 nMaxChannels;
+	u32 nMalLength;
+	u32 nHighestBankBit;
+	u32 reserved2[2];
+};
+
+struct msm_vidc_ubwc_config_data_v2 {
+	u32 nSize;
+	u32 ePacketType;
+	struct msm_vidc_ubwc_config_v2 config_v2;
+};
+
+struct msm_vidc_ubwc_config_data {
+	enum ubwc_version version;
+	struct msm_vidc_ubwc_config_data_v1 ubwc_config_data_v1;
+	struct msm_vidc_ubwc_config_data_v2 ubwc_config_data_v2;
 };
 
 struct msm_vidc_platform_data {
