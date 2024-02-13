@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -24,6 +24,9 @@
 #include "venus_hfi_response.h"
 #include "hfi_packet.h"
 #include "msm_vidc_events.h"
+#ifdef MSM_VIDC_HW_VIRT
+#include "vidc_hw_virt.h"
+#endif
 
 extern struct msm_vidc_core *g_core;
 
@@ -4846,6 +4849,20 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 	/* clear PM suspend from core sub_state */
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_PM_SUSPEND, 0, __func__);
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_PAGE_FAULT, 0, __func__);
+
+	/* open gvm */
+	if (core->is_hw_virt && !core->is_gvm_open) {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
+			&core->device_core_mask);
+#endif
+		if (rc) {
+			d_vpr_e("%s: open_gvm failed\n", __func__);
+			goto unlock;
+		} else {
+			core->is_gvm_open = true;
+		}
+	}
 
 	rc = venus_hfi_core_init(core);
 	if (rc) {

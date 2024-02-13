@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/workqueue.h>
@@ -632,6 +633,17 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 		return rc;
 	g_core = core;
 
+	/* Read and store is_hw_virt flag, vmid */
+	if (of_property_read_u32(pdev->dev.of_node, "vmid", &core->vmid)) {
+		d_vpr_h("Failed to read vmid. Defaulting to 0");
+		core->vmid = 0;
+		core->is_hw_virt = false;
+	} else {
+		/* If gvm, set hw virtualization flag */
+		if (core->vmid != 0)
+			core->is_hw_virt = true;
+	}
+
 	core->debugfs_parent = msm_vidc_debugfs_init_drv();
 	if (!core->debugfs_parent)
 		d_vpr_h("Failed to create debugfs for msm_vidc\n");
@@ -942,7 +954,17 @@ static int __init msm_vidc_init(void)
 
 static void __exit msm_vidc_exit(void)
 {
+	struct msm_vidc_core *core = NULL;
+
 	d_vpr_h("%s()\n", __func__);
+	core = g_core;
+	if (core && core->is_hw_virt && core->is_gvm_open) {
+#ifdef MSM_VIDC_HW_VIRT
+		/* close gvm */
+		virtio_video_cmd_close_gvm();
+#endif
+		core->is_gvm_open = false;
+	}
 
 	platform_driver_unregister(&msm_vidc_driver);
 	d_vpr_h("%s(): succssful\n", __func__);

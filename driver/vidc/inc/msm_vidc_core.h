@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_CORE_H_
@@ -97,6 +97,10 @@ struct msm_vidc_core {
 	u32                                    spur_count;
 	u32                                    reg_count;
 	u32                                    codecs_count;
+	bool                                   is_hw_virt;
+	u32                                    vmid;
+	u32                                    device_core_mask;
+	bool                                   is_gvm_open;
 	struct msm_vidc_core_capability       *capabilities;
 	struct msm_vidc_inst_capability       *inst_caps;
 	struct msm_vidc_mem_addr               sfr;
