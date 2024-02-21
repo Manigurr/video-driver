@@ -4235,18 +4235,26 @@ static int msm_vidc_remove_dangling_session(struct msm_vidc_inst *inst)
 int msm_vidc_session_open(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+	struct msm_vidc_core *core = NULL;
 
-	if (!inst) {
+	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
+	core = inst->core;
 
 	inst->packet_size = 4096;
 	rc = msm_vidc_vmem_alloc(inst->packet_size, (void **)&inst->packet, __func__);
 	if (rc)
 		return rc;
 
-	rc = venus_hfi_session_open(inst);
+	if (core->is_hw_virt) {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
+#endif
+	} else {
+		rc = venus_hfi_session_open(inst);
+	}
 	if (rc)
 		goto error;
 
