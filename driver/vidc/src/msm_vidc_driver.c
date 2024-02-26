@@ -4841,6 +4841,27 @@ unlock:
 	return rc;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+static int msm_vidc_pvm_event_handler(void *p)
+{
+	struct msm_vidc_core *core = p;
+	struct virtio_video_event evt;
+
+	while (core->is_gvm_open) {
+		if (!virtio_video_queue_event_wait(&evt)) {
+			switch (evt.event_type) {
+			case VIRTIO_VIDEO_EVENT_GVM_SSR:
+				core->ssr_dev = *(uint32_t *)evt.payload;
+				schedule_work(&core->hw_virt_ssr_work);
+				break;
+			};
+		}
+	}
+
+	return 0;
+}
+#endif
+
 int msm_vidc_core_init(struct msm_vidc_core *core)
 {
 	int rc = 0;
@@ -4871,6 +4892,10 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 			goto unlock;
 		} else {
 			core->is_gvm_open = true;
+#ifdef MSM_VIDC_HW_VIRT
+			core->pvm_event_handler_thread = kthread_run(msm_vidc_pvm_event_handler,
+					core, "msm_vidc_pvm_evt_handler");
+#endif
 		}
 	}
 
@@ -5115,22 +5140,43 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 	return 0;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+void msm_vidc_hw_virt_ssr_handler(struct work_struct *work)
+{
+	struct msm_vidc_core *core = NULL;
+
+	core = container_of(work, struct msm_vidc_core, hw_virt_ssr_work);
+	if (!core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, core);
+		return;
+	}
+
+	MSM_VIDC_FATAL(true);
+	msm_vidc_core_deinit(core, true);
+
+	if (core->ssr_dev == GVM_SSR_DEVICE_DRIVER) {
+		virtio_video_cmd_close_gvm();
+		core->is_gvm_open = false;
+	}
+}
+#endif
+
 void msm_vidc_ssr_handler(struct work_struct *work)
 {
-	int rc;
-	struct msm_vidc_core *core;
-	struct msm_vidc_ssr *ssr;
+	int rc = 0;
+	struct msm_vidc_core *core = NULL;
+	struct msm_vidc_ssr *ssr = NULL;
 
 	core = container_of(work, struct msm_vidc_core, ssr_work);
 	if (!core) {
 		d_vpr_e("%s: invalid params %pK\n", __func__, core);
 		return;
 	}
-	ssr = &core->ssr;
+	if (!core->is_hw_virt) {
+		ssr = &core->ssr;
 
-	core_lock(core, __func__);
-	if (is_core_state(core, MSM_VIDC_CORE_INIT)) {
-		if (!core->is_hw_virt) {
+		core_lock(core, __func__);
+		if (is_core_state(core, MSM_VIDC_CORE_INIT)) {
 			/*
 			 * In current implementation, user-initiated SSR triggers
 			 * a fatal error from hardware. However, there is no way
@@ -5141,11 +5187,11 @@ void msm_vidc_ssr_handler(struct work_struct *work)
 					ssr->sub_client_id, ssr->test_addr);
 			if (rc)
 				d_vpr_e("%s: trigger_ssr failed\n", __func__);
+		} else {
+			d_vpr_e("%s: video core not initialized\n", __func__);
 		}
-	} else {
-		d_vpr_e("%s: video core not initialized\n", __func__);
+		core_unlock(core, __func__);
 	}
-	core_unlock(core, __func__);
 }
 
 int msm_vidc_trigger_stability(struct msm_vidc_core *core,

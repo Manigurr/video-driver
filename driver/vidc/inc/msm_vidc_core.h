@@ -101,6 +101,7 @@ struct msm_vidc_core {
 	u32                                    vmid;
 	u32                                    device_core_mask;
 	bool                                   is_gvm_open;
+	struct task_struct                    *pvm_event_handler_thread;
 	struct msm_vidc_core_capability       *capabilities;
 	struct msm_vidc_inst_capability       *inst_caps;
 	struct msm_vidc_mem_addr               sfr;
@@ -111,6 +112,8 @@ struct msm_vidc_core {
 	struct workqueue_struct               *batch_workq;
 	struct delayed_work                    fw_unload_work;
 	struct work_struct                     ssr_work;
+	struct work_struct                     hw_virt_ssr_work;
+	u32                                    ssr_dev;
 	struct msm_vidc_core_power             power;
 	struct msm_vidc_ssr                    ssr;
 	u32                                    skip_pc_count;

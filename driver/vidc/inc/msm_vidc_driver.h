@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_DRIVER_H_
@@ -460,6 +460,9 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 		u64 trigger_ssr_val);
 void msm_vidc_ssr_handler(struct work_struct *work);
+#ifdef MSM_VIDC_HW_VIRT
+void msm_vidc_hw_virt_ssr_handler(struct work_struct *work);
+#endif
 int msm_vidc_trigger_stability(struct msm_vidc_core *core,
 		u64 trigger_stability_val);
 void msm_vidc_stability_handler(struct work_struct *work);
