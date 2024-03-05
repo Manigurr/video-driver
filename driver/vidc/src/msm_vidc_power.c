@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_vidc_power.h"
@@ -562,63 +562,66 @@ int msm_vidc_scale_power(struct msm_vidc_inst *inst, bool scale_buses)
 	}
 	core = inst->core;
 
-	if (!inst->active) {
-		/* scale buses for inactive -> active session */
-		scale_buses = true;
-		inst->active = true;
-	}
-
-	list_for_each_entry(vbuf, &inst->buffers.input.list, list)
-		data_size = max(data_size, vbuf->data_size);
-	inst->max_input_data_size = data_size;
-
-	frame_rate = msm_vidc_get_frame_rate(inst);
-	operating_rate = msm_vidc_get_operating_rate(inst);
-	fps = max(frame_rate, operating_rate);
-	if (is_decode_session(inst)) {
-		/*
-		 * when buffer detected fps is more than client set value by 12.5%,
-		 * utilize buffer detected fps to scale clock.
-		 */
-		timestamp_rate = msm_vidc_get_timestamp_rate(inst);
-		input_rate = msm_vidc_get_input_rate(inst);
-		if (timestamp_rate > (fps + fps / 8))
-			fps = timestamp_rate;
-
-		if (input_rate > fps) {
-			fps = input_rate;
-			/*
-			 * add 6.25% more fps for NRT session to increase power to make
-			 * firmware processing little faster than client queuing rate
-			 */
-			if (!is_realtime_session(inst))
-				fps = fps + fps / 16;
+	/* skip scale_power when using hw virtualization */
+	if (!core->is_hw_virt) {
+		if (!inst->active) {
+			/* scale buses for inactive -> active session */
+			scale_buses = true;
+			inst->active = true;
 		}
+
+		list_for_each_entry(vbuf, &inst->buffers.input.list, list)
+			data_size = max(data_size, vbuf->data_size);
+		inst->max_input_data_size = data_size;
+
+		frame_rate = msm_vidc_get_frame_rate(inst);
+		operating_rate = msm_vidc_get_operating_rate(inst);
+		fps = max(frame_rate, operating_rate);
+		if (is_decode_session(inst)) {
+			/*
+			 * when buffer detected fps is more than client set value by 12.5%,
+			 * utilize buffer detected fps to scale clock.
+			 */
+			timestamp_rate = msm_vidc_get_timestamp_rate(inst);
+			input_rate = msm_vidc_get_input_rate(inst);
+			if (timestamp_rate > (fps + fps / 8))
+				fps = timestamp_rate;
+
+			if (input_rate > fps) {
+				fps = input_rate;
+				/*
+				 * add 6.25% more fps for NRT session to increase power to make
+				 * firmware processing little faster than client queuing rate
+				 */
+				if (!is_realtime_session(inst))
+					fps = fps + fps / 16;
+			}
+		}
+		inst->max_rate = fps;
+
+		/* no pending inputs - skip scale power */
+		if (!inst->max_input_data_size)
+			return 0;
+
+		if (msm_vidc_scale_clocks(inst))
+			i_vpr_e(inst, "failed to scale clock\n");
+
+		if (scale_buses) {
+			if (msm_vidc_scale_buses(inst))
+				i_vpr_e(inst, "failed to scale bus\n");
+		}
+
+		i_vpr_hp(inst,
+				"power: inst: clk %lld ddr %d llcc %d dcvs flags %#x fps %u (%u %u %u %u) core: clk %lld ddr %lld llcc %lld\n",
+				inst->power.curr_freq, inst->power.ddr_bw,
+				inst->power.sys_cache_bw, inst->power.dcvs_flags,
+				inst->max_rate, frame_rate, operating_rate, timestamp_rate,
+				input_rate, core->power.clk_freq, core->power.bw_ddr,
+				core->power.bw_llcc);
+
+		trace_msm_vidc_perf_power_scale(inst, core->power.clk_freq,
+				core->power.bw_ddr, core->power.bw_llcc);
 	}
-	inst->max_rate = fps;
-
-	/* no pending inputs - skip scale power */
-	if (!inst->max_input_data_size)
-		return 0;
-
-	if (msm_vidc_scale_clocks(inst))
-		i_vpr_e(inst, "failed to scale clock\n");
-
-	if (scale_buses) {
-		if (msm_vidc_scale_buses(inst))
-			i_vpr_e(inst, "failed to scale bus\n");
-	}
-
-	i_vpr_hp(inst,
-		"power: inst: clk %lld ddr %d llcc %d dcvs flags %#x fps %u (%u %u %u %u) core: clk %lld ddr %lld llcc %lld\n",
-		inst->power.curr_freq, inst->power.ddr_bw,
-		inst->power.sys_cache_bw, inst->power.dcvs_flags,
-		inst->max_rate, frame_rate, operating_rate, timestamp_rate,
-		input_rate, core->power.clk_freq, core->power.bw_ddr,
-		core->power.bw_llcc);
-
-	trace_msm_vidc_perf_power_scale(inst, core->power.clk_freq,
-		core->power.bw_ddr, core->power.bw_llcc);
 
 	return 0;
 }

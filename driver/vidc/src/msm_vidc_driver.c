@@ -4759,7 +4759,9 @@ int msm_vidc_core_deinit_locked(struct msm_vidc_core *core, bool force)
 		}
 	}
 
-	venus_hfi_core_deinit(core, force);
+	if (!core->is_hw_virt) {
+		venus_hfi_core_deinit(core, force);
+	}
 
 	/* unlink all sessions from core, if any */
 	list_for_each_entry_safe(inst, dummy, &core->instances, list) {
@@ -5128,16 +5130,18 @@ void msm_vidc_ssr_handler(struct work_struct *work)
 
 	core_lock(core, __func__);
 	if (is_core_state(core, MSM_VIDC_CORE_INIT)) {
-		/*
-		 * In current implementation, user-initiated SSR triggers
-		 * a fatal error from hardware. However, there is no way
-		 * to know if fatal error is due to SSR or not. Handle
-		 * user SSR as non-fatal.
-		 */
-		rc = venus_hfi_trigger_ssr(core, ssr->ssr_type,
-			ssr->sub_client_id, ssr->test_addr);
-		if (rc)
-			d_vpr_e("%s: trigger_ssr failed\n", __func__);
+		if (!core->is_hw_virt) {
+			/*
+			 * In current implementation, user-initiated SSR triggers
+			 * a fatal error from hardware. However, there is no way
+			 * to know if fatal error is due to SSR or not. Handle
+			 * user SSR as non-fatal.
+			 */
+			rc = venus_hfi_trigger_ssr(core, ssr->ssr_type,
+					ssr->sub_client_id, ssr->test_addr);
+			if (rc)
+				d_vpr_e("%s: trigger_ssr failed\n", __func__);
+		}
 	} else {
 		d_vpr_e("%s: video core not initialized\n", __func__);
 	}
