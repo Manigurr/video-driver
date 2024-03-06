@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_INTERNAL_H_
@@ -451,6 +451,7 @@ enum msm_vidc_buffer_region {
 	MSM_VIDC_REGION_NONE = 0,
 	MSM_VIDC_NON_SECURE,
 	MSM_VIDC_NON_SECURE_PIXEL,
+	MSM_VIDC_NON_SECURE_NONPIXEL,
 	MSM_VIDC_SECURE_PIXEL,
 	MSM_VIDC_SECURE_NONPIXEL,
 	MSM_VIDC_SECURE_BITSTREAM,
@@ -587,6 +588,7 @@ enum msm_vidc_core_capability_type {
 	ENC_AUTO_FRAMERATE,
 	DEVICE_CAPS,
 	SUPPORTS_REQUESTS,
+	NUM_VPU,
 	CORE_CAP_MAX,
 };
 

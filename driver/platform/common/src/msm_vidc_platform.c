@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/io.h>
@@ -36,6 +36,9 @@
 #if defined(CONFIG_MSM_VIDC_LEMANS)
 #include "msm_vidc_lemans.h"
 #endif
+#if defined(CONFIG_MSM_VIDC_NORDAU)
+#include "msm_vidc_nordau.h"
+#endif
 #if defined(CONFIG_MSM_VIDC_IRIS2)
 #include "msm_vidc_iris2.h"
 #endif
@@ -44,6 +47,9 @@
 #endif
 #if defined(CONFIG_MSM_VIDC_IRIS33)
 #include "msm_vidc_iris33.h"
+#endif
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+#include "msm_vidc_iris33_au.h"
 #endif
 
 #define CAP_TO_8BIT_QP(a) {          \
@@ -273,6 +279,14 @@ static int msm_vidc_deinit_platform_variant(struct msm_vidc_core *core, struct d
 		return rc;
 	}
 #endif
+#if defined(CONFIG_MSM_VIDC_NORDAU)
+	if (of_device_is_compatible(dev->of_node, "qcom,sa8797-vidc")) {
+		rc = msm_vidc_deinit_platform_nordau(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed with %d\n", __func__, rc);
+		return rc;
+	}
+#endif
 
 
 	return rc;
@@ -325,6 +339,14 @@ static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct dev
 #if defined(CONFIG_MSM_VIDC_LEMANS)
 	if (of_device_is_compatible(dev->of_node, "qcom,sa8255-vidc")) {
 		rc = msm_vidc_init_platform_lemans(core, dev);
+		if (rc)
+			d_vpr_e("%s: failed with %d\n", __func__, rc);
+		return rc;
+	}
+#endif
+#if defined(CONFIG_MSM_VIDC_NORDAU)
+	if (of_device_is_compatible(dev->of_node, "qcom,sa8797-vidc")) {
+		rc = msm_vidc_init_platform_nordau(core, dev);
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);
 		return rc;
@@ -388,7 +410,7 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 		rc = msm_vidc_init_iris2(core);
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);
-	    return rc;
+		return rc;
 	}
 #endif
 #if defined(CONFIG_MSM_VIDC_IRIS3)
@@ -398,7 +420,7 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 		rc = msm_vidc_init_iris3(core);
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);
-	    return rc;
+		return rc;
 	}
 #endif
 #if defined(CONFIG_MSM_VIDC_IRIS33)
@@ -406,7 +428,15 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 		rc = msm_vidc_init_iris33(core);
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);
-	    return rc;
+		return rc;
+	}
+#endif
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+	if (of_device_is_compatible(dev->of_node, "qcom,sm8797-vidc")) {
+		rc = msm_vidc_init_iris33_au(core);
+		if (rc)
+			d_vpr_e("%s: failed with %d\n", __func__, rc);
+		return rc;
 	}
 #endif
 
