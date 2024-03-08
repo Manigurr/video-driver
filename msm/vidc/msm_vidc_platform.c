@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023. Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024. Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -35,19 +35,35 @@
 	.purpose = p	\
 }
 
-#define UBWC_CONFIG(mco, mlo, hbo, bslo, bso, rs, mc, ml, hbb, bsl, bsp) \
+#define UBWC_CONFIG(ver, mco, mlo, hbo, bslo, bso, rs, mc, ml, hbb, bsl, bsp) \
 {	\
-	.override_bit_info.max_channel_override = mco,	\
-	.override_bit_info.mal_length_override = mlo,	\
-	.override_bit_info.hb_override = hbo,	\
-	.override_bit_info.bank_swzl_level_override = bslo,	\
-	.override_bit_info.bank_spreading_override = bso,	\
-	.override_bit_info.reserved = rs,	\
-	.max_channels = mc,	\
-	.mal_length = ml,	\
-	.highest_bank_bit = hbb,	\
-	.bank_swzl_level = bsl,	\
-	.bank_spreading = bsp,	\
+	.version = ver, \
+	.ubwc_config_data_v1.override_bit_info.max_channel_override = mco,	\
+	.ubwc_config_data_v1.override_bit_info.mal_length_override = mlo,	\
+	.ubwc_config_data_v1.override_bit_info.hb_override = hbo,	\
+	.ubwc_config_data_v1.override_bit_info.bank_swzl_level_override = bslo,	\
+	.ubwc_config_data_v1.override_bit_info.bank_spreading_override = bso,	\
+	.ubwc_config_data_v1.override_bit_info.reserved = rs,	\
+	.ubwc_config_data_v1.max_channels = mc,	\
+	.ubwc_config_data_v1.mal_length = ml,	\
+	.ubwc_config_data_v1.highest_bank_bit = hbb,	\
+	.ubwc_config_data_v1.bank_swzl_level = bsl,	\
+	.ubwc_config_data_v1.bank_spreading = bsp,	\
+}
+
+#define UBWC_CONFIG_v2(ver, sz, type, mco, mlo, hbbo, rs1, mc, ml, hbb, rs2) \
+{	\
+	.version = ver, \
+	.ubwc_config_data_v2.nSize = sz, \
+	.ubwc_config_data_v2.ePacketType = type, \
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bMaxChannelsOverride = mco,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bMalLengthOverride = mlo,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.bHBBOverride = hbbo,	\
+	.ubwc_config_data_v2.config_v2.sOverrideBitInfo.reserved1 = rs1,	\
+	.ubwc_config_data_v2.config_v2.nMaxChannels = mc,	\
+	.ubwc_config_data_v2.config_v2.nMalLength = ml,	\
+	.ubwc_config_data_v2.config_v2.nHighestBankBit = hbb,	\
+	.ubwc_config_data_v2.config_v2.reserved2 = {rs2}	\
 }
 
 static struct msm_vidc_codec_data default_codec_data[] =  {
@@ -127,6 +143,17 @@ static struct msm_vidc_codec_data kona_codec_data[] =  {
 	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_DECODER, 25, 200, 200),
 	CODEC_ENTRY(V4L2_PIX_FMT_VP8, MSM_VIDC_DECODER, 60, 200, 200),
 	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 60, 200, 200),
+};
+
+static struct msm_vidc_codec_data qcs605_codec_data[] =  {
+	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_ENCODER, 125, 675, 320),
+	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_ENCODER, 125, 675, 320),
+	CODEC_ENTRY(V4L2_PIX_FMT_VP8, MSM_VIDC_ENCODER, 125, 675, 320),
+	CODEC_ENTRY(V4L2_PIX_FMT_MPEG2, MSM_VIDC_DECODER, 50, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_DECODER, 50, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_DECODER, 50, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_VP8, MSM_VIDC_DECODER, 50, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 50, 200, 200),
 };
 
 #define ENC     HAL_VIDEO_DOMAIN_ENCODER
@@ -1441,6 +1468,100 @@ static struct msm_vidc_vpss_capability vpss_capabilities[] = {
 	{1644, 3840},
 };
 
+static struct msm_vidc_codec_capability qcs605_capabilities[] = {
+	/* {cap_type, domains, codecs, min, max, step_size, default_value,} */
+	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 96, 5376, 1, 5376},
+	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 96, 5376, 1, 5376},
+	/* ((4096*2176)/256) decode + ((4096*2176)/256) encode  */
+	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 36, 69632, 1, 69632},
+	/* (4096 × 2176) /256 *60 fps + (4096 × 2176) /256 * 30 fps*/
+	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 36, 3133440, 1, 3133440},
+	{CAP_FRAMERATE, DOMAINS_ALL, CODECS_ALL, 1, 480, 1, 30},
+	//{CAP_OPERATINGRATE, DOMAINS_ALL, CODECS_ALL, 1, INT_MAX, 1, 30},
+	{CAP_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 120000000, 1, 12000000},
+	{CAP_CABAC_BITRATE, ENC, H264, 1, 120000000, 1, 12000000},
+	{CAP_SCALE_X, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
+	{CAP_SCALE_Y, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
+	{CAP_SCALE_X, DEC, CODECS_ALL, 65536, 65536, 1, 65536},
+	{CAP_SCALE_Y, DEC, CODECS_ALL, 65536, 65536, 1, 65536},
+	{CAP_BFRAME, ENC, H264|HEVC, 0, 1, 1, 0},
+	{CAP_HIER_P_NUM_ENH_LAYERS, ENC, H264|HEVC, 0, 6, 1, 0},
+	{CAP_LTR_COUNT, ENC, H264|HEVC, 0, 4, 1, 0},
+	/* (4096 × 2176) /256 *60 fps + (4096 × 2176) /256 * 30 fps*/
+	{CAP_MBS_PER_SECOND_POWER_SAVE, ENC, CODECS_ALL,
+		0, 3133440, 1, 3133440},
+	{CAP_I_FRAME_QP, ENC, H264|HEVC, 0, 51, 1, 10},
+	{CAP_P_FRAME_QP, ENC, H264|HEVC, 0, 51, 1, 20},
+	{CAP_B_FRAME_QP, ENC, H264|HEVC, 0, 51, 1, 20},
+	{CAP_I_FRAME_QP, ENC, VP8|VP9, 0, 127, 1, 20},
+	{CAP_P_FRAME_QP, ENC, VP8|VP9, 0, 127, 1, 40},
+	{CAP_B_FRAME_QP, ENC, VP8|VP9, 0, 127, 1, 40},
+	/* 10 slices */
+	{CAP_SLICE_BYTE, ENC, H264|HEVC, 1, 10, 1, 10},
+	{CAP_SLICE_MB, ENC, H264|HEVC, 1, 10, 1, 10},
+	{CAP_MAX_VIDEOCORES, DOMAINS_ALL, CODECS_ALL, 0, 2, 1, 2},
+
+	/* VP8 specific */
+	{CAP_FRAME_WIDTH, ENC|DEC, VP8, 96, 3840, 1, 1920},
+	{CAP_FRAME_HEIGHT, ENC|DEC, VP8, 96, 3840, 1, 1080},
+	/* (3840 * 2176) / 256 */
+	{CAP_MBS_PER_FRAME, ENC|DEC, VP8, 36, 32640, 1, 8160},
+	/* (3840 * 2176) / 256  * 30*/
+	{CAP_MBS_PER_SECOND, ENC|DEC, VP8, 36, 979200 , 1, 979200 },
+	{CAP_BFRAME, ENC, VP8, 0, 0, 1, 0},
+	{CAP_FRAMERATE, ENC|DEC, VP8, 1, 240, 1, 30},
+	{CAP_BITRATE, ENC|DEC, VP8, 1, 120000000, 1, 20000000},
+
+	/* Mpeg2 decoder specific */
+	{CAP_FRAME_WIDTH, DEC, MPEG2, 96, 1920, 1, 1920},
+	{CAP_FRAME_HEIGHT, DEC, MPEG2, 96, 1920, 1, 1080},
+	/* (1920 * 1088) / 256 */
+	{CAP_MBS_PER_FRAME, DEC, MPEG2, 36, 8160, 1, 8160},
+	/*((1920 * 1088) / 256) * 30*/
+	{CAP_MBS_PER_SECOND, DEC, MPEG2, 36, 244800, 1, 244800},
+	{CAP_FRAMERATE, DEC, MPEG2, 1, 30, 1, 30},
+	{CAP_BITRATE, DEC, MPEG2, 1, 40000000, 1, 20000000},
+
+	/* Secure usecase specific */
+	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 96, 3840, 1, 1920},
+	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 96, 3840, 1, 1080},
+	/* (3840 * 2176) / 256 */
+	{CAP_SECURE_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 36, 32640, 1, 36864},
+	{CAP_SECURE_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 35000000, 1, 20000000},
+
+	/* Batch Mode Decode */
+	{CAP_BATCH_MAX_MB_PER_FRAME, DEC, CODECS_ALL, 36, 34816, 1, 34816},
+	/* (4096 * 2176) / 256 */
+	{CAP_BATCH_MAX_FPS, DEC, CODECS_ALL, 1, 240, 1, 120},
+
+	/* All intra encoding usecase specific */
+	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 240, 1, 30},
+
+	/* Image specific */
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 96, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 96, 512, 1, 512},
+
+	/* Level for AVC and HEVC encoder specific.
+	   Default for levels is UNKNOWN value. But if we use unknown
+	   value here to set as default, max value needs to be set to
+	   unknown as well, which creates a problem of allowing client
+	   to set higher level than supported */
+	{CAP_H264_LEVEL, ENC, H264, V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
+	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_1, 1,
+	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_1},
+	{CAP_HEVC_LEVEL, ENC, HEVC, V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
+	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1, 1,
+	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1},
+
+	/* Level for AVC and HEVC decoder specific */
+	{CAP_H264_LEVEL, DEC, H264, V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
+	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_1, 1,
+	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_0},
+	{CAP_HEVC_LEVEL, DEC, HEVC, V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
+	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1, 1,
+	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_5},
+};
+
 /*
  * Custom conversion coefficients for resolution: 176x144 negative
  * coeffs are converted to s4.9 format
@@ -2496,6 +2617,10 @@ static struct msm_vidc_common_data trinket_common_data[] = {
 		.value = 1,
 	},
 	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
+	},
+	{
 		.key = "qcom,sw-power-collapse",
 		.value = 1,
 	},
@@ -2561,6 +2686,10 @@ static struct msm_vidc_common_data kona_common_data[] = {
 	{
 		.key = "qcom,never-unload-fw",
 		.value = 1,
+	},
+	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
 	},
 	{
 		.key = "qcom,sw-power-collapse",
@@ -2743,6 +2872,165 @@ static struct msm_vidc_common_data qcs3165_common_data[] = {
 	},
 };
 
+static struct msm_vidc_common_data qcs605_common_data_v0[] = {
+	{
+		.key = "qcom,never-unload-fw",
+		.value = 1,
+	},
+	{
+		.key = "qcom,sw-power-collapse",
+		.value = 1,
+	},
+	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
+	},
+	{
+		.key = "qcom,domain-attr-non-fatal-faults",
+		.value = 1,
+	},
+	{
+		.key = "qcom,max-secure-instances",
+		.value = 3,
+	},
+	{
+		.key = "qcom,domain-attr-cache-pagetables",
+		.value = 1,
+	},
+	{
+		.key = "qcom,max-hw-load",
+		.value = 3133440,
+		/* (4096 × 2176) /256 *60 fps decode + (4096 × 2176) /256 * 30 fps encode */
+	},
+	{
+		.key = "qcom,max-hq-mbs-per-frame",
+		.value = 8160,
+	},
+	{
+		.key = "qcom,max-hq-mbs-per-sec",
+		.value = 244800,  /* 1920 x 1088 @ 30 fps */
+	},
+	{
+		.key = "qcom,max-hq-frames-per-sec",
+		.value = 60,
+	},
+	{
+		.key = "qcom,max-b-frame-size",
+		.value = 8160,
+	},
+	{
+		.key = "qcom,max-b-frames-per-sec",
+		.value = 60,
+	},
+	{
+		.key = "qcom,power-collapse-delay",
+		.value = 1500,
+	},
+	{
+		.key = "qcom,hw-resp-timeout",
+		.value = 1000,
+	},
+	{
+		.key = "qcom,dcvs",
+		.value = 1,
+	},
+	{
+		.key = "qcom,fw-cycles",
+		.value = 733003,
+	},
+	{
+		.key = "qcom,fw-vpp-cycles",
+		.value = 225975,
+	},
+	{
+		.key = "qcom,no-cvp",
+		.value = 1,
+	},
+	{
+		.key = "qcom,boost_margin_disable",
+		.value = 1,
+	},
+};
+
+static struct msm_vidc_common_data qcs605_common_data_v1[] = {
+	{
+		.key = "qcom,never-unload-fw",
+		.value = 1,
+	},
+	{
+		.key = "qcom,sw-power-collapse",
+		.value = 1,
+	},
+	{
+		.key = "qcom,fw-unload-delay",
+		.value = 1000,
+	},
+	{
+		.key = "qcom,domain-attr-non-fatal-faults",
+		.value = 1,
+	},
+	{
+		.key = "qcom,max-secure-instances",
+		.value = 3,
+	},
+	{
+		.key = "qcom,domain-attr-cache-pagetables",
+		.value = 1,
+	},
+	{
+		.key = "qcom,max-hw-load",
+		.value = 1224000,/* 3840 x 2176 @ 30 fps + 1920x1088 @30 fps*/
+	},
+	{
+		.key = "qcom,max-hq-mbs-per-frame",
+		.value = 8160,
+	},
+	{
+		.key = "qcom,max-hq-mbs-per-sec",
+		.value = 244800,  /* 1920 x 1088 @ 30 fps */
+	},
+	{
+		.key = "qcom,max-hq-frames-per-sec",
+		.value = 60,
+	},
+	{
+		.key = "qcom,max-b-frame-size",
+		.value = 8160,
+	},
+	{
+		.key = "qcom,max-b-frames-per-sec",
+		.value = 60,
+	},
+	{
+		.key = "qcom,power-collapse-delay",
+		.value = 1500,
+	},
+	{
+		.key = "qcom,hw-resp-timeout",
+		.value = 1000,
+	},
+	{
+		.key = "qcom,dcvs",
+		.value = 1,
+	},
+	{
+		.key = "qcom,fw-cycles",
+		.value = 733003,
+	},
+	{
+		.key = "qcom,fw-vpp-cycles",
+		.value = 225975,
+	},
+	{
+		.key = "qcom,no-cvp",
+		.value = 1,
+	},
+	{
+		.key = "qcom,boost_margin_disable",
+		.value = 1,
+	},
+};
+
 static struct msm_vidc_efuse_data yupik_efuse_data[] = {
 	/* IRIS_PLL_FMAX - max 4K@30 */
 	EFUSE_ENTRY(0x007801E8, 4, 0x00200000, 0x15, SKU_VERSION),
@@ -2757,27 +3045,36 @@ static struct msm_vidc_efuse_data shima_efuse_data[] = {
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data lahaina_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data yupik_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data shima_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 15, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data trinket_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG_v2(2, sizeof(struct msm_vidc_ubwc_config_v2), HFI_PROPERTY_SYS_UBWC_CONFIG, 0, 1, 0, 0, 0, 64, 0, 0),
 };
 
 /* Default UBWC config for LPDDR5 */
 static struct msm_vidc_ubwc_config_data kona_ubwc_data[] = {
-	UBWC_CONFIG(1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+	UBWC_CONFIG(1,1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+};
+
+static struct msm_vidc_ubwc_config_data qcs605_ubwc_data[] = {
+	UBWC_CONFIG(1, 1, 1, 1, 0, 0, 0, 8, 32, 16, 0, 0),
+};
+
+
+static struct msm_vidc_efuse_data qcs605_efuse_data[] = {
+	EFUSE_ENTRY(0x007801A0, 4, 0x00008000, 0x0f, SKU_VERSION),
 };
 
 static struct msm_vidc_platform_data default_data = {
@@ -3015,6 +3312,27 @@ static struct msm_vidc_platform_data qcs3165_data = {
 	.max_inst_count = MAX_SUPPORTED_INSTANCES_24,
 };
 
+static struct msm_vidc_platform_data qcs605_data = {
+	.codec_data = qcs605_codec_data,
+	.codec_data_length =  ARRAY_SIZE(qcs605_codec_data),
+	.common_data = qcs605_common_data_v0,
+	.common_data_length =  ARRAY_SIZE(qcs605_common_data_v0),
+	.csc_data.vpe_csc_custom_bias_coeff = vpe_csc_custom_bias_coeff,
+	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
+	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
+	.efuse_data = qcs605_efuse_data,
+	.efuse_data_length = ARRAY_SIZE(qcs605_efuse_data),
+	.sku_version = 0,
+	.vpu_ver = VPU_VERSION_AR50,
+	.num_vpp_pipes = 0x1,
+	.ubwc_config = qcs605_ubwc_data,
+	.codecs = default_codecs,
+	.codecs_count = ARRAY_SIZE(default_codecs),
+	.codec_caps = qcs605_capabilities,
+	.codec_caps_count = ARRAY_SIZE(qcs605_capabilities),
+	.max_inst_count = MAX_SUPPORTED_INSTANCES,
+};
+
 static const struct of_device_id msm_vidc_dt_device[] = {
 	{
 		.compatible = "qcom,lahaina-vidc",
@@ -3055,6 +3373,10 @@ static const struct of_device_id msm_vidc_dt_device[] = {
 	{
 		.compatible = "qcom,trinket-vidc",
 		.data = &trinket_data,
+	},
+	{
+		.compatible = "qcom,qcs605-vidc",
+		.data = &qcs605_data,
 	},
 	{},
 };
@@ -3130,11 +3452,11 @@ static inline void msm_vidc_ddr_ubwc_config(
 	if (driver_data->ubwc_config &&
 		(ddr_type == DDR_TYPE_LPDDR4 ||
 		 ddr_type == DDR_TYPE_LPDDR4X))
-		driver_data->ubwc_config->highest_bank_bit = hbb_override_val;
+		driver_data->ubwc_config->ubwc_config_data_v1.highest_bank_bit = hbb_override_val;
 
 	d_vpr_h("DDR Type 0x%x hbb 0x%x\n",
 		ddr_type, driver_data->ubwc_config ?
-		driver_data->ubwc_config->highest_bank_bit : -1);
+		driver_data->ubwc_config->ubwc_config_data_v1.highest_bank_bit : -1);
 }
 
 void *vidc_get_drv_data(struct device *dev)
@@ -3232,7 +3554,20 @@ void *vidc_get_drv_data(struct device *dev)
 		msm_vidc_ddr_ubwc_config(driver_data, 0xe);
 	} else if (!strcmp(match->compatible, "qcom,qcs3165-vidc")) {
 		msm_vidc_ddr_ubwc_config(driver_data, 0xe);
+	} else if (!strcmp(match->compatible, "qcom,qcs605-vidc")) {
+		rc = msm_vidc_read_efuse(driver_data, dev);
+		if (rc) {
+			d_vpr_e("msm_vidc_read_efuse failed\n");
+				goto exit;
+		}
+
+		if (driver_data->sku_version == SKU_VERSION_1) {
+			driver_data->common_data = qcs605_common_data_v1;
+			driver_data->common_data_length =
+			ARRAY_SIZE(qcs605_common_data_v1);
+		}
 	}
+	
 exit:
 	return driver_data;
 }
