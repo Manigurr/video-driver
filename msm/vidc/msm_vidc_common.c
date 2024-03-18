@@ -6198,10 +6198,11 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 
 		if (is_grid_session(inst)) {
 			if (inst->fmts[INPUT_PORT].v4l2_fmt.fmt.pix_mp.pixelformat !=
-				V4L2_PIX_FMT_NV12 &&
-				inst->fmts[INPUT_PORT].v4l2_fmt.fmt.pix_mp.pixelformat !=
-				V4L2_PIX_FMT_NV12_512)
-				return -ENOTSUPP;
+				V4L2_PIX_FMT_NV12_512){
+					s_vpr_e(sid, "Unsupported pxlfmt 0x%x for grid\n",
+						inst->fmts[INPUT_PORT].v4l2_fmt.fmt.pix_mp.pixelformat);
+					return -ENOTSUPP;
+				}
 
 			width_min =
 				capability->cap[CAP_HEIC_IMAGE_FRAME_WIDTH].min;
