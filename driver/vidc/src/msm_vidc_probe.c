@@ -29,6 +29,7 @@
 #include "video_generated_h"
 #ifdef MSM_VIDC_HW_VIRT
 #include "vidc_hw_virt.h"
+#include <linux/reboot.h>
 #endif
 
 #define BASE_DEVICE_NUMBER 32
@@ -634,6 +635,36 @@ static int msm_vidc_remove(struct platform_device *pdev)
 	return -EINVAL;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+static int vidc_reboot_notify(
+		struct notifier_block *nfb, unsigned long action, void *data)
+{
+	struct msm_vidc_core *core = NULL;
+
+	d_vpr_h("%s(): %ld", __func__, action);
+	core = g_core;
+
+	switch (action) {
+	case SYS_DOWN:
+	case SYS_HALT:
+	case SYS_POWER_OFF:
+		msm_vidc_core_deinit(core, true);
+		if (core && core->is_hw_virt && core->is_gvm_open) {
+			/* close gvm */
+			virtio_video_cmd_close_gvm();
+			core->is_gvm_open = false;
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block vidc_reboot_nb = {
+	.notifier_call = vidc_reboot_notify,
+};
+#endif
+
 static int msm_vidc_probe_video_device(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -786,6 +817,10 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
             place_marker("M - DRIVER Video Ready");
         #endif
             pr_info("boot_kpi: M - DRIVER Video Ready\n");
+
+#ifdef MSM_VIDC_HW_VIRT
+	register_reboot_notifier(&vidc_reboot_nb);
+#endif
 
 	d_vpr_h("%s(): succssful\n", __func__);
 
