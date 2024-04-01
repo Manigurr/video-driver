@@ -1,23 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
+M := $(shell pwd)
+KBUILD_OPTIONS += VIDEO_KERNEL_ROOT=$(M)
+
 VIDEO_COMPILE_TIME = $(shell date)
-VIDEO_COMPILE_BY = $(shell whoami | sed 's/\\/\\\\/')
 VIDEO_COMPILE_HOST = $(shell uname -n)
-VIDEO_GEN_PATH = $(VIDEO_ROOT)/driver/vidc/inc/video_generated_h
 
-all: modules
+vidc_generated_h: $(shell find . -iname "*.c") $(shell find . -iname "*.h") $(shell find . -iname "*.mk")
+	echo '#define VIDEO_COMPILE_TIME "$(VIDEO_COMPILE_TIME)"' > vidc_generated_h
+	echo '#define VIDEO_COMPILE_HOST "$(VIDEO_COMPILE_HOST)"' >> vidc_generated_h
 
-$(VIDEO_GEN_PATH): $(shell find . -type f \( -iname \*.c -o -iname \*.h -o -iname \*.mk \))
-	echo '#define VIDEO_COMPILE_TIME "$(VIDEO_COMPILE_TIME)"' > $(VIDEO_GEN_PATH)
-	echo '#define VIDEO_COMPILE_BY "$(VIDEO_COMPILE_BY)"' >> $(VIDEO_GEN_PATH)
-	echo '#define VIDEO_COMPILE_HOST "$(VIDEO_COMPILE_HOST)"' >> $(VIDEO_GEN_PATH)
-
-modules: $(VIDEO_GEN_PATH)
-	ln -sf $(VIDEO_ROOT)/driver $(VIDEO_ROOT)/msm_video/driver
-	ln -sf $(VIDEO_ROOT)/driver $(VIDEO_ROOT)/video/driver
+all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
-	rm $(VIDEO_ROOT)/msm_video/driver
-	rm $(VIDEO_ROOT)/video/driver
+
+modules: vidc_generated_h
 
 modules_install:
 	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(M) modules_install
@@ -26,5 +22,5 @@ modules_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
 
 clean:
-	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
+	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd
 	rm -rf .tmp_versions
