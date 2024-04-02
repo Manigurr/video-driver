@@ -1039,6 +1039,7 @@ int msm_vidc_process_streamon_output(struct msm_vidc_inst *inst)
 	enum msm_vidc_sub_state clear_sub_state = MSM_VIDC_SUB_STATE_NONE;
 	enum msm_vidc_sub_state set_sub_state = MSM_VIDC_SUB_STATE_NONE;
 	bool drain_pending = false;
+	bool drc_pending = false;
 
 	msm_vidc_scale_power(inst, true);
 
@@ -1046,9 +1047,16 @@ int msm_vidc_process_streamon_output(struct msm_vidc_inst *inst)
 	 * client completed drc sequence, reset DRC and
 	 * MSM_VIDC_DRC_LAST_BUFFER substates
 	 */
-	if (is_sub_state(inst, MSM_VIDC_DRC) &&
-	    is_sub_state(inst, MSM_VIDC_DRC_LAST_BUFFER)) {
+	drc_pending = is_sub_state(inst, MSM_VIDC_DRC) &&
+		is_sub_state(inst, MSM_VIDC_DRC_LAST_BUFFER);
+
+	drain_pending = is_sub_state(inst, MSM_VIDC_DRAIN) &&
+		is_sub_state(inst, MSM_VIDC_DRAIN_LAST_BUFFER);
+
+	if (drc_pending) {
 		clear_sub_state = MSM_VIDC_DRC | MSM_VIDC_DRC_LAST_BUFFER;
+	} else if (drain_pending) {
+		clear_sub_state = MSM_VIDC_DRAIN | MSM_VIDC_DRAIN_LAST_BUFFER;
 	}
 	/*
 	 * Client is completing port reconfiguration, hence reallocate
@@ -1074,16 +1082,20 @@ int msm_vidc_process_streamon_output(struct msm_vidc_inst *inst)
 	 * completed drc sequence, resume fw input port provided
 	 * drain is not pending and input port is streaming.
 	 */
-	drain_pending = is_sub_state(inst, MSM_VIDC_DRAIN) &&
-		is_sub_state(inst, MSM_VIDC_DRAIN_LAST_BUFFER);
-	if (!drain_pending && is_state(inst, MSM_VIDC_INPUT_STREAMING)) {
-		if (is_sub_state(inst, MSM_VIDC_INPUT_PAUSE)) {
+	if (is_sub_state(inst, MSM_VIDC_INPUT_PAUSE) &&
+		is_state(inst, MSM_VIDC_INPUT_STREAMING)) {
+		if (!drain_pending) {
 			rc = venus_hfi_session_resume(inst, INPUT_PORT,
 						      HFI_CMD_SETTINGS_CHANGE);
 			if (rc)
 				return rc;
-			clear_sub_state |= MSM_VIDC_INPUT_PAUSE;
+		} else {
+			rc = venus_hfi_session_resume(inst, INPUT_PORT,
+						      HFI_CMD_DRAIN);
+			if (rc)
+				return rc;
 		}
+		clear_sub_state |= MSM_VIDC_INPUT_PAUSE;
 	}
 
 	rc = venus_hfi_start(inst, OUTPUT_PORT);
