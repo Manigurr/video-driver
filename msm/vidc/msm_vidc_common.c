@@ -1614,7 +1614,9 @@ static void handle_event_change_insufficient(struct msm_vidc_inst *inst,
 					u32 codec)
 {
 	int extra_buff_count = 0;
-
+	uint32_t vpu;
+	codec = get_v4l2_codec(inst);
+	vpu = inst->core->platform_data->vpu_ver;
 	s_vpr_h(inst->sid,
 		"seq: V4L2_EVENT_SEQ_CHANGED_INSUFFICIENT\n");
 
@@ -1625,7 +1627,11 @@ static void handle_event_change_insufficient(struct msm_vidc_inst *inst,
 	msm_dcvs_try_enable(inst);
 	extra_buff_count = msm_vidc_get_extra_buff_count(inst,
 		HAL_BUFFER_OUTPUT);
-	fmt->count_min = event_notify->fw_min_cnt;
+	if(vpu == VPU_VERSION_AR50 && codec == V4L2_PIX_FMT_MPEG2){
+		fmt->count_min = event_notify->fw_min_cnt + 1;
+	} else {
+		fmt->count_min = event_notify->fw_min_cnt;
+	}
 
 	if (is_vpp_delay_allowed(inst)) {
 		fmt->count_min =
