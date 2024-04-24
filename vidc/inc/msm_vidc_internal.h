@@ -56,7 +56,7 @@ static const char video_banner[] = "Video-Banner: (" __stringify(VIDEO_COMPILE_B
 #define MAX_AVC_ENH_LAYER_SLIDING_WINDOW      3
 #define MAX_AVC_ENH_LAYER_HYBRID_HP           5
 #define INVALID_DEFAULT_MARK_OR_USE_LTR      -1
-#define MAX_SLICES_PER_FRAME                 10
+#define MAX_SLICES_PER_FRAME                128
 #define MAX_SLICES_FRAME_RATE                60
 #define MAX_MB_SLICE_WIDTH                 4096
 #define MAX_MB_SLICE_HEIGHT                2160
