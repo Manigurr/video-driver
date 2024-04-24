@@ -461,7 +461,7 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
 		0},
 
 	{B_FRAME, ENC, H264 | HEVC,
-		0, 7, 1, 0,
+		0, 1, 1, 0,
 		V4L2_CID_MPEG_VIDEO_B_FRAMES,
 		HFI_PROP_MAX_B_FRAMES,
 		CAP_FLAG_OUTPUT_PORT},
@@ -515,6 +515,12 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
 		0, 1, 1, 0,
 		V4L2_CID_MPEG_VIDEO_AU_DELIMITER,
 		HFI_PROP_AUD,
+		CAP_FLAG_OUTPUT_PORT},
+
+	{TIME_DELTA_BASED_RC, ENC, H264 | HEVC,
+		0, 1, 1, 0,
+		0,
+		HFI_PROP_TIME_DELTA_BASED_RATE_CONTROL,
 		CAP_FLAG_OUTPUT_PORT},
 
 	{MIN_QUALITY, ENC, H264 | HEVC,
@@ -1193,7 +1199,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_qcm6
 		{LTR_COUNT, IR_PERIOD, I_FRAME_QP, P_FRAME_QP,
 			B_FRAME_QP, ENH_LAYER_COUNT, BIT_RATE,
 			MIN_QUALITY, VBV_DELAY,
-			PEAK_BITRATE, SLICE_MODE},
+			PEAK_BITRATE, SLICE_MODE, TIME_DELTA_BASED_RC},
 		msm_vidc_adjust_bitrate_mode,
 		msm_vidc_set_u32_enum},
 
@@ -1201,7 +1207,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_qcm6
 		{LTR_COUNT, IR_PERIOD, I_FRAME_QP, P_FRAME_QP,
 			B_FRAME_QP, CONSTANT_QUALITY, ENH_LAYER_COUNT,
 			BIT_RATE, MIN_QUALITY, VBV_DELAY,
-			PEAK_BITRATE, SLICE_MODE},
+			PEAK_BITRATE, SLICE_MODE, TIME_DELTA_BASED_RC},
 		msm_vidc_adjust_bitrate_mode,
 		msm_vidc_set_u32_enum},
 
@@ -1239,6 +1245,11 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_qcm6
 		{0},
 		msm_vidc_adjust_ir_period,
 		msm_vidc_set_ir_period},
+
+	{TIME_DELTA_BASED_RC, ENC, H264 | HEVC,
+		{0},
+		msm_vidc_adjust_delta_based_rc,
+		msm_vidc_set_u32},
 
 	{AU_DELIMITER, ENC, H264 | HEVC,
 		{0},

@@ -1227,7 +1227,7 @@ int msm_vidc_adjust_b_frame(void *instance, struct v4l2_ctrl *ctrl)
 {
 	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
 	s32 adjusted_value, enh_layer_count = -1;
-	const u32 max_bframe_size = 7;
+	const u32 max_bframe_size = inst->capabilities[B_FRAME].max;
 
 	adjusted_value = ctrl ? ctrl->val : inst->capabilities[B_FRAME].value;
 
