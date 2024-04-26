@@ -737,6 +737,8 @@ int msm_vidc_adjust_bitrate_mode(void *instance, struct v4l2_ctrl *ctrl)
 			hfi_value = HFI_RC_CBR_CFR;
 	} else if (bitrate_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_CQ) {
 		hfi_value = HFI_RC_CQ;
+	} else if (bitrate_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_MBR) {
+		hfi_value = HFI_RC_MBR;
 	}
 
 update:
@@ -1371,7 +1373,7 @@ int msm_vidc_adjust_b_frame(void *instance, struct v4l2_ctrl *ctrl)
 {
 	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
 	s32 adjusted_value, enh_layer_count = -1;
-	const u32 max_bframe_size = 7;
+	const u32 max_bframe_size = inst->capabilities[B_FRAME].max;
 
 	adjusted_value = ctrl ? ctrl->val : inst->capabilities[B_FRAME].value;
 

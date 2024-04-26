@@ -638,9 +638,10 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
 
     {BITRATE_MODE, ENC, H264,
         V4L2_MPEG_VIDEO_BITRATE_MODE_VBR,
-        V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
+        V4L2_MPEG_VIDEO_BITRATE_MODE_MBR,
         BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_VBR) |
-        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CBR),
+        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CBR) |
+        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_MBR),
         V4L2_MPEG_VIDEO_BITRATE_MODE_VBR,
         V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
         HFI_PROP_RATE_CONTROL,
@@ -648,10 +649,11 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
 
     {BITRATE_MODE, ENC, HEVC,
         V4L2_MPEG_VIDEO_BITRATE_MODE_VBR,
-        V4L2_MPEG_VIDEO_BITRATE_MODE_CQ,
+        V4L2_MPEG_VIDEO_BITRATE_MODE_MBR,
         BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_VBR) |
         BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CBR) |
-        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CQ),
+        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CQ) |
+        BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_MBR),
         V4L2_MPEG_VIDEO_BITRATE_MODE_VBR,
         V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
         HFI_PROP_RATE_CONTROL,
@@ -734,7 +736,7 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
         0},
 
     {B_FRAME, ENC, H264 | HEVC,
-        0, 7, 1, 0,
+        0, 1, 1, 0,
         V4L2_CID_MPEG_VIDEO_B_FRAMES,
         HFI_PROP_MAX_B_FRAMES,
         CAP_FLAG_OUTPUT_PORT},
@@ -836,7 +838,7 @@ static struct msm_platform_inst_capability instance_cap_data_qcm6490[] = {
         CAP_FLAG_OUTPUT_PORT},
 
     {TIME_DELTA_BASED_RC, ENC, H264 | HEVC,
-        0, 1, 1, 1,
+        0, 1, 1, 0,
         V4L2_CID_MPEG_VIDC_TIME_DELTA_BASED_RC,
         HFI_PROP_TIME_DELTA_BASED_RATE_CONTROL,
         CAP_FLAG_OUTPUT_PORT},

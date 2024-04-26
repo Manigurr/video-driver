@@ -835,10 +835,16 @@ int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst *inst)
 			(inst->capabilities[LOWLATENCY_MODE].value)) {
 			work_mode = MSM_VIDC_STAGE_1;
 		}
+
 		if (inst->capabilities[SLICE_MODE].value ==
 			V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES) {
 			work_mode = MSM_VIDC_STAGE_1;
 		}
+
+		if (inst->hfi_rc_type == HFI_RC_CBR_CFR ||
+			inst->hfi_rc_type == HFI_RC_CBR_VFR)
+				work_mode = MSM_VIDC_STAGE_1;
+
 		if (inst->capabilities[LOSSLESS].value)
 			work_mode = MSM_VIDC_STAGE_2;
 
