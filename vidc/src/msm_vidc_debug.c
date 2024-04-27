@@ -4,13 +4,19 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "msm_vidc.h"
-#include "msm_vidc_core.h"
+#define CREATE_TRACE_POINTS
 #include "msm_vidc_debug.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc.h"
+#include "msm_vidc_core.h"
 #include "msm_vidc_inst.h"
 #include "msm_vidc_internal.h"
+#include "msm_vidc_events.h"
 
+extern struct msm_vidc_core *g_core;
+
+#define MAX_SSR_STRING_LEN         64
+#define MAX_STABILITY_STRING_LEN   64
 #define MAX_DEBUG_LEVEL_STRING_LEN 15
 #define MSM_VIDC_MIN_STATS_DELAY_MS     200
 #define MSM_VIDC_MAX_STATS_DELAY_MS     10000
@@ -18,8 +24,11 @@
 unsigned int msm_vidc_debug = DRV_LOG;
 unsigned int msm_fw_debug = FW_LOG;
 
+/* disabled synx fence by default temporarily */
+bool msm_vidc_synx_fence_enable = false;
+
 static int debug_level_set_drv(const char *val,
-			       const struct kernel_param *kp)
+	const struct kernel_param *kp)
 {
 	struct msm_vidc_core *core = NULL;
 	unsigned int dvalue;
@@ -55,7 +64,8 @@ static int debug_level_set_drv(const char *val,
 		core->capabilities[FW_UNLOAD_DELAY].value     = FW_UNLOAD_DELAY_VALUE;
 	}
 
-	d_vpr_h("timeout for driver: hw_response %u, sw_pc %u, fw_unload %u, debug_level %#x\n",
+	d_vpr_h(
+		"timeout updated for driver: hw_response %u, sw_pc %u, fw_unload %u, debug_level %#x\n",
 		core->capabilities[HW_RESPONSE_TIMEOUT].value,
 		core->capabilities[SW_PC_DELAY].value,
 		core->capabilities[FW_UNLOAD_DELAY].value,
@@ -65,7 +75,7 @@ static int debug_level_set_drv(const char *val,
 }
 
 static int debug_level_set_fw(const char *val,
-			      const struct kernel_param *kp)
+	const struct kernel_param *kp)
 {
 	struct msm_vidc_core *core = NULL;
 	unsigned int dvalue;
@@ -101,7 +111,8 @@ static int debug_level_set_fw(const char *val,
 		core->capabilities[FW_UNLOAD_DELAY].value     = FW_UNLOAD_DELAY_VALUE;
 	}
 
-	d_vpr_h("timeout for firmware: hw_response %u, sw_pc %u, fw_unload %u, debug_level %#x\n",
+	d_vpr_h(
+		"timeout updated for firmware: hw_response %u, sw_pc %u, fw_unload %u, debug_level %#x\n",
 		core->capabilities[HW_RESPONSE_TIMEOUT].value,
 		core->capabilities[SW_PC_DELAY].value,
 		core->capabilities[FW_UNLOAD_DELAY].value,
@@ -130,7 +141,8 @@ static const struct kernel_param_ops msm_fw_debug_fops = {
 	.get = debug_level_get_fw,
 };
 
-static int fw_dump_set(const char *val, const struct kernel_param *kp)
+static int fw_dump_set(const char *val,
+	const struct kernel_param *kp)
 {
 	unsigned int dvalue;
 	int ret;
@@ -161,12 +173,57 @@ static const struct kernel_param_ops msm_vidc_fw_dump_fops = {
 	.get = fw_dump_get,
 };
 
+static int synx_fence_set(const char *val,
+	const struct kernel_param *kp)
+{
+	unsigned int dvalue;
+	int ret;
+
+	if (!kp || !kp->arg || !val) {
+		d_vpr_e("%s: Invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = kstrtouint(val, 0, &dvalue);
+	if (ret)
+		return ret;
+
+	msm_vidc_synx_fence_enable = dvalue;
+
+	return 0;
+}
+
+static int synx_fence_get(char *buffer, const struct kernel_param *kp)
+{
+	return scnprintf(buffer, PAGE_SIZE, "%#x", msm_vidc_synx_fence_enable);
+}
+
+static const struct kernel_param_ops msm_vidc_synx_fence_debug_fops = {
+	.set = synx_fence_set,
+	.get = synx_fence_get,
+};
+
 module_param_cb(msm_vidc_debug, &msm_vidc_debug_fops, &g_core, 0644);
 module_param_cb(msm_fw_debug, &msm_fw_debug_fops, &g_core, 0644);
 module_param_cb(msm_vidc_fw_dump, &msm_vidc_fw_dump_fops, &g_core, 0644);
+module_param_cb(msm_vidc_synx_fence_enable,
+	&msm_vidc_synx_fence_debug_fops, &g_core, 0644);
+
+bool msm_vidc_lossless_encode = !true;
+EXPORT_SYMBOL(msm_vidc_lossless_encode);
+
+bool msm_vidc_syscache_disable = !true;
+EXPORT_SYMBOL(msm_vidc_syscache_disable);
+
+int msm_vidc_clock_voting = !1;
+int msm_vidc_ddr_bw = !1;
+int msm_vidc_llc_bw = !1;
 
 bool msm_vidc_fw_dump = !true;
 EXPORT_SYMBOL(msm_vidc_fw_dump);
+
+unsigned int msm_vidc_enable_bugon = !1;
+EXPORT_SYMBOL(msm_vidc_enable_bugon);
 
 #define MAX_DBG_BUF_SIZE 4096
 
@@ -176,8 +233,48 @@ struct core_inst_pair {
 };
 
 /* debug fs support */
+static inline void tic(struct msm_vidc_inst *inst, enum profiling_points p,
+				 char *b)
+{
+	if (!inst->debug.pdata[p].name[0])
+		memcpy(inst->debug.pdata[p].name, b, 64);
+	if (inst->debug.pdata[p].sampling) {
+		inst->debug.pdata[p].start = ktime_get_ns() / 1000 / 1000;
+		inst->debug.pdata[p].sampling = false;
+	}
+}
 
-static u32 write_str(char *buffer, size_t size, const char *fmt, ...)
+static inline void toc(struct msm_vidc_inst *inst, enum profiling_points p)
+{
+	if (!inst->debug.pdata[p].sampling) {
+		inst->debug.pdata[p].stop = ktime_get_ns() / 1000 / 1000;
+		inst->debug.pdata[p].cumulative += inst->debug.pdata[p].stop -
+			inst->debug.pdata[p].start;
+		inst->debug.pdata[p].sampling = true;
+	}
+}
+
+void msm_vidc_show_stats(struct msm_vidc_inst *inst)
+{
+	int x;
+
+	for (x = 0; x < MAX_PROFILING_POINTS; x++) {
+		if (inst->debug.pdata[x].name[0]) {
+			if (inst->debug.samples) {
+				i_vpr_p(inst, "%s averaged %llu ms/sample\n",
+						inst->debug.pdata[x].name,
+						inst->debug.pdata[x].cumulative /
+						inst->debug.samples);
+			}
+
+			i_vpr_p(inst, "%s Samples: %d\n",
+				inst->debug.pdata[x].name, inst->debug.samples);
+		}
+	}
+}
+
+static u32 write_str(char *buffer,
+		size_t size, const char *fmt, ...)
 {
 	va_list args;
 	u32 len;
@@ -189,7 +286,7 @@ static u32 write_str(char *buffer, size_t size, const char *fmt, ...)
 }
 
 static ssize_t core_info_read(struct file *file, char __user *buf,
-			      size_t count, loff_t *ppos)
+	size_t count, loff_t *ppos)
 {
 	struct msm_vidc_core *core = file->private_data;
 	char *cur, *end, *dbuf = NULL;
@@ -217,7 +314,8 @@ static ssize_t core_info_read(struct file *file, char __user *buf,
 		"register_base: 0x%x\n", core->resource->register_base_addr);
 	cur += write_str(cur, end - cur, "irq: %u\n", core->resource->irq);
 
-	len = simple_read_from_buffer(buf, count, ppos, dbuf, cur - dbuf);
+	len = simple_read_from_buffer(buf, count, ppos,
+		dbuf, cur - dbuf);
 
 	vfree(dbuf);
 	return len;
@@ -229,7 +327,7 @@ static const struct file_operations core_info_fops = {
 };
 
 static ssize_t stats_delay_write_ms(struct file *filp, const char __user *buf,
-				    size_t count, loff_t *ppos)
+		size_t count, loff_t *ppos)
 {
 	int rc = 0;
 	struct msm_vidc_core *core = filp->private_data;
@@ -269,7 +367,7 @@ exit:
 }
 
 static ssize_t stats_delay_read_ms(struct file *file, char __user *buf,
-				   size_t count, loff_t *ppos)
+		size_t count, loff_t *ppos)
 {
 	size_t len;
 	char kbuf[MAX_DEBUG_LEVEL_STRING_LEN];
@@ -290,6 +388,98 @@ static const struct file_operations stats_delay_fops = {
 	.read = stats_delay_read_ms,
 };
 
+static ssize_t trigger_ssr_write(struct file *filp, const char __user *buf,
+	size_t count, loff_t *ppos)
+{
+	unsigned long ssr_trigger_val = 0;
+	int rc = 0;
+	struct msm_vidc_core *core = filp->private_data;
+	size_t size = MAX_SSR_STRING_LEN;
+	char kbuf[MAX_SSR_STRING_LEN + 1] = { 0 };
+
+	if (!core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, core);
+		return 0;
+	}
+
+	if (!buf)
+		return -EINVAL;
+
+	if (!count)
+		goto exit;
+
+	if (count < size)
+		size = count;
+
+	if (copy_from_user(kbuf, buf, size)) {
+		d_vpr_e("%s: User memory fault\n", __func__);
+		rc = -EFAULT;
+		goto exit;
+	}
+
+	rc = kstrtoul(kbuf, 0, &ssr_trigger_val);
+	if (rc) {
+		d_vpr_e("returning error err %d\n", rc);
+		rc = -EINVAL;
+	} else {
+		msm_vidc_trigger_ssr(core, ssr_trigger_val);
+		rc = count;
+	}
+exit:
+	return rc;
+}
+
+static const struct file_operations ssr_fops = {
+	.open = simple_open,
+	.write = trigger_ssr_write,
+};
+
+static ssize_t trigger_stability_write(struct file *filp, const char __user *buf,
+	size_t count, loff_t *ppos)
+{
+	unsigned long stability_trigger_val = 0;
+	int rc = 0;
+	struct msm_vidc_core *core = filp->private_data;
+	size_t size = MAX_STABILITY_STRING_LEN;
+	char kbuf[MAX_STABILITY_STRING_LEN + 1] = { 0 };
+
+	if (!core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, core);
+		return 0;
+	}
+
+	if (!buf)
+		return -EINVAL;
+
+	if (!count)
+		goto exit;
+
+	if (count < size)
+		size = count;
+
+	if (copy_from_user(kbuf, buf, size)) {
+		d_vpr_e("%s: User memory fault\n", __func__);
+		rc = -EFAULT;
+		goto exit;
+	}
+
+	rc = kstrtoul(kbuf, 0, &stability_trigger_val);
+	if (rc) {
+		d_vpr_e("%s: returning error err %d\n", __func__, rc);
+		rc = -EINVAL;
+	} else {
+		msm_vidc_trigger_stability(core, stability_trigger_val);
+		rc = count;
+	}
+exit:
+	return rc;
+}
+
+static const struct file_operations stability_fops = {
+	.open = simple_open,
+	.write = trigger_stability_write,
+};
+
 struct dentry *msm_vidc_debugfs_init_drv(void)
 {
 	struct dentry *dir = NULL;
@@ -300,10 +490,24 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 		goto failed_create_dir;
 	}
 
+	debugfs_create_u32("core_clock_voting", 0644, dir,
+			&msm_vidc_clock_voting);
+	debugfs_create_u32("ddr_bw_kbps", 0644, dir,
+			&msm_vidc_ddr_bw);
+	debugfs_create_u32("llc_bw_kbps", 0644, dir,
+			&msm_vidc_llc_bw);
+	debugfs_create_bool("disable_video_syscache", 0644, dir,
+			&msm_vidc_syscache_disable);
+	debugfs_create_bool("lossless_encoding", 0644, dir,
+			&msm_vidc_lossless_encode);
+	debugfs_create_u32("enable_bugon", 0644, dir,
+			&msm_vidc_enable_bugon);
+
 	return dir;
 
 failed_create_dir:
-	debugfs_remove_recursive(dir);
+	if (dir)
+		debugfs_remove_recursive(dir);
 
 	return NULL;
 }
@@ -331,7 +535,15 @@ struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core)
 		d_vpr_e("debugfs_create_file: fail\n");
 		goto failed_create_dir;
 	}
-
+	if (!debugfs_create_file("trigger_ssr", 0200,
+			dir, core, &ssr_fops)) {
+		d_vpr_e("debugfs_create_file: fail\n");
+		goto failed_create_dir;
+	}
+	if (!debugfs_create_file("trigger_stability", 0200, dir, core, &stability_fops)) {
+		d_vpr_e("trigger_stability debugfs_create_file: fail\n");
+		goto failed_create_dir;
+	}
 	if (!debugfs_create_file("stats_delay_ms", 0644, dir, core, &stats_delay_fops)) {
 		d_vpr_e("debugfs_create_file: fail\n");
 		goto failed_create_dir;
@@ -347,8 +559,14 @@ static int inst_info_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static int publish_unreleased_reference(struct msm_vidc_inst *inst,
+		char **dbuf, char *end)
+{
+	return 0;
+}
+
 static ssize_t inst_info_read(struct file *file, char __user *buf,
-			      size_t count, loff_t *ppos)
+		size_t count, loff_t *ppos)
 {
 	struct core_inst_pair *idata = file->private_data;
 	struct msm_vidc_core *core;
@@ -374,17 +592,18 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 
 	dbuf = vzalloc(MAX_DBG_BUF_SIZE);
 	if (!dbuf) {
-		d_vpr_e("%s: allocation failed\n", __func__);
+		i_vpr_e(inst, "%s: allocation failed\n", __func__);
 		len = -ENOMEM;
 		goto failed_alloc;
 	}
+
 	cur = dbuf;
 	end = cur + MAX_DBG_BUF_SIZE;
 
 	f = &inst->fmts[OUTPUT_PORT];
 	cur += write_str(cur, end - cur, "==============================\n");
 	cur += write_str(cur, end - cur, "INSTANCE: %pK (%s)\n", inst,
-		inst->domain == MSM_VIDC_ENCODER ? "Encoder" : "Decoder");
+		is_encode_session(inst) ? "Encoder" : "Decoder");
 	cur += write_str(cur, end - cur, "==============================\n");
 	cur += write_str(cur, end - cur, "core: %pK\n", inst->core);
 	cur += write_str(cur, end - cur, "height: %d\n", f->fmt.pix_mp.height);
@@ -392,6 +611,8 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 	cur += write_str(cur, end - cur, "fps: %d\n",
 			inst->capabilities[FRAME_RATE].value >> 16);
 	cur += write_str(cur, end - cur, "state: %d\n", inst->state);
+	cur += write_str(cur, end - cur, "secure: %d\n",
+		is_secure_session(inst));
 	cur += write_str(cur, end - cur, "-----------Formats-------------\n");
 	for (i = 0; i < MAX_PORT; i++) {
 		if (i != INPUT_PORT && i != OUTPUT_PORT)
@@ -424,8 +645,9 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 	cur += write_str(cur, end - cur, "FBD Count: %d\n",
 		inst->debug_count.fbd);
 
+	publish_unreleased_reference(inst, &cur, end);
 	len = simple_read_from_buffer(buf, count, ppos,
-				      dbuf, cur - dbuf);
+		dbuf, cur - dbuf);
 
 	vfree(dbuf);
 failed_alloc:
@@ -473,7 +695,7 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst, struct den
 	}
 
 	info = debugfs_create_file("info", 0444, dir,
-				   idata, &inst_info_fops);
+			idata, &inst_info_fops);
 	if (IS_ERR_OR_NULL(info)) {
 		i_vpr_e(inst, "%s: debugfs_create_file: fail\n",
 			__func__);
@@ -481,6 +703,7 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst, struct den
 	}
 
 	dir->d_inode->i_private = info->d_inode->i_private;
+	inst->debug.pdata[FRAME_PROCESSING].sampling = true;
 	return dir;
 
 failed_create_file:
@@ -511,30 +734,38 @@ void msm_vidc_debugfs_deinit_inst(struct msm_vidc_inst *inst)
 }
 
 void msm_vidc_debugfs_update(struct msm_vidc_inst *inst,
-			     enum msm_vidc_debugfs_event e)
+	enum msm_vidc_debugfs_event e)
 {
+	struct msm_vidc_debug *d;
+	char a[64] = "Frame processing";
+
+	d = &inst->debug;
+
 	switch (e) {
 	case MSM_VIDC_DEBUGFS_EVENT_ETB:
 		inst->debug_count.etb++;
 		if (inst->debug_count.ebd &&
-		    inst->debug_count.ftb > inst->debug_count.fbd) {
+			inst->debug_count.ftb > inst->debug_count.fbd) {
+			d->pdata[FRAME_PROCESSING].name[0] = '\0';
+			tic(inst, FRAME_PROCESSING, a);
 		}
 		break;
 	case MSM_VIDC_DEBUGFS_EVENT_EBD:
 		inst->debug_count.ebd++;
 		/*
-		 * Host needs to ensure FW at least have 2 buffers available always
+		 * Host needs to ensure FW atleast have 2 buffers available always
 		 * one for HW processing and another for fw processing in parallel
 		 * to avoid FW starving for buffers
 		 */
 		if (inst->debug_count.etb < (inst->debug_count.ebd + 2)) {
+			toc(inst, FRAME_PROCESSING);
 			i_vpr_p(inst,
 				"EBD: FW needs input buffers. Processed etb %llu ebd %llu ftb %llu fbd %llu\n",
 				inst->debug_count.etb, inst->debug_count.ebd,
 				inst->debug_count.ftb, inst->debug_count.fbd);
 		}
 		if (inst->debug_count.fbd &&
-		    inst->debug_count.ftb < (inst->debug_count.fbd + 2))
+			inst->debug_count.ftb < (inst->debug_count.fbd + 2))
 			i_vpr_p(inst,
 				"EBD: FW needs output buffers. Processed etb %llu ebd %llu ftb %llu fbd %llu\n",
 				inst->debug_count.etb, inst->debug_count.ebd,
@@ -543,24 +774,28 @@ void msm_vidc_debugfs_update(struct msm_vidc_inst *inst,
 	case MSM_VIDC_DEBUGFS_EVENT_FTB:
 		inst->debug_count.ftb++;
 		if (inst->debug_count.ebd &&
-		    inst->debug_count.etb > inst->debug_count.ebd) {
+			inst->debug_count.etb > inst->debug_count.ebd) {
+			d->pdata[FRAME_PROCESSING].name[0] = '\0';
+			tic(inst, FRAME_PROCESSING, a);
 		}
 		break;
 	case MSM_VIDC_DEBUGFS_EVENT_FBD:
 		inst->debug_count.fbd++;
+		inst->debug.samples++;
 		/*
-		 * Host needs to ensure FW at least have 2 buffers available always
+		 * Host needs to ensure FW atleast have 2 buffers available always
 		 * one for HW processing and another for fw processing in parallel
 		 * to avoid FW starving for buffers
 		 */
 		if (inst->debug_count.ftb < (inst->debug_count.fbd + 2)) {
+			toc(inst, FRAME_PROCESSING);
 			i_vpr_p(inst,
 				"FBD: FW needs output buffers. Processed etb %llu ebd %llu ftb %llu fbd %llu\n",
 				inst->debug_count.etb, inst->debug_count.ebd,
 				inst->debug_count.ftb, inst->debug_count.fbd);
 		}
 		if (inst->debug_count.ebd &&
-		    inst->debug_count.etb < (inst->debug_count.ebd + 2))
+			inst->debug_count.etb < (inst->debug_count.ebd + 2))
 			i_vpr_p(inst,
 				"FBD: FW needs input buffers. Processed etb %llu ebd %llu ftb %llu fbd %llu\n",
 				inst->debug_count.etb, inst->debug_count.ebd,

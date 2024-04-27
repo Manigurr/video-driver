@@ -3,80 +3,10 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include "kalama_technology.h"
 #include "msm_vidc_debug.h"
-#include "perf_static_model.h"
 
-/* 100x */
-static u32 dpbopb_ubwc30_cr_table_cratio_iris3[7][12] = {
-	{237, 399, 272, 137, 225, 158, 185, 259, 203, 138, 167, 152},
-	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
-	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
-	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
-	{237, 399, 272, 137, 225, 158, 185, 259, 203, 138, 167, 152},
-	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
-	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
-};
-
-/* 100x */
-static u32 rpb_ubwc30_cr_table_cratio_iris3[7][12] = {
-	{193, 294, 218, 135, 214, 155, 175, 241, 191, 139, 162, 149},
-	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
-	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
-	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
-	{193, 294, 218, 135, 214, 155, 175, 241, 191, 139, 162, 149},
-	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
-	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
-};
-
-/* 100x */
-static u32 ipblossy_ubwc30_cr_table_cratio_iris3[7][12] = {
-	{215, 215, 215, 174, 174, 174, 266, 266, 266, 231, 231, 231},
-	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
-	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
-	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
-	{215, 215, 215, 174, 174, 174, 266, 266, 266, 231, 231, 231},
-	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
-	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
-};
-
-/* 100x */
-static u32 ipblossless_ubwc30_cr_table_cratio_iris3[7][12] = {
-	{185, 215, 194, 147, 178, 159, 162, 181, 169, 138, 161, 146},
-	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
-	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
-	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
-	{185, 215, 194, 147, 178, 159, 162, 181, 169, 138, 161, 146},
-	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
-	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
-};
-
-/* 100x */
-static u32 en_original_compression_factor_rgba_pwd_iris3 = 243;
-/* 100x */
-static u32 en_original_compression_factor_rgba_avg_iris3 = 454;
-
-/*                                H   I   J         K   L   M      N   O   P
- *         TotalW   Total R       Frequency         Write         Read
- * Name                           B   b   P         B   b   P      B   b   P
- * I3B4b1P    0.5    1.875        3   4   1         1   0   1      2   2   1
- * I1B2b1P    0.5    1.75         1   2   1         1   0   1      2   2   1
- * IbP        0.5    1.5          0   1   1         1   0   1      2   2   1
- * IPP        1      1            0   0   1         1   0   1      2   2   1
- * P          1      1            0   0   1         1   0   1      2   2   1
- * smallB     0      2            0   1   0         1   0   1      2   2   1
- * bigB       1      2            1   0   0         1   0   1      2   2   1
- *
- * Total W = SUMPRODUCT(H16:J16, K16 : M16) / SUM(H16:J16)
- * Total R = SUMPRODUCT(H16:J16, N16 : P16) / SUM(H16:J16)
- */
-
-/* 1000x */
-static u32 iris3_en_readfactor[7] = {1000, 1500, 1750, 1875, 1000, 2000, 2000};
-/* 1000x */
-static u32 iris3_en_writefactor[7] = {1000, 500, 500, 500, 1000, 0, 1000};
-static u32 iris3_en_frame_num_parallel = 1;
-
-u32 calculate_number_lcus_iris3(u32 width, u32 height, u32 lcu_size)
+u32 calculate_number_lcus_kalama(u32 width, u32 height, u32 lcu_size)
 {
 	u32 mbs_width = (width % lcu_size) ?
 		(width / lcu_size + 1) : (width / lcu_size);
@@ -86,7 +16,8 @@ u32 calculate_number_lcus_iris3(u32 width, u32 height, u32 lcu_size)
 	return mbs_width * mbs_height;
 }
 
-u32 calculate_number_ubwctiles_iris3(u32 width, u32 height, u32 tile_w, u32 tile_h)
+u32 calculate_number_ubwctiles_kalama(
+		u32 width, u32 height, u32 tile_w, u32 tile_h)
 {
 	u32 tiles_width = (width % tile_w) ?
 		(width / tile_w + 1) : (width / tile_w);
@@ -106,7 +37,7 @@ struct compression_factors {
 } compression_factor;
 
 u32 get_compression_factors(struct compression_factors *compression_factor,
-			    struct api_calculation_input codec_input)
+		struct api_calculation_input codec_input)
 {
 	u8 cr_index_entry, cr_index_y, cr_index_c, cr_index_uni;
 	u32 frame_width;
@@ -145,15 +76,15 @@ u32 get_compression_factors(struct compression_factors *compression_factor,
 
 	if (codec_input.decoder_or_encoder == CODEC_DECODER) {
 		compression_factor->dpb_cf_y =
-			dpbopb_ubwc30_cr_table_cratio_iris3[cr_index_entry][cr_index_y];
+			dpbopb_ubwc30_cr_table_cratio_kalama[cr_index_entry][cr_index_y];
 		compression_factor->dpb_cf_cbcr =
-			dpbopb_ubwc30_cr_table_cratio_iris3[cr_index_entry][cr_index_c];
+			dpbopb_ubwc30_cr_table_cratio_kalama[cr_index_entry][cr_index_c];
 		compression_factor->opb_cf_ycbcr =
-			dpbopb_ubwc30_cr_table_cratio_iris3[cr_index_entry][cr_index_uni];
+			dpbopb_ubwc30_cr_table_cratio_kalama[cr_index_entry][cr_index_uni];
 
-		if (codec_input.regression_mode == 3 &&
-		    /* input cr numbers from interface */
-		    (codec_input.cr_dpb != 0 || codec_input.cr_opb != 0)) {
+		if ((codec_input.regression_mode == 3) &&
+			/* input cr numbers from interface */
+			((codec_input.cr_dpb != 0) || (codec_input.cr_opb != 0))) {
 			compression_factor->dpb_cf_y = (u32)(codec_input.cr_dpb * 100);
 			compression_factor->dpb_cf_cbcr = (u32)(codec_input.cr_dpb * 100);
 			compression_factor->opb_cf_ycbcr = (u32)(codec_input.cr_opb * 100);
@@ -166,29 +97,29 @@ u32 get_compression_factors(struct compression_factors *compression_factor,
 		 */
 		if (frame_width < 3840) {
 			compression_factor->ipb_cr =
-				ipblossless_ubwc30_cr_table_cratio_iris3
-				[cr_index_entry][cr_index_uni];
+				ipblossless_ubwc30_cr_table_cratio_kalama[cr_index_entry]
+					[cr_index_uni];
 			compression_factor->ipb_cr_y =
-				ipblossless_ubwc30_cr_table_cratio_iris3
-				[cr_index_entry][cr_index_y];
+				ipblossless_ubwc30_cr_table_cratio_kalama[cr_index_entry]
+					[cr_index_y];
 		} else {
 			compression_factor->ipb_cr =
-				ipblossy_ubwc30_cr_table_cratio_iris3[cr_index_entry]
-				[cr_index_uni];
+				ipblossy_ubwc30_cr_table_cratio_kalama[cr_index_entry]
+					[cr_index_uni];
 			compression_factor->ipb_cr_y =
-				ipblossy_ubwc30_cr_table_cratio_iris3[cr_index_entry]
-				[cr_index_y];
+				ipblossy_ubwc30_cr_table_cratio_kalama[cr_index_entry]
+					[cr_index_y];
 		}
 
 		compression_factor->dpb_cf_y =
-			rpb_ubwc30_cr_table_cratio_iris3[cr_index_entry][cr_index_y];
+			rpb_ubwc30_cr_table_cratio_kalama[cr_index_entry][cr_index_y];
 
 		compression_factor->dpb_cf_cbcr =
-			rpb_ubwc30_cr_table_cratio_iris3[cr_index_entry][cr_index_c];
+			rpb_ubwc30_cr_table_cratio_kalama[cr_index_entry][cr_index_c];
 
-		if (codec_input.regression_mode == 3 &&
-		    /* input cr from interface */
-		    (codec_input.cr_ipb != 0 || codec_input.cr_rpb != 0)) {
+		if ((codec_input.regression_mode == 3) &&
+			/* input cr from interface */
+			((codec_input.cr_ipb != 0) || (codec_input.cr_rpb != 0))) {
 			compression_factor->dpb_cf_y = (u32)(codec_input.cr_rpb * 100);
 			compression_factor->dpb_cf_cbcr = (u32)(codec_input.cr_rpb * 100);
 			compression_factor->ipb_cr_y = (u32)(codec_input.cr_ipb * 100);
@@ -198,8 +129,9 @@ u32 get_compression_factors(struct compression_factors *compression_factor,
 	return 0;
 }
 
-static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_input,
-					     struct api_calculation_bw_output *codec_output)
+static int calculate_bandwidth_decoder_iris3(
+		struct api_calculation_input codec_input,
+		struct api_calculation_bw_output *codec_output)
 {
 	/* common control parameters */
 	u32 frame_width;
@@ -208,6 +140,8 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 	u32 lcu_per_frame;
 	u32 target_bitrate;
 	u32 collocated_bytes_per_lcu = 16; /* initialized to h264 */
+	u32 av1d_segment_read_per_lcu;
+	u32 av1d_fe_leftlinebuffer_perlcu_tileboudary;
 
 	u32 frame420_y_bw_linear_8bpp;
 	u32 frame420_y_bw_no_ubwc_tile_10bpp;
@@ -233,12 +167,19 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 	u8 llc_enable_ref_crcb_rd = 1;
 	u8 llc_enabled_bse_tlb = 1;
 	/* this is for 2pipe and 1pipe LLC */
+	u8 llc_enable_probtable_av1d_21pipe = 0;
 
 	u32 opb_compression_factor_ycbcr;
 	u32 dpb_ubwc_tile_width_pixels;
 	u32 dpb_ubwc_tile_height_pixels;
 	u32 decoder_frame_complexity_factor;
 	u32 llc_saving = 130; /* Initialized to H264 */
+
+	u16 av1_tile_numbers;
+	u32 av1_collated_seg_buffer_rd_wr;
+	/* need divide by 1M at later step; */
+	u32 av1_probability_table_rdwr_bytesperframe = 22784;
+	u32 av1_fe_left_line_buffer_rdwr;
 
 	u32 bse_tlb_byte_per_lcu = 0;
 
@@ -251,8 +192,8 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 
 	frame_width = codec_input.frame_width;
 	frame_height = codec_input.frame_height;
-	if (codec_input.codec == CODEC_H264 ||
-	    codec_input.codec == CODEC_H264_CAVLC) {
+	if ((codec_input.codec == CODEC_H264) ||
+		(codec_input.codec == CODEC_H264_CAVLC)) {
 		frame_lcu_size = 16;
 		collocated_bytes_per_lcu = 16;
 		llc_saving = 130;
@@ -276,10 +217,40 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 			collocated_bytes_per_lcu = 256;
 			llc_saving = 107;
 		}
+	} else if (codec_input.codec == CODEC_AV1) {
+		u32 av1d_leftline_cdef = (2944 + 896 + 896);
+		u32 av1d_leftline_scaling = (2176 + 1408 + 1408);
+		u32 av1d_leftline_fg = (1280);
+		u32 av1d_leftline_lr = (1536 + 1024 + 1024);
+
+		av1d_fe_leftlinebuffer_perlcu_tileboudary =
+			av1d_leftline_cdef + av1d_leftline_scaling +
+			av1d_leftline_fg + av1d_leftline_lr;
+
+		if (codec_input.lcu_size == 128) {
+			frame_lcu_size = 128;
+			collocated_bytes_per_lcu = 4 * 512;
+			av1d_segment_read_per_lcu = 512;
+			llc_saving = 104;
+		} else if (codec_input.lcu_size == 32) {
+			frame_lcu_size = 32;
+			collocated_bytes_per_lcu = 4 * 512 / (128 * 128 / 32 / 32);
+			av1d_segment_read_per_lcu = 512 / (128 * 128 / 32 / 32);
+			av1d_fe_leftlinebuffer_perlcu_tileboudary =
+				av1d_fe_leftlinebuffer_perlcu_tileboudary / (128 * 128 / 32 / 32);
+			llc_saving = 114;
+		} else if (codec_input.lcu_size == 64) {
+			frame_lcu_size = 64;
+			collocated_bytes_per_lcu = 4 * 512 / (128 * 128 / 64 / 64);
+			av1d_segment_read_per_lcu = 512 / (128 * 128 / 64 / 64);
+			av1d_fe_leftlinebuffer_perlcu_tileboudary =
+				av1d_fe_leftlinebuffer_perlcu_tileboudary / (128 * 128 / 64 / 64);
+			llc_saving = 107;
+		}
 	}
 
 	lcu_per_frame =
-		calculate_number_lcus_iris3(frame_width, frame_height, frame_lcu_size);
+		calculate_number_lcus_kalama(frame_width, frame_height, frame_lcu_size);
 
 	target_bitrate = (u32)(codec_input.bitrate_mbps); /* Mbps */
 
@@ -287,11 +258,11 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 	ubwc_tile_h = (codec_input.bitdepth == CODEC_BITDEPTH_8) ? 8 : 4;
 
 	frame420_y_bw_linear_8bpp =
-		((calculate_number_ubwctiles_iris3(frame_width, frame_height, 32, 8) *
+		((calculate_number_ubwctiles_kalama(frame_width, frame_height, 32, 8) *
 		256 * codec_input.frame_rate + 999) / 1000 + 999) / 1000;
 
 	frame420_y_bw_no_ubwc_tile_10bpp =
-		((calculate_number_ubwctiles_iris3(frame_width, frame_height, 48, 4) *
+		((calculate_number_ubwctiles_kalama(frame_width, frame_height, 48, 4) *
 		256 * codec_input.frame_rate + 999) / 1000 + 999) / 1000;
 	frame420_y_bw_linear_10bpp = ((frame_width * frame_height *
 		codec_input.frame_rate * 2 + 999) / 1000 + 999) / 1000;
@@ -317,6 +288,39 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 
 	reference_cbcr_read_bw_factor = llc_saving;
 
+	if (codec_input.codec == CODEC_AV1) {
+		u8 av1tile_index_entry, av1tile_complexity;
+
+		if (frame_width * frame_height <= 1280 * 720)
+			av1tile_index_entry = 4;
+		else if (frame_width * frame_height <= 1920 * 1080)
+			av1tile_index_entry = 0;
+		else if (frame_width * frame_height <= 2560 * 1440)
+			av1tile_index_entry = 5;
+		else if (frame_width * frame_height <= 4096 * 2304)
+			av1tile_index_entry = 1;
+		else
+			av1tile_index_entry = 6;
+
+		/* NOT PWC //or average and power case */
+		if (codec_input.complexity_setting != 0)
+			av1tile_complexity = 1;
+		else
+			av1tile_complexity = 0;
+
+		av1_tile_numbers = av1_num_tiles_kalama[av1tile_index_entry][av1tile_complexity];
+
+		/* these bw can be ignored */
+		av1_collated_seg_buffer_rd_wr =
+			((av1d_segment_read_per_lcu * lcu_per_frame *
+			codec_input.frame_rate + 999) / 1000 + 999) / 1000;
+
+		av1_fe_left_line_buffer_rdwr =
+			(((av1d_fe_leftlinebuffer_perlcu_tileboudary *
+			frame_height * (av1_tile_numbers > 1 ? av1_tile_numbers / 2 : 0)
+			+ 999) / 1000 + 999) / 1000 + (frame_lcu_size - 1)) / frame_lcu_size;
+	}
+
 	if (codec_input.codec == CODEC_HEVC) {
 		if (codec_input.lcu_size == 32)
 			bse_tlb_byte_per_lcu = 64;
@@ -329,6 +333,13 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 		bse_tlb_byte_per_lcu = 64;
 	} else if (codec_input.codec == CODEC_VP9) {
 		bse_tlb_byte_per_lcu = 304;
+	} else if (codec_input.codec == CODEC_AV1) {
+		if (codec_input.lcu_size == 128)
+			bse_tlb_byte_per_lcu = 2064;
+		else if (codec_input.lcu_size == 64)
+			bse_tlb_byte_per_lcu = 1056;
+		else if (codec_input.lcu_size == 32)
+			bse_tlb_byte_per_lcu = 2064 / (128 * 128 / 32 / 32);
 	}
 
 	codec_output->noc_bw_rd = 0;
@@ -504,6 +515,37 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 	codec_output->noc_bw_wr += codec_output->bse_tlb_wr_noc;
 	codec_output->ddr_bw_wr += codec_output->bse_tlb_wr_ddr;
 
+	if (codec_input.codec == CODEC_AV1) {
+		codec_output->statistics_rd_noc = (av1_collated_seg_buffer_rd_wr +
+			av1_probability_table_rdwr_bytesperframe * av1_tile_numbers /
+			1000 / 1000 + av1_fe_left_line_buffer_rdwr);
+
+		codec_output->statistics_wr_noc = (av1_collated_seg_buffer_rd_wr +
+			av1_probability_table_rdwr_bytesperframe * av1_tile_numbers /
+			1000 / 1000 + av1_fe_left_line_buffer_rdwr);
+
+		if (llc_enable_probtable_av1d_21pipe) {
+			/* assert(CODEC_INPUT.pipe_num != 4); */
+			codec_output->statistics_rd_ddr = codec_output->statistics_rd_noc -
+				av1_probability_table_rdwr_bytesperframe *
+				av1_tile_numbers / 1000 / 1000;
+
+			codec_output->statistics_wr_ddr = codec_output->statistics_wr_noc -
+				av1_probability_table_rdwr_bytesperframe *
+				av1_tile_numbers / 1000 / 1000;
+		} else {
+			codec_output->statistics_rd_ddr = codec_output->statistics_rd_noc;
+			codec_output->statistics_wr_ddr = codec_output->statistics_wr_noc;
+		}
+
+		/* accumulation */
+		codec_output->noc_bw_rd += codec_output->statistics_rd_noc;
+		codec_output->ddr_bw_rd += codec_output->statistics_rd_ddr;
+		codec_output->noc_bw_wr += codec_output->statistics_wr_noc;
+		codec_output->ddr_bw_wr += codec_output->statistics_wr_ddr;
+	}
+
+
 	codec_output->mmu_rd_ddr = 0;
 	codec_output->mmu_rd_noc = 0;
 	/* accumulation */
@@ -513,8 +555,9 @@ static int calculate_bandwidth_decoder_iris3(struct api_calculation_input codec_
 	return 0;
 }
 
-static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_input,
-					     struct api_calculation_bw_output *codec_output)
+static int calculate_bandwidth_encoder_iris3(
+		struct api_calculation_input codec_input,
+		struct api_calculation_bw_output *codec_output)
 {
 	/* common control parameters */
 	u32 frame_width;
@@ -565,21 +608,21 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 
 	frame_width = codec_input.frame_width;
 	frame_height = codec_input.frame_height;
-	if (codec_input.codec == CODEC_H264 ||
-	    codec_input.codec == CODEC_H264_CAVLC) {
+	if ((codec_input.codec == CODEC_H264) ||
+		(codec_input.codec == CODEC_H264_CAVLC)) {
 		frame_lcu_size = 16;
 		collocated_bytes_per_lcu = 16;
 	} else if (codec_input.codec == CODEC_HEVC) {
 		frame_lcu_size = 32;
 		collocated_bytes_per_lcu = 64;
 	} else {
-		/* TODO What is the value for VP9 ? */
+		/* TODO What is the value for VP9, AV1? */
 		frame_lcu_size = 16;
 		collocated_bytes_per_lcu = 16; /* TODO Fixes Uninitialized compilation error. */
 	}
 
 	lcu_per_frame =
-		calculate_number_lcus_iris3(frame_width, frame_height, frame_lcu_size);
+		calculate_number_lcus_kalama(frame_width, frame_height, frame_lcu_size);
 
 	bse_tlb_byte_per_lcu = 16; /* TODO Should be in common declaration */
 
@@ -591,16 +634,16 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 	/* yuv */
 	if (codec_input.ipb_yuvrgb == 0) {
 		frame420_y_bw_linear_8bpp =
-			((calculate_number_ubwctiles_iris3(frame_width, frame_height,
+			((calculate_number_ubwctiles_kalama(frame_width, frame_height,
 			32, 8) * 256 * codec_input.frame_rate + 999) / 1000 + 999) / 1000;
 	} else { /* RGBA */
 		frame420_y_bw_linear_8bpp =
-			((calculate_number_ubwctiles_iris3(frame_width, frame_height,
+			((calculate_number_ubwctiles_kalama(frame_width, frame_height,
 			6, 4) * 256 * codec_input.frame_rate + 999) / 1000 + 999) / 1000;
 	}
 
 	frame420_y_bw_no_ubwc_tile_10bpp =
-		((calculate_number_ubwctiles_iris3(frame_width, frame_height, 48, 4) *
+		((calculate_number_ubwctiles_kalama(frame_width, frame_height, 48, 4) *
 		256 * codec_input.frame_rate + 999) / 1000 + 999) / 1000;
 
 	frame420_y_bw_linear_10bpp = ((frame_width * frame_height *
@@ -622,7 +665,7 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 	/* ceil is same as excel roundup (float, 0); */
 	reconstructed_write_bw_factor_rd = ((en_tile_number - 100) * 2 *
 		((codec_input.lcu_size + ubwc_tile_w - 1) / ubwc_tile_w) *
-		ubwc_tile_w + (frame_width - 1)) / (frame_width) + 100;
+		ubwc_tile_w + (frame_width - 1)) / (frame_width)+100;
 
 	reference_y_read_bw_factor = ((en_tile_number - 100) * 2 *
 		((en_search_windows_size_horizontal + ubwc_tile_w - 1) / ubwc_tile_w) *
@@ -677,7 +720,7 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 		frame420_y_bw_no_ubwc_tile_10bpp) * reference_y_read_bw_factor;
 
 	large_bw_calculation_fp = (large_bw_calculation_fp *
-		iris3_en_readfactor[codec_input.hierachical_layer]);
+		kalama_en_readfactor[codec_input.hierachical_layer]);
 
 	large_bw_calculation_fp = (large_bw_calculation_fp +
 		dpb_compression_factor_y - 1) / dpb_compression_factor_y;
@@ -693,7 +736,7 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 		frame420_y_bw_no_ubwc_tile_10bpp) * reference_crcb_read_bw_factor / 2;
 
 	large_bw_calculation_fp = large_bw_calculation_fp *
-		iris3_en_readfactor[codec_input.hierachical_layer];
+		kalama_en_readfactor[codec_input.hierachical_layer];
 
 	large_bw_calculation_fp = (large_bw_calculation_fp +
 		dpb_compression_factor_cbcr - 1) / dpb_compression_factor_cbcr;
@@ -706,8 +749,8 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 	large_bw_calculation_fp = ((codec_input.bitdepth == CODEC_BITDEPTH_8) ?
 		frame420_y_bw_linear_8bpp : frame420_y_bw_no_ubwc_tile_10bpp) *
 		reconstructed_write_bw_factor_rd *
-		iris3_en_writefactor[codec_input.hierachical_layer] /
-		iris3_en_frame_num_parallel;
+		kalama_en_writefactor[codec_input.hierachical_layer] /
+		kalama_en_frame_num_parallel;
 
 	large_bw_calculation_fp = (large_bw_calculation_fp + 999) / 1000;
 
@@ -725,24 +768,24 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 	/*
 	 * Summary:
 	 * by default (for both HFR and HSR cases) :
-	 *	-Any resolution and fps >= 120, enable layering.
+	 *      -Any resolution and fps >= 120, enable layering.
 	 * (120 -> 3, 240 -> 4, 480 -> 5)
-	 *	- (once we enable layering) : 50 per cent frames are Non - reference
+	 *      - (once we enable layering) : 50 per cent frames are Non - reference
 	 *  frames.recon write is disable by Venus firmware
-	 *	- Customer has ability to enable / disable layering.
-	 *  Hence, recon write savings would not be there if customer
-	 *  explicitly disables layer encoding.
+	 * 	- Customer has ability to enable / disable layering.
+	 *  Hence, recon write savings would not be there if
+	 *  customer explicitly disables layer encoding.
 	 */
 
 	/*HFR Cases use alternating rec write if not PWC*/
-	if (codec_input.frame_rate >= 120 && codec_input.complexity_setting != 0)
+	if ((codec_input.frame_rate >= 120) && (codec_input.complexity_setting != 0))
 		codec_output->dpb_wr_noc = codec_output->dpb_wr_noc / 2;
 
 	/* for power cases with [B1] adaptive non-ref b frame */
 	/* power caes IbP non reference b */
-	if (codec_input.hierachical_layer >= 1 &&
-	    codec_input.hierachical_layer <= 3 &&
-	    codec_input.complexity_setting != 0)
+	if ((codec_input.hierachical_layer >= 1) &&
+		(codec_input.hierachical_layer <= 3) &&
+		(codec_input.complexity_setting != 0))
 		codec_output->dpb_wr_noc = codec_output->dpb_wr_noc / 2;
 
 	large_bw_calculation_fp = 0;
@@ -784,8 +827,8 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 			codec_output->ipb_rd_total_noc = large_bw_calculation_fp;
 			if (codec_input.linear_ipb == 0) {
 				codec_output->ipb_rd_total_noc =
-					(large_bw_calculation_fp * 100 + ipb_compression_factor
-					 - 1) / ipb_compression_factor;
+					(large_bw_calculation_fp * 100 +
+					ipb_compression_factor - 1) / ipb_compression_factor;
 			}
 		} else { /* rgb */
 			large_bw_calculation_fp = frame420_y_bw_linear_8bpp;
@@ -794,14 +837,14 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 				if (codec_input.complexity_setting == 0) /* pwc */
 					codec_output->ipb_rd_total_noc =
 						(large_bw_calculation_fp * 100 +
-						en_original_compression_factor_rgba_pwd_iris3
+						en_original_compression_factor_rgba_pwd_kalama
 						- 1) /
-						en_original_compression_factor_rgba_pwd_iris3;
+						en_original_compression_factor_rgba_pwd_kalama;
 				else
 					codec_output->ipb_rd_total_noc =
 					(large_bw_calculation_fp * 100 +
-					en_original_compression_factor_rgba_avg_iris3 - 1) /
-					en_original_compression_factor_rgba_avg_iris3;
+					en_original_compression_factor_rgba_avg_kalama - 1) /
+					en_original_compression_factor_rgba_avg_kalama;
 			}
 		}
 	} else {
@@ -817,13 +860,13 @@ static int calculate_bandwidth_encoder_iris3(struct api_calculation_input codec_
 
 	if (en_rotation_90_270) {
 		if (codec_input.codec == CODEC_HEVC) {
-			if (codec_input.bitdepth == CODEC_BITDEPTH_8 &&
-			    codec_input.ipb_yuvrgb == 0)
-				codec_output->ipb_rd_total_noc =
-					codec_output->ipb_rd_total_noc * 1;
+			if ((codec_input.bitdepth == CODEC_BITDEPTH_8) &&
+					(codec_input.ipb_yuvrgb == 0))
+				codec_output->ipb_rd_total_noc = codec_output->ipb_rd_total_noc
+					* 1;
 			else
-				codec_output->ipb_rd_total_noc =
-					codec_output->ipb_rd_total_noc * 3;
+				codec_output->ipb_rd_total_noc = codec_output->ipb_rd_total_noc
+					* 3;
 		} else {
 			codec_output->ipb_rd_total_noc = codec_output->ipb_rd_total_noc * 2;
 		}
@@ -876,8 +919,10 @@ int msm_vidc_calculate_bandwidth(struct api_calculation_input codec_input,
 	} else if (codec_input.decoder_or_encoder == CODEC_ENCODER) {
 		rc = calculate_bandwidth_encoder_iris3(codec_input, codec_output);
 	} else {
+		d_vpr_e("%s: invalid codec\n", codec_input.decoder_or_encoder);
 		return -EINVAL;
 	}
 
 	return rc;
 }
+

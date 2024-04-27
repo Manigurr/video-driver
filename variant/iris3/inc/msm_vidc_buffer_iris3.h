@@ -10,10 +10,10 @@
 #include "msm_vidc_inst.h"
 
 int msm_buffer_size_iris3(struct msm_vidc_inst *inst,
-			  enum msm_vidc_buffer_type buffer_type);
+		enum msm_vidc_buffer_type buffer_type);
 int msm_buffer_min_count_iris3(struct msm_vidc_inst *inst,
-			       enum msm_vidc_buffer_type buffer_type);
+		enum msm_vidc_buffer_type buffer_type);
 int msm_buffer_extra_count_iris3(struct msm_vidc_inst *inst,
-				 enum msm_vidc_buffer_type buffer_type);
+		enum msm_vidc_buffer_type buffer_type);
 
 #endif // __H_MSM_VIDC_BUFFER_IRIS3_H__

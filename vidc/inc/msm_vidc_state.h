@@ -9,12 +9,28 @@
 
 #include "msm_vidc_internal.h"
 
-enum msm_vidc_core_state {
-	MSM_VIDC_CORE_DEINIT,
-	MSM_VIDC_CORE_INIT_WAIT,
-	MSM_VIDC_CORE_INIT,
-	MSM_VIDC_CORE_ERROR,
-};
+struct msm_vidc_core;
+
+#define FOREACH_CORE_STATE(CORE_STATE) {               \
+	CORE_STATE(CORE_DEINIT)                        \
+	CORE_STATE(CORE_INIT_WAIT)                     \
+	CORE_STATE(CORE_INIT)                          \
+	CORE_STATE(CORE_ERROR)                         \
+}
+
+#define FOREACH_EVENT(EVENT) {                         \
+	EVENT(TRY_FMT)                                 \
+	EVENT(S_FMT)                                   \
+	EVENT(REQBUFS)                                 \
+	EVENT(S_CTRL)                                  \
+	EVENT(STREAMON)                                \
+	EVENT(STREAMOFF)                               \
+	EVENT(CMD_START)                               \
+	EVENT(CMD_STOP)                                \
+	EVENT(BUF_QUEUE)                               \
+}
+
+enum msm_vidc_core_state FOREACH_CORE_STATE(GENERATE_MSM_VIDC_ENUM);
 
 enum msm_vidc_core_sub_state {
 	CORE_SUBSTATE_NONE                   = 0x0,
@@ -33,17 +49,19 @@ enum msm_vidc_core_event_type {
 	CORE_EVENT_UPDATE_SUB_STATE          = BIT(1),
 };
 
-enum msm_vidc_state {
-	MSM_VIDC_OPEN,
-	MSM_VIDC_INPUT_STREAMING,
-	MSM_VIDC_OUTPUT_STREAMING,
-	MSM_VIDC_STREAMING,
-	MSM_VIDC_CLOSE,
-	MSM_VIDC_ERROR,
-};
+#define FOREACH_STATE(STATE) {                    \
+	STATE(OPEN)                               \
+	STATE(INPUT_STREAMING)                    \
+	STATE(OUTPUT_STREAMING)                   \
+	STATE(STREAMING)                          \
+	STATE(CLOSE)                              \
+	STATE(ERROR)                              \
+}
+
+enum msm_vidc_state FOREACH_STATE(GENERATE_MSM_VIDC_ENUM);
 
 #define MSM_VIDC_SUB_STATE_NONE          0
-#define MSM_VIDC_MAX_SUB_STATES          6
+#define MSM_VIDC_MAX_SUB_STATES          7
 /*
  * max value of inst->sub_state if all
  * the 6 valid bits are set i.e 111111==>63
@@ -57,28 +75,22 @@ enum msm_vidc_sub_state {
 	MSM_VIDC_DRC_LAST_BUFFER           = BIT(3),
 	MSM_VIDC_INPUT_PAUSE               = BIT(4),
 	MSM_VIDC_OUTPUT_PAUSE              = BIT(5),
+	MSM_VIDC_FIRST_IPSC                = BIT(6),
 };
 
-enum msm_vidc_event {
-	MSM_VIDC_TRY_FMT,
-	MSM_VIDC_S_FMT,
-	MSM_VIDC_REQBUFS,
-	MSM_VIDC_S_CTRL,
-	MSM_VIDC_STREAMON,
-	MSM_VIDC_STREAMOFF,
-	MSM_VIDC_CMD_START,
-	MSM_VIDC_CMD_STOP,
-	MSM_VIDC_BUF_QUEUE,
-};
+enum msm_vidc_event FOREACH_EVENT(GENERATE_MSM_VIDC_ENUM);
 
 /* core statemachine functions */
-enum msm_vidc_allow msm_vidc_allow_core_state_change(struct msm_vidc_core *core,
-						     enum msm_vidc_core_state req_state);
+enum msm_vidc_allow
+	msm_vidc_allow_core_state_change(struct msm_vidc_core *core,
+					 enum msm_vidc_core_state req_state);
 int msm_vidc_update_core_state(struct msm_vidc_core *core,
-			       enum msm_vidc_core_state request_state, const char *func);
+			       enum msm_vidc_core_state request_state,
+			       const char *func);
 bool core_in_valid_state(struct msm_vidc_core *core);
 bool is_core_state(struct msm_vidc_core *core, enum msm_vidc_core_state state);
-bool is_core_sub_state(struct msm_vidc_core *core, enum msm_vidc_core_sub_state sub_state);
+bool is_core_sub_state(struct msm_vidc_core *core,
+		       enum msm_vidc_core_sub_state sub_state);
 const char *core_state_name(enum msm_vidc_core_state state);
 const char *core_sub_state_name(enum msm_vidc_core_sub_state sub_state);
 
@@ -86,9 +98,11 @@ const char *core_sub_state_name(enum msm_vidc_core_sub_state sub_state);
 bool is_drc_pending(struct msm_vidc_inst *inst);
 bool is_drain_pending(struct msm_vidc_inst *inst);
 int msm_vidc_update_state(struct msm_vidc_inst *inst,
-			  enum msm_vidc_state request_state, const char *func);
+			  enum msm_vidc_state request_state,
+			  const char *func);
 int msm_vidc_change_state(struct msm_vidc_inst *inst,
-			  enum msm_vidc_state request_state, const char *func);
+			  enum msm_vidc_state request_state,
+			  const char *func);
 int msm_vidc_change_sub_state(struct msm_vidc_inst *inst,
 			      enum msm_vidc_sub_state clear_sub_state,
 			      enum msm_vidc_sub_state set_sub_state,

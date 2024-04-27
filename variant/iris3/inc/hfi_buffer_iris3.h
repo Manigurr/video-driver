@@ -8,7 +8,6 @@
 #define __HFI_BUFFER_IRIS3__
 
 #include <linux/types.h>
-
 #include "hfi_property.h"
 
 typedef u8      HFI_U8;
@@ -18,7 +17,7 @@ typedef s16     HFI_S16;
 typedef u32     HFI_U32;
 typedef s32     HFI_S32;
 typedef u64     HFI_U64;
-typedef u32     HFI_BOOL;
+typedef HFI_U32 HFI_BOOL;
 
 #ifndef MIN
 #define  MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -69,19 +68,19 @@ typedef u32     HFI_BOOL;
 	(stride = HFI_ALIGN(frame_width, stride_multiple))
 
 #define HFI_NV12_IL_CALC_UV_BUFHEIGHT(buf_height, frame_height, \
-	min_buf_height_multiple) (buf_height = HFI_ALIGN((((frame_height) + 1) \
+	min_buf_height_multiple) (buf_height = HFI_ALIGN(((frame_height + 1) \
 	 >> 1),	min_buf_height_multiple))
 
-#define HFI_NV12_IL_CALC_BUF_SIZE(buf_size, y_bufsize, y_stride, y_buf_height, \
+#define HFI_NV12_IL_CALC_BUF_SIZE(buf_size, y_bufSize, y_stride, y_buf_height, \
 	uv_buf_size, uv_stride, uv_buf_height) \
 	do { \
-		y_bufsize = (y_stride * y_buf_height); \
+		y_bufSize = (y_stride * y_buf_height); \
 		uv_buf_size = (uv_stride * uv_buf_height); \
-		buf_size = HFI_ALIGN(y_bufsize + uv_buf_size, HFI_ALIGNMENT_4096) \
+		buf_size = HFI_ALIGN(y_bufSize + uv_buf_size, HFI_ALIGNMENT_4096); \
 	} while (0)
 
-#define HFI_NV12_UBWC_IL_CALC_Y_BUF_SIZE(y_bufsize, y_stride, y_buf_height) \
-	(y_bufsize = HFI_ALIGN(y_stride * y_buf_height, HFI_ALIGNMENT_4096))
+#define HFI_NV12_UBWC_IL_CALC_Y_BUF_SIZE(y_bufSize, y_stride, y_buf_height) \
+	(y_bufSize = HFI_ALIGN(y_stride * y_buf_height, HFI_ALIGNMENT_4096))
 
 #define HFI_NV12_UBWC_IL_CALC_UV_BUF_SIZE(uv_buf_size, \
 	uv_stride, uv_buf_height) \
@@ -150,10 +149,10 @@ typedef u32     HFI_BOOL;
 
 #define HFI_YUV420_TP10_CALC_BUF_SIZE(buf_size, y_buf_size, y_stride,\
 		y_buf_height, uv_buf_size, uv_stride, uv_buf_height) \
-	do {	\
+	do { \
 		y_buf_size = (y_stride * y_buf_height); \
 		uv_buf_size = (uv_stride * uv_buf_height); \
-		buf_size = y_buf_size + uv_buf_size \
+		buf_size = y_buf_size + uv_buf_size; \
 	} while (0)
 
 #define HFI_YUV420_TP10_UBWC_CALC_Y_BUF_SIZE(y_buf_size, y_stride, \
@@ -240,7 +239,7 @@ typedef u32     HFI_BOOL;
 				stride, buf_height); \
 		HFI_UBWC_METADATA_PLANE_BUFFER_SIZE(metadata_buffer_size, \
 				_metadata_tride, _metadata_buf_height); \
-		buf_size = data_buf_size + metadata_buffer_size \
+		buf_size = data_buf_size + metadata_buffer_size; \
 	} while (0)
 
 #define HFI_UBWC_CALC_METADATA_PLANE_STRIDE(metadata_stride, frame_width,\
@@ -299,7 +298,7 @@ typedef u32     HFI_BOOL;
 
 #define MAX_TILE_COLUMNS 32
 
-#define SIZE_VPSS_LB(size, frame_width, frame_height, num_vpp_pipes) \
+#define SIZE_VPSS_LB(Size, frame_width, frame_height, num_vpp_pipes) \
 	do { \
 		HFI_U32 vpss_4tap_top_buffer_size, vpss_div2_top_buffer_size, \
 		vpss_4tap_left_buffer_size, vpss_div2_left_buffer_size; \
@@ -308,10 +307,8 @@ typedef u32     HFI_BOOL;
 		opb_lb_wr_llb_y_buffer_size,\
 		opb_lb_wr_llb_uv_buffer_size; \
 		HFI_U32 macrotiling_size; \
-		vpss_4tap_top_buffer_size = 0; \
-		vpss_div2_top_buffer_size = 0; \
-		vpss_4tap_left_buffer_size = 0; \
-		vpss_div2_left_buffer_size = 0; \
+		vpss_4tap_top_buffer_size = vpss_div2_top_buffer_size = \
+		vpss_4tap_left_buffer_size = vpss_div2_left_buffer_size = 0; \
 		macrotiling_size = 32; \
 		opb_wr_top_line_luma_buffer_size = HFI_ALIGN(frame_width, \
 			macrotiling_size) / macrotiling_size * 256; \
@@ -323,13 +320,10 @@ typedef u32     HFI_BOOL;
 			HFI_ALIGN(frame_height, 8))); \
 		opb_wr_top_line_chroma_buffer_size = \
 			opb_wr_top_line_luma_buffer_size;\
-		opb_lb_wr_llb_uv_buffer_size = \
+		opb_lb_wr_llb_uv_buffer_size = opb_lb_wr_llb_y_buffer_size = \
 			HFI_ALIGN((HFI_ALIGN(frame_height, 8) / (4 / 2)) * 64,\
 					   BUFFER_ALIGNMENT_32_BYTES); \
-		opb_lb_wr_llb_y_buffer_size = \
-			HFI_ALIGN((HFI_ALIGN(frame_height, 8) / (4 / 2)) * 64,\
-					   BUFFER_ALIGNMENT_32_BYTES); \
-		size = num_vpp_pipes * 2 * (vpss_4tap_top_buffer_size +  \
+		Size = num_vpp_pipes * 2 * (vpss_4tap_top_buffer_size +  \
 						vpss_div2_top_buffer_size) +  \
 			   2 * (vpss_4tap_left_buffer_size + \
 					vpss_div2_left_buffer_size) + \
@@ -392,11 +386,12 @@ typedef u32     HFI_BOOL;
 				BUFFER_ALIGNMENT_32_BYTES); \
 		_size = MIN((((_height + 15) >> 4) * 48), H264D_MAX_SLICE) * \
 					SIZE_H264D_VPP_CMD_PER_BUF; \
-		if (_size > VPP_CMD_MAX_SIZE) \
+		if (_size > VPP_CMD_MAX_SIZE) { \
 			_size = VPP_CMD_MAX_SIZE; \
+		} \
 	} while (0)
 
-#define HFI_BUFFER_COMV_H264D(comv_size, frame_width, \
+#define HFI_BUFFER_COMV_H264D(coMV_size, frame_width, \
 			frame_height, _comv_bufcount) \
 	do { \
 		HFI_U32 frame_width_in_mbs = ((frame_width + 15) >> 4); \
@@ -423,8 +418,8 @@ typedef u32     HFI_BOOL;
 		size_colloc = HFI_ALIGN(size_colloc, \
 				BUFFER_ALIGNMENT_512_BYTES); \
 		size_colloc += (col_zero_size + SIZE_H264D_BUFTAB_T * 2); \
-		comv_size = size_colloc * (_comv_bufcount); \
-		comv_size += BUFFER_ALIGNMENT_512_BYTES; \
+		coMV_size = size_colloc * (_comv_bufcount); \
+		coMV_size += BUFFER_ALIGNMENT_512_BYTES; \
 	} while (0)
 
 #define HFI_BUFFER_NON_COMV_H264D(_size, frame_width, frame_height, \
@@ -506,8 +501,9 @@ typedef u32     HFI_BOOL;
 		if (!is_interlaced)  { \
 			SIZE_H264D_HW_BIN_BUFFER(_size, n_aligned_w, \
 				n_aligned_h, delay, num_vpp_pipes); \
-		} else \
+		} else { \
 			_size = 0;  \
+		} \
 	} while (0)
 
 #define NUM_SLIST_BUF_H264 (256 + 32)
@@ -520,7 +516,7 @@ typedef u32     HFI_BOOL;
 	(_size = HFI_ALIGN((SIZE_SLIST_BUF_H264 * NUM_SLIST_BUF_H264 + \
 	H264_DISPLAY_BUF_SIZE * H264_NUM_FRM_INFO + \
 	NUM_HW_PIC_BUF * SIZE_SEI_USERDATA + \
-	(rpu_enabled) * NUM_HW_PIC_BUF * SIZE_DOLBY_RPU_METADATA), \
+	rpu_enabled * NUM_HW_PIC_BUF * SIZE_DOLBY_RPU_METADATA), \
 	VENUS_DMA_ALIGNMENT))
 
 #define LCU_MAX_SIZE_PELS 64
@@ -697,8 +693,9 @@ typedef u32     HFI_BOOL;
 		if (!is_interlaced) { \
 			SIZE_H265D_HW_BIN_BUFFER(_size, n_aligned_w, \
 			n_aligned_h, delay, num_vpp_pipes); \
-		} else \
+		} else { \
 			_size = 0; \
+		} \
 	} while (0)
 
 #define SIZE_SLIST_BUF_H265 (1 << 10)
@@ -715,7 +712,7 @@ typedef u32     HFI_BOOL;
 	rpu_enabled * NUM_HW_PIC_BUF * SIZE_DOLBY_RPU_METADATA),\
 	VENUS_DMA_ALIGNMENT))
 
-#define SIZE_VPXD_LB_FE_LEFT_CTRL(frame_width, frame_height) \
+#define SIZE_VPXD_LB_FE_LEFT_CTRL(frame_width, frame_height)   \
 	MAX(((frame_height + 15) >> 4) * \
 	MAX_FE_NBR_CTRL_LCU16_LINE_BUFFER_SIZE, \
 	MAX(((frame_height + 31) >> 5) * \
@@ -754,7 +751,8 @@ typedef u32     HFI_BOOL;
 	SIZE_H264D_QP(frame_width, frame_height)
 
 #define HFI_IRIS3_VP9D_LB_SIZE(_size, frame_width, frame_height, num_vpp_pipes)\
-		(_size = HFI_ALIGN(SIZE_VPXD_LB_FE_LEFT_CTRL(frame_width, \
+	do { \
+		_size = HFI_ALIGN(SIZE_VPXD_LB_FE_LEFT_CTRL(frame_width, \
 		frame_height), VENUS_DMA_ALIGNMENT) * num_vpp_pipes + \
 		HFI_ALIGN(SIZE_VPXD_LB_SE_LEFT_CTRL(frame_width, frame_height),\
 		VENUS_DMA_ALIGNMENT) * num_vpp_pipes + \
@@ -771,7 +769,8 @@ typedef u32     HFI_BOOL;
 		HFI_ALIGN(SIZE_VP9D_LB_FE_TOP_DATA(frame_width, frame_height), \
 		VENUS_DMA_ALIGNMENT) + \
 		HFI_ALIGN(SIZE_VP9D_QP(frame_width, frame_height), \
-		VENUS_DMA_ALIGNMENT))
+		VENUS_DMA_ALIGNMENT); \
+	} while (0)
 
 #define HFI_BUFFER_LINE_VP9D(_size, frame_width, frame_height, \
 		_yuv_bufcount_min, is_opb, num_vpp_pipes) \
@@ -788,8 +787,8 @@ typedef u32     HFI_BOOL;
 	} while (0)
 
 #define VPX_DECODER_FRAME_CONCURENCY_LVL (2)
-#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO (1 / 2)
-#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO (3 / 2)
+#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO 1 / 2
+#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO 3 / 2
 
 #define HFI_BUFFER_BIN_VP9D(_size, frame_width, frame_height, \
 				is_interlaced, num_vpp_pipes) \
@@ -863,8 +862,280 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 #define QMATRIX_SIZE (sizeof(HFI_U32) * 128 + 256)
 #define MP2D_QPDUMP_SIZE 115200
 #define HFI_BUFFER_PERSIST_MP2D(_size) \
+	(_size = QMATRIX_SIZE + MP2D_QPDUMP_SIZE;)
+
+#define AV1D_LCU_MAX_SIZE_PELS 128
+#define AV1D_LCU_MIN_SIZE_PELS 64
+#define AV1D_MAX_TILE_COLS     64
+
+#define HFI_BUFFER_COMV_AV1D(_size, frame_width, frame_height, \
+				_comv_bufcount) \
 	do { \
-		_size = QMATRIX_SIZE + MP2D_QPDUMP_SIZE \
+		_size = 2 * HFI_ALIGN(MAX(((frame_width + 63) / 64) * \
+				((frame_height + 63) / 64) * 512, \
+				((frame_width + 127) / 128) * \
+				((frame_height + 127) / 128) * 2816), \
+				VENUS_DMA_ALIGNMENT); \
+		_size *= _comv_bufcount; \
+	} while (0)
+
+#define SIZE_AV1D_LB_FE_TOP_DATA(frame_width, frame_height) \
+	(HFI_ALIGN(frame_width, AV1D_LCU_MAX_SIZE_PELS) * ((16 * 10) >> 3) + \
+	HFI_ALIGN(frame_width, AV1D_LCU_MAX_SIZE_PELS) / 2 * ((16 * 6) >> 3) * 2)
+
+#define SIZE_AV1D_LB_FE_LEFT_DATA(frame_width, frame_height) \
+	(32 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 16) + \
+	16 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / 2 + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 8) * 2 + \
+	24 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 16) + \
+	24 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / 2 + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 12) * 2 + \
+	24 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 16) + \
+	16 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 16) + \
+	16 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / 2 + \
+		HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+		AV1D_LCU_MIN_SIZE_PELS * 12) * 2)
+
+#define SIZE_AV1D_LB_FE_TOP_CTRL(frame_width, frame_height) \
+	(10 * ((frame_width + AV1D_LCU_MIN_SIZE_PELS - 1) / \
+		AV1D_LCU_MIN_SIZE_PELS) * 128 / 8)
+
+#define SIZE_AV1D_LB_FE_LEFT_CTRL(frame_width, frame_height) \
+	(16 * ((HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / 16) + \
+	(HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+	AV1D_LCU_MIN_SIZE_PELS)) + \
+	3 * 16 * (HFI_ALIGN(frame_height, AV1D_LCU_MAX_SIZE_PELS) / \
+	AV1D_LCU_MIN_SIZE_PELS))
+
+#define SIZE_AV1D_LB_SE_TOP_CTRL(frame_width, frame_height) \
+	(((frame_width + 7) / 8) * 16)
+
+#define SIZE_AV1D_LB_SE_LEFT_CTRL(frame_width, frame_height) \
+	(MAX(((frame_height + 15) / 16) * MAX_SE_NBR_CTRL_LCU16_LINE_BUFFER_SIZE, \
+	MAX(((frame_height + 31) / 32) * MAX_SE_NBR_CTRL_LCU32_LINE_BUFFER_SIZE, \
+	((frame_height + 63) / 64) * MAX_SE_NBR_CTRL_LCU64_LINE_BUFFER_SIZE)))
+
+#define SIZE_AV1D_LB_PE_TOP_DATA(frame_width, frame_height) \
+	(MAX(((frame_width + 15) / 16) * MAX_PE_NBR_DATA_LCU16_LINE_BUFFER_SIZE, \
+	MAX(((frame_width + 31) / 32) * MAX_PE_NBR_DATA_LCU32_LINE_BUFFER_SIZE, \
+	((frame_width + 63) / 64) * MAX_PE_NBR_DATA_LCU64_LINE_BUFFER_SIZE)))
+
+#define SIZE_AV1D_LB_VSP_TOP(frame_width, frame_height) \
+	(MAX(((frame_width + 63) / 64) * 1280, ((frame_width + 127) / 128) * 2304))
+
+#define SIZE_AV1D_LB_RECON_DMA_METADATA_WR(frame_width, frame_height) \
+	((HFI_ALIGN(frame_height, 8) / (4 / 2)) * 64)
+
+#define SIZE_AV1D_QP(frame_width, frame_height) \
+	SIZE_H264D_QP(frame_width, frame_height)
+
+#define SIZE_AV1D_LB_OPB_WR1_NV12_UBWC(_size, frame_width, frame_height) \
+	do { \
+		HFI_U32 y_width, y_width_a = 128; \
+		HFI_NV12_IL_CALC_Y_STRIDE(y_width, frame_width, y_width_a); \
+		_size = (256 * ((y_width + 31) / 32 + (AV1D_MAX_TILE_COLS - 1))); \
+	} while (0)
+
+#define SIZE_AV1D_LB_OPB_WR1_TP10_UBWC(_size, frame_width, frame_height) \
+	do { \
+		HFI_U32 y_width, y_width_a = 256; \
+		HFI_YUV420_TP10_CALC_Y_STRIDE(y_width, frame_width, y_width_a); \
+		_size = (256 * ((y_width + 47) / 48 + (AV1D_MAX_TILE_COLS - 1))); \
+	} while (0)
+
+#define SIZE_AV1D_IBC_NV12_UBWC(_size, frame_width, frame_height) \
+	do { \
+		HFI_U32 y_width_a = 128, y_height_a = 32; \
+		HFI_U32 uv_width_a = 128, uv_height_a = 32; \
+		HFI_U32 yBufSize, uvBufSize, y_width, y_height, uv_width, uv_height; \
+		HFI_U32 y_meta_width_a = 64, y_meta_height_a = 16; \
+		HFI_U32 uv_meta_width_a = 64, uv_meta_height_a = 16; \
+		HFI_U32 meta_height, meta_stride, meta_size; \
+		HFI_U32 tile_width_y = HFI_COLOR_FORMAT_YUV420_NV12_UBWC_Y_TILE_WIDTH; \
+		HFI_U32 tile_height_y = HFI_COLOR_FORMAT_YUV420_NV12_UBWC_Y_TILE_HEIGHT; \
+		HFI_U32 tile_width_uv = HFI_COLOR_FORMAT_YUV420_NV12_UBWC_UV_TILE_WIDTH; \
+		HFI_U32 tile_height_uv = \
+		    HFI_COLOR_FORMAT_YUV420_NV12_UBWC_UV_TILE_HEIGHT; \
+		HFI_NV12_IL_CALC_Y_STRIDE(y_width, frame_width, y_width_a); \
+		HFI_NV12_IL_CALC_Y_BUFHEIGHT(y_height, frame_height, y_height_a); \
+		HFI_NV12_IL_CALC_UV_STRIDE(uv_width, frame_width, uv_width_a); \
+		HFI_NV12_IL_CALC_UV_BUFHEIGHT(uv_height, frame_height, uv_height_a); \
+		HFI_NV12_UBWC_IL_CALC_Y_BUF_SIZE(yBufSize, y_width, y_height); \
+		HFI_NV12_UBWC_IL_CALC_UV_BUF_SIZE(uvBufSize, uv_width, uv_height); \
+		_size = yBufSize + uvBufSize; \
+		HFI_UBWC_CALC_METADATA_PLANE_STRIDE(meta_stride, frame_width, \
+							y_meta_width_a, tile_width_y); \
+		HFI_UBWC_METADATA_PLANE_BUFHEIGHT(meta_height, frame_height, \
+							y_meta_height_a, tile_height_y); \
+		HFI_UBWC_METADATA_PLANE_BUFFER_SIZE(meta_size, \
+							meta_stride, meta_height); \
+		_size += meta_size; \
+		HFI_UBWC_UV_METADATA_PLANE_STRIDE(meta_stride, frame_width, \
+						uv_meta_width_a, tile_width_uv); \
+		HFI_UBWC_UV_METADATA_PLANE_BUFHEIGHT(meta_height, frame_height, \
+						uv_meta_height_a, tile_height_uv); \
+		HFI_UBWC_METADATA_PLANE_BUFFER_SIZE(meta_size, \
+						meta_stride, meta_height); \
+		_size += meta_size; \
+	} while (0)
+
+#define SIZE_AV1D_IBC_TP10_UBWC(_size, frame_width, frame_height) \
+	do { \
+		HFI_U32 y_width_a = 256, y_height_a = 16, \
+			uv_width_a = 256, uv_height_a = 16; \
+		HFI_U32 yBufSize, uvBufSize, y_width, y_height, uv_width, uv_height; \
+		HFI_U32 y_meta_width_a = 64, y_meta_height_a = 16, \
+			uv_meta_width_a = 64, uv_meta_height_a = 16; \
+		HFI_U32 meta_height, meta_stride, meta_size; \
+		HFI_U32 tile_width_y = HFI_COLOR_FORMAT_YUV420_TP10_UBWC_Y_TILE_WIDTH; \
+		HFI_U32 tile_height_y = HFI_COLOR_FORMAT_YUV420_TP10_UBWC_Y_TILE_HEIGHT; \
+		HFI_U32 tile_width_uv = HFI_COLOR_FORMAT_YUV420_TP10_UBWC_UV_TILE_WIDTH; \
+		HFI_U32 tile_height_uv = \
+			HFI_COLOR_FORMAT_YUV420_TP10_UBWC_UV_TILE_HEIGHT; \
+		HFI_YUV420_TP10_CALC_Y_STRIDE(y_width, frame_width, y_width_a); \
+		HFI_YUV420_TP10_CALC_Y_BUFHEIGHT(y_height, frame_height, y_height_a); \
+		HFI_YUV420_TP10_CALC_UV_STRIDE(uv_width, frame_width, uv_width_a); \
+		HFI_YUV420_TP10_CALC_UV_BUFHEIGHT(uv_height, frame_height, \
+						uv_height_a); \
+		HFI_YUV420_TP10_UBWC_CALC_Y_BUF_SIZE(yBufSize, y_width, y_height); \
+		HFI_YUV420_TP10_UBWC_CALC_UV_BUF_SIZE(uvBufSize, uv_width, uv_height); \
+		_size = yBufSize + uvBufSize; \
+		HFI_UBWC_CALC_METADATA_PLANE_STRIDE(meta_stride, frame_width, \
+			y_meta_width_a, tile_width_y); \
+		HFI_UBWC_METADATA_PLANE_BUFHEIGHT(meta_height, frame_height, \
+			y_meta_height_a, tile_height_y); \
+		HFI_UBWC_METADATA_PLANE_BUFFER_SIZE(meta_size, \
+			meta_stride, meta_height); \
+		_size += meta_size; \
+		HFI_UBWC_UV_METADATA_PLANE_STRIDE(meta_stride, frame_width, \
+			uv_meta_width_a, tile_width_uv); \
+		HFI_UBWC_UV_METADATA_PLANE_BUFHEIGHT(meta_height, frame_height, \
+			uv_meta_height_a, tile_height_uv); \
+		HFI_UBWC_METADATA_PLANE_BUFFER_SIZE(meta_size, \
+			meta_stride, meta_height); \
+		_size += meta_size; \
+	} while (0)
+
+#define HFI_BUFFER_LINE_AV1D(_size, frame_width, frame_height, isOPB, \
+			num_vpp_pipes) \
+	do { \
+		HFI_U32 vpssLBSize, opbwr1BufSize, opbwr8, opbwr10; \
+		_size = HFI_ALIGN(SIZE_AV1D_LB_FE_TOP_DATA(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) + \
+			HFI_ALIGN(SIZE_AV1D_LB_FE_TOP_CTRL(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) + \
+			HFI_ALIGN(SIZE_AV1D_LB_FE_LEFT_DATA(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) * num_vpp_pipes + \
+			HFI_ALIGN(SIZE_AV1D_LB_FE_LEFT_CTRL(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) * num_vpp_pipes + \
+			HFI_ALIGN(SIZE_AV1D_LB_SE_LEFT_CTRL(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) * num_vpp_pipes + \
+			HFI_ALIGN(SIZE_AV1D_LB_SE_TOP_CTRL(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) + \
+			HFI_ALIGN(SIZE_AV1D_LB_PE_TOP_DATA(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) + \
+			HFI_ALIGN(SIZE_AV1D_LB_VSP_TOP(frame_width, frame_height), \
+				VENUS_DMA_ALIGNMENT) + \
+			HFI_ALIGN(SIZE_AV1D_LB_RECON_DMA_METADATA_WR(frame_width, \
+				frame_height), \
+			VENUS_DMA_ALIGNMENT) * 2 + \
+			HFI_ALIGN(SIZE_AV1D_QP(frame_width, frame_height), \
+			VENUS_DMA_ALIGNMENT); \
+		SIZE_AV1D_LB_OPB_WR1_NV12_UBWC(opbwr8, frame_width, frame_height); \
+		SIZE_AV1D_LB_OPB_WR1_TP10_UBWC(opbwr10, frame_width, frame_height); \
+		opbwr1BufSize = MAX(opbwr8, opbwr10); \
+		_size = HFI_ALIGN((_size + opbwr1BufSize), VENUS_DMA_ALIGNMENT); \
+		if (isOPB) { \
+			SIZE_VPSS_LB(vpssLBSize, frame_width, frame_height, num_vpp_pipes); \
+			_size = HFI_ALIGN((_size + vpssLBSize), VENUS_DMA_ALIGNMENT); \
+		} \
+	} while (0)
+
+#define HFI_BUFFER_IBC_AV1D(_size, frame_width, frame_height) \
+	do { \
+		HFI_U32 ibc8, ibc10; \
+		SIZE_AV1D_IBC_NV12_UBWC(ibc8, frame_width, frame_height); \
+		SIZE_AV1D_IBC_TP10_UBWC(ibc10, frame_width, frame_height); \
+		_size = HFI_ALIGN(MAX(ibc8, ibc10), VENUS_DMA_ALIGNMENT); \
+	} while (0)
+
+#define AV1_CABAC_HDR_RATIO_HD_TOT 2
+#define AV1_CABAC_RES_RATIO_HD_TOT 2
+/* some content need more bin buffer,
+ * but limit buffer size for high resolution
+ */
+#define SIZE_AV1D_HW_BIN_BUFFER(_size, frame_width, frame_height, delay, \
+				num_vpp_pipes) \
+	do { \
+		HFI_U32 size_yuv, size_bin_hdr, size_bin_res; \
+		size_yuv = ((frame_width * frame_height) <= BIN_BUFFER_THRESHOLD) ? \
+			((BIN_BUFFER_THRESHOLD * 3) >> 1) : \
+			((frame_width * frame_height * 3) >> 1); \
+		size_bin_hdr = size_yuv * AV1_CABAC_HDR_RATIO_HD_TOT; \
+		size_bin_res = size_yuv * AV1_CABAC_RES_RATIO_HD_TOT; \
+		size_bin_hdr = size_bin_hdr * \
+			(((((HFI_U32)(delay)) & 31) / 10) + 2) / 2; \
+		size_bin_res = size_bin_res * \
+			(((((HFI_U32)(delay)) & 31) / 10) + 2) / 2; \
+		size_bin_hdr = HFI_ALIGN(size_bin_hdr / num_vpp_pipes, \
+					 VENUS_DMA_ALIGNMENT) * num_vpp_pipes; \
+		size_bin_res = HFI_ALIGN(size_bin_res / num_vpp_pipes, \
+					 VENUS_DMA_ALIGNMENT) * num_vpp_pipes; \
+		_size = size_bin_hdr + size_bin_res; \
+	} while (0)
+
+#define HFI_BUFFER_BIN_AV1D(_size, frame_width, frame_height, isInterlaced, \
+				delay, num_vpp_pipes) \
+	do { \
+		HFI_U32 nAlignedW = HFI_ALIGN(frame_width, BUFFER_ALIGNMENT_16_BYTES); \
+		HFI_U32 nAlignedH = HFI_ALIGN(frame_height, BUFFER_ALIGNMENT_16_BYTES); \
+		if (!isInterlaced) { \
+			SIZE_AV1D_HW_BIN_BUFFER(_size, nAlignedW, nAlignedH, \
+						delay, num_vpp_pipes); \
+		} else { \
+			_size = 0; \
+		} \
+	} while (0)
+
+#define AV1D_NUM_HW_PIC_BUF    16
+#define AV1D_NUM_FRAME_HEADERS 16
+
+#define SIZE_AV1D_SEQUENCE_HEADER 768
+#define SIZE_AV1D_METADATA        512
+#define SIZE_AV1D_FRAME_HEADER    1280
+#define SIZE_AV1D_TILE_OFFSET     65536
+#define SIZE_AV1D_QM              3328
+#define SIZE_AV1D_PROB_TABLE      22784
+
+#define AV1D_SIZE_BSE_COL_MV_64x64 512
+#define AV1D_SIZE_BSE_COL_MV_128x128 2816
+#define SIZE_AV1D_COL_MV MAX((((8192 + 63) / 64) * ((4352 + 63) / 64) *        \
+				AV1D_SIZE_BSE_COL_MV_64x64),                   \
+				(((8192 + 127) / 128) * ((4352 + 127) / 128) * \
+				AV1D_SIZE_BSE_COL_MV_128x128))
+
+#define HFI_BUFFER_PERSIST_AV1D(_size, max_width, max_height, total_ref_count) \
+	do { \
+		HFI_U32 comv_size; \
+		HFI_BUFFER_COMV_AV1D(comv_size, max_width, max_height, total_ref_count); \
+		_size = \
+		HFI_ALIGN((SIZE_AV1D_SEQUENCE_HEADER * 2 + \
+		SIZE_AV1D_METADATA + \
+		AV1D_NUM_HW_PIC_BUF * (SIZE_AV1D_TILE_OFFSET + SIZE_AV1D_QM) + \
+		AV1D_NUM_FRAME_HEADERS * (SIZE_AV1D_FRAME_HEADER + \
+		2 * SIZE_AV1D_PROB_TABLE) + \
+		comv_size + HDR10_HIST_EXTRADATA_SIZE + \
+		SIZE_AV1D_METADATA * AV1D_NUM_HW_PIC_BUF), VENUS_DMA_ALIGNMENT); \
 	} while (0)
 
 #define HFI_BUFFER_BITSTREAM_ENC(size, frame_width, frame_height, \
@@ -885,8 +1156,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		} else { \
 		    /* bitstream_size = 2 * yuv_size; */ \
 		} \
-		if ((rc_type == HFI_RC_CQ || rc_type == HFI_RC_OFF) && \
-			bitstream_size < yuv_size)  { \
+		if (((rc_type == HFI_RC_CQ) || (rc_type == HFI_RC_OFF)) \
+			&& (bitstream_size < yuv_size))  { \
 			bitstream_size = (bitstream_size << 1);\
 		} \
 		if (is_ten_bit) { \
@@ -897,13 +1168,24 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_IRIS3_ENC_TILE_SIZE_INFO(tile_size, tile_count, last_tile_size, \
-				frame_width_coded, codec_standard) \
+				frame_width_coded, codec_standard, num_vpp_pipes) \
 	do { \
-		HFI_U32 without_tile_enc_width; \
-		HFI_U32 min_tile_size = 352, fixed_tile_width = 960; \
+		HFI_U32 without_tile_enc_width, min_tile_size, fixed_tile_width; \
+		if (num_vpp_pipes == 4) { \
+			min_tile_size = 352; \
+			fixed_tile_width = 960; \
+		} \
+		else if (num_vpp_pipes == 2) { \
+			min_tile_size = 256; \
+			fixed_tile_width = 768; \
+		} \
+		else { \
+			min_tile_size = 256; \
+			fixed_tile_width = 672; \
+		} \
 		without_tile_enc_width = min_tile_size + fixed_tile_width; \
-		if (codec_standard == HFI_CODEC_ENCODE_HEVC && \
-			frame_width_coded > without_tile_enc_width) { \
+		if ((codec_standard == HFI_CODEC_ENCODE_HEVC) && \
+			(frame_width_coded > without_tile_enc_width)) { \
 			tile_size = fixed_tile_width; \
 			tile_count = (frame_width_coded + tile_size - 1) / tile_size; \
 			last_tile_size = (frame_width_coded - (tile_size * (tile_count - 1))); \
@@ -919,7 +1201,7 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_IRIS3_ENC_MB_BASED_MULTI_SLICE_COUNT(total_slice_count, frame_width, frame_height, \
-			codec_standard, multi_slice_max_mb_count) \
+			codec_standard, multi_slice_max_mb_count, num_vpp_pipes) \
 	do { \
 		HFI_U32 tile_size, tile_count, last_tile_size, \
 			slice_count_per_tile, slice_count_in_last_tile; \
@@ -929,7 +1211,7 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		frame_width_coded = HFI_ALIGN(frame_width, lcu_size); \
 		frame_height_coded = HFI_ALIGN(frame_height, lcu_size); \
 		HFI_IRIS3_ENC_TILE_SIZE_INFO(tile_size, tile_count, last_tile_size, \
-			frame_width_coded, codec_standard); \
+			frame_width_coded, codec_standard, num_vpp_pipes); \
 		mbs_in_one_tile = (tile_size * frame_height_coded) / (lcu_size * lcu_size); \
 		slice_count_per_tile = \
 			(mbs_in_one_tile + multi_slice_max_mb_count - 1) / \
@@ -943,17 +1225,19 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 			total_slice_count = \
 				(slice_count_per_tile * (tile_count - 1)) + \
 				slice_count_in_last_tile; \
-		} else \
+		} else { \
 			total_slice_count = (slice_count_per_tile * tile_count); \
+		} \
 	} while (0)
 
 #define SIZE_ROI_METADATA_ENC(size_roi, frame_width, frame_height, lcu_size)\
 	do { \
 		HFI_U32 width_in_lcus = 0, height_in_lcus = 0, n_shift = 0;    \
-		while (lcu_size && !(lcu_size & 0x1)) { \
+		HFI_U32 n_lcu_size = lcu_size;              \
+		while (n_lcu_size && !(n_lcu_size & 0x1)) { \
 			n_shift++;                          \
-			lcu_size = lcu_size >> 1;          \
-		}                                      \
+			n_lcu_size = n_lcu_size >> 1;       \
+		}                                           \
 		width_in_lcus = (frame_width + (lcu_size - 1)) >> n_shift; \
 		height_in_lcus = (frame_height + (lcu_size - 1)) >> n_shift;  \
 		size_roi = (((width_in_lcus + 7) >> 3) << 3) * \
@@ -974,16 +1258,22 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 
 #define HFI_BUFFER_INPUT_METADATA_H264E(size_metadata, frame_width, \
 		frame_height, is_roi_enabled)    \
+	do { \
 		HFI_BUFFER_INPUT_METADATA_ENC(size_metadata, frame_width, \
-			frame_height, is_roi_enabled, 16)
+			frame_height, is_roi_enabled, 16); \
+	} while (0)
 
 #define HFI_BUFFER_INPUT_METADATA_H265E(size_metadata, frame_width, \
 		frame_height, is_roi_enabled)    \
+	do { \
 		HFI_BUFFER_INPUT_METADATA_ENC(size_metadata, frame_width, \
-			frame_height, is_roi_enabled, 32)
+			frame_height, is_roi_enabled, 32); \
+	} while (0)
 
 #define HFI_BUFFER_ARP_ENC(size) \
-	(size = 204800)
+	do { \
+		size = 204800; \
+	} while (0)
 
 #define HFI_MAX_COL_FRAME 6
 #define HFI_VENUS_VENC_TRE_WB_BUFF_SIZE (65 << 4) // bytes
@@ -1035,7 +1325,7 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		size_aligned_width = HFI_ALIGN((frame_width), lcu_size); \
 		size_aligned_height = HFI_ALIGN((frame_height), lcu_size); \
 		if (work_mode == HFI_WORKMODE_2) { \
-			if (rc_type == HFI_RC_CQ || rc_type == HFI_RC_OFF) { \
+			if ((rc_type == HFI_RC_CQ) || (rc_type == HFI_RC_OFF)) { \
 				bitstream_size_eval = (((size_aligned_width) * \
 							(size_aligned_height) * 3) >> 1); \
 			} \
@@ -1044,16 +1334,19 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 							(size_aligned_height) * 3); \
 				if (rc_type == HFI_RC_LOSSLESS) { \
 					bitstream_size_eval = (bitstream_size_eval * 3 >> 2); \
-				} else if ((size_aligned_width * size_aligned_height) > \
+				} \
+				else if ((size_aligned_width * size_aligned_height) > \
 					(4096 * 2176)) { \
 					bitstream_size_eval >>= 3; \
-				} else if ((size_aligned_width * size_aligned_height) > \
+				} \
+				else if ((size_aligned_width * size_aligned_height) > \
 					(480 * 320)) { \
 					bitstream_size_eval >>= 2; \
 				} \
 				if (profile == HFI_H265_PROFILE_MAIN_10 || \
-					profile == HFI_H265_PROFILE_MAIN_10_STILL_PICTURE) \
+					profile == HFI_H265_PROFILE_MAIN_10_STILL_PICTURE) { \
 					bitstream_size_eval = (bitstream_size_eval * 5 >> 2); \
+				} \
 			} \
 		} else { \
 			bitstream_size_eval = size_aligned_width * \
@@ -1073,7 +1366,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		if ((size_aligned_width * size_aligned_height) > \
 			(3840 * 2160)) { \
 			size_single_pipe_eval = (bitbin_size / num_vpp_pipes); \
-		} else if (num_vpp_pipes > 2) { \
+		} \
+		else if (num_vpp_pipes > 2) { \
 			size_single_pipe_eval = bitbin_size / 2; \
 		} else { \
 			size_single_pipe_eval = bitbin_size; \
@@ -1115,20 +1409,25 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 			bitbin_size = size_single_pipe * num_vpp_pipes; \
 			_size = HFI_ALIGN(bitbin_size, VENUS_DMA_ALIGNMENT) * \
 					total_bitbin_buffers + 512; \
-		} else \
+		} \
+		else \
 			/* Avoid 512 Bytes allocation in case of 1Pipe HEVC Direct Mode*/ \
 			_size = 0; \
 	} while (0)
 
 #define HFI_BUFFER_BIN_H264E(_size, rc_type, frame_width, frame_height, \
 				work_mode, num_vpp_pipes, profile)    \
+	do { \
 		HFI_BUFFER_BIN_ENC(_size, rc_type, frame_width, frame_height, 16, \
-				work_mode, num_vpp_pipes, profile)
+				work_mode, num_vpp_pipes, profile); \
+	} while (0)
 
 #define HFI_BUFFER_BIN_H265E(_size, rc_type, frame_width, frame_height, \
 				work_mode, num_vpp_pipes, profile)    \
+	do { \
 		HFI_BUFFER_BIN_ENC(_size, rc_type, frame_width, frame_height, 32,\
-				work_mode, num_vpp_pipes, profile)
+				work_mode, num_vpp_pipes, profile); \
+	} while (0)
 
 #define SIZE_ENC_SLICE_INFO_BUF(num_lcu_in_frame) HFI_ALIGN((256 + \
 		(num_lcu_in_frame << 4)), VENUS_DMA_ALIGNMENT)
@@ -1138,7 +1437,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		HFI_ALIGN(frame_width_coded, VENUS_DMA_ALIGNMENT)
 
 #define SIZE_LINEBUFF_DATA(_size, is_ten_bit, frame_width_coded) \
-		(_size = is_ten_bit ? (((((10 * (frame_width_coded) +\
+	do { \
+		_size = is_ten_bit ? (((((10 * (frame_width_coded) +\
 		 1024) + (VENUS_DMA_ALIGNMENT - 1)) & \
 		 (~(VENUS_DMA_ALIGNMENT - 1))) * 1) + \
 		(((((10 * (frame_width_coded) + 1024) >> 1) + \
@@ -1148,7 +1448,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		& (~(VENUS_DMA_ALIGNMENT - 1))) * 1) + \
 		(((((8 * (frame_width_coded) +\
 		1024) >> 1) + (VENUS_DMA_ALIGNMENT - 1)) & \
-		(~(VENUS_DMA_ALIGNMENT - 1))) * 2)))
+		(~(VENUS_DMA_ALIGNMENT - 1))) * 2)); \
+	} while (0)
 
 #define SIZE_LEFT_LINEBUFF_CTRL(_size, standard, frame_height_coded, \
 				num_vpp_pipes_enc) \
@@ -1167,10 +1468,12 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 
 #define SIZE_LEFT_LINEBUFF_RECON_PIX(_size, is_ten_bit, frame_height_coded, \
 				num_vpp_pipes_enc) \
-		(_size = (((is_ten_bit + 1) * 2 * (frame_height_coded) + \
+	do { \
+		_size = (((is_ten_bit + 1) * 2 * (frame_height_coded) + \
 		VENUS_DMA_ALIGNMENT) + \
 		(VENUS_DMA_ALIGNMENT << (num_vpp_pipes_enc - 1)) - 1) & \
-		(~((VENUS_DMA_ALIGNMENT << (num_vpp_pipes_enc - 1)) - 1)) * 1)
+		(~((VENUS_DMA_ALIGNMENT << (num_vpp_pipes_enc - 1)) - 1)) * 1; \
+	} while (0)
 
 #define SIZE_TOP_LINEBUFF_CTRL_FE(_size, frame_width_coded, standard) \
 	do { \
@@ -1205,7 +1508,7 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define SIZE_LINEBUFF_RECON_PIX(_size, is_ten_bit, frame_width_coded) \
-	do { \
+	do   { \
 		_size = ((is_ten_bit ? 3 : 2) * (frame_width_coded));         \
 		_size = HFI_ALIGN(_size, VENUS_DMA_ALIGNMENT);             \
 	} while (0)
@@ -1263,8 +1566,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		HFI_U32 left_line_buff_metadata_recon__y__size = 0, \
 			left_line_buff_metadata_recon__uv__size = 0, \
 			line_buff_recon_pix_size = 0;          \
-		width_in_lcus = ((frame_width) + (lcu_size) - 1) / (lcu_size); \
-		height_in_lcus = ((frame_height) + (lcu_size) - 1) / (lcu_size); \
+		width_in_lcus = ((frame_width) + (lcu_size)-1) / (lcu_size); \
+		height_in_lcus = ((frame_height) + (lcu_size)-1) / (lcu_size); \
 		frame_width_coded = width_in_lcus * (lcu_size); \
 		frame_height_coded = height_in_lcus * (lcu_size); \
 		SIZE_LINEBUFF_DATA(line_buff_data_size, is_ten_bit, \
@@ -1301,13 +1604,17 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 
 #define HFI_BUFFER_LINE_H264E(_size, frame_width, frame_height, is_ten_bit, \
 		num_vpp_pipes)                   \
+	do { \
 		HFI_BUFFER_LINE_ENC(_size, frame_width, frame_height, 0, \
-			num_vpp_pipes, 16, HFI_CODEC_ENCODE_AVC)
+			num_vpp_pipes, 16, HFI_CODEC_ENCODE_AVC); \
+	} while (0)
 
 #define HFI_BUFFER_LINE_H265E(_size, frame_width, frame_height, is_ten_bit, \
 			num_vpp_pipes)                          \
+	do { \
 		HFI_BUFFER_LINE_ENC(_size, frame_width, frame_height, \
-		is_ten_bit, num_vpp_pipes, 32, HFI_CODEC_ENCODE_HEVC)
+		is_ten_bit, num_vpp_pipes, 32, HFI_CODEC_ENCODE_HEVC); \
+	} while (0)
 
 #define HFI_BUFFER_COMV_ENC(_size, frame_width, frame_height, lcu_size, \
 			num_recon, standard) \
@@ -1315,9 +1622,9 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		HFI_U32 size_colloc_mv = 0, size_colloc_rc = 0; \
 		HFI_U32 mb_width = ((frame_width) + 15) >> 4; \
 		HFI_U32 mb_height = ((frame_height) + 15) >> 4; \
-		HFI_U32 width_in_lcus = ((frame_width) + (lcu_size) - 1) /\
+		HFI_U32 width_in_lcus = ((frame_width) + (lcu_size)-1) /\
 					(lcu_size); \
-		HFI_U32 height_in_lcus = ((frame_height) + (lcu_size) - 1) / \
+		HFI_U32 height_in_lcus = ((frame_height) + (lcu_size)-1) / \
 					(lcu_size); \
 		HFI_U32 num_lcu_in_frame = width_in_lcus * height_in_lcus; \
 		size_colloc_mv = (standard == HFI_CODEC_ENCODE_HEVC) ? \
@@ -1333,12 +1640,16 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_BUFFER_COMV_H264E(_size, frame_width, frame_height, num_recon) \
+	do { \
 		HFI_BUFFER_COMV_ENC(_size, frame_width, frame_height, 16, \
-			num_recon, HFI_CODEC_ENCODE_AVC)
+			num_recon, HFI_CODEC_ENCODE_AVC); \
+	} while (0)
 
 #define HFI_BUFFER_COMV_H265E(_size, frame_width, frame_height, num_recon) \
+	do { \
 		HFI_BUFFER_COMV_ENC(_size, frame_width, frame_height, 32,\
-			num_recon, HFI_CODEC_ENCODE_HEVC)
+			num_recon, HFI_CODEC_ENCODE_HEVC); \
+	} while (0)
 
 #define HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
 			num_vpp_pipes_enc, lcu_size, standard) \
@@ -1347,8 +1658,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		frame_width_coded = 0, frame_height_coded = 0, \
 		num_lcu_in_frame = 0, num_lcumb = 0; \
 		HFI_U32	frame_rc_buf_size = 0; \
-		width_in_lcus = ((frame_width) + (lcu_size) - 1) / (lcu_size); \
-		height_in_lcus = ((frame_height) + (lcu_size) - 1) / (lcu_size); \
+		width_in_lcus = ((frame_width) + (lcu_size)-1) / (lcu_size); \
+		height_in_lcus = ((frame_height) + (lcu_size)-1) / (lcu_size); \
 		num_lcu_in_frame = width_in_lcus * height_in_lcus; \
 		frame_width_coded = width_in_lcus * (lcu_size); \
 		frame_height_coded = height_in_lcus * (lcu_size); \
@@ -1370,13 +1681,17 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 
 #define HFI_BUFFER_NON_COMV_H264E(_size, frame_width, frame_height, \
 				num_vpp_pipes_enc) \
+	do { \
 		HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
-				num_vpp_pipes_enc, 16, HFI_CODEC_ENCODE_AVC)
+				num_vpp_pipes_enc, 16, HFI_CODEC_ENCODE_AVC); \
+	} while (0)
 
 #define HFI_BUFFER_NON_COMV_H265E(_size, frame_width, frame_height, \
 				num_vpp_pipes_enc) \
+	do { \
 		HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
-			num_vpp_pipes_enc, 32, HFI_CODEC_ENCODE_HEVC)
+			num_vpp_pipes_enc, 32, HFI_CODEC_ENCODE_HEVC); \
+	} while (0)
 
 #define SIZE_ENC_REF_BUFFER(size, frame_width, frame_height) \
 	do { \
@@ -1457,10 +1772,14 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_BUFFER_DPB_H264E(_size, frame_width, frame_height) \
-		HFI_BUFFER_DPB_ENC(_size, frame_width, frame_height, 0)
+	do { \
+		HFI_BUFFER_DPB_ENC(_size, frame_width, frame_height, 0); \
+	} while (0)
 
 #define HFI_BUFFER_DPB_H265E(_size, frame_width, frame_height, is_ten_bit) \
-		HFI_BUFFER_DPB_ENC(_size, frame_width, frame_height, is_ten_bit)
+	do { \
+		HFI_BUFFER_DPB_ENC(_size, frame_width, frame_height, is_ten_bit); \
+	} while (0)
 
 #define HFI_BUFFER_VPSS_ENC(vpss_size, dswidth, dsheight, ds_enable, blur, is_ten_bit) \
 	do { \
@@ -1470,11 +1789,11 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		} \
 	} while (0)
 
-#define HFI_IRIS3_ENC_MIN_INPUT_BUF_COUNT(numinput, totalhblayers) \
+#define HFI_IRIS3_ENC_MIN_INPUT_BUF_COUNT(numInput, TotalHBLayers) \
 	do { \
-		numinput = 3;                                             \
-		if (totalhblayers >= 2) { \
-			numinput = (1 << (totalhblayers - 1)) + 2;        \
+		numInput = 3;                                             \
+		if (TotalHBLayers >= 2) { \
+			numInput = (1 << (TotalHBLayers - 1)) + 2;        \
 		}                                                         \
 	} while (0)
 

@@ -4,18 +4,19 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "hfi_packet.h"
 #include "msm_media_info.h"
+
 #include "msm_venc.h"
-#include "msm_vidc_control.h"
 #include "msm_vidc_core.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
 #include "msm_vidc_inst.h"
+#include "msm_vidc_driver.h"
 #include "msm_vidc_internal.h"
-#include "msm_vidc_platform.h"
+#include "msm_vidc_control.h"
 #include "msm_vidc_power.h"
+#include "msm_vidc_debug.h"
 #include "venus_hfi.h"
+#include "hfi_packet.h"
+#include "msm_vidc_platform.h"
 
 static const u32 msm_venc_input_set_prop[] = {
 	HFI_PROP_COLOR_FORMAT,
@@ -28,6 +29,7 @@ static const u32 msm_venc_input_set_prop[] = {
 static const u32 msm_venc_output_set_prop[] = {
 	HFI_PROP_BITSTREAM_RESOLUTION,
 	HFI_PROP_CROP_OFFSETS,
+	HFI_PROP_CSC,
 };
 
 static const u32 msm_venc_input_subscribe_for_properties[] = {
@@ -106,7 +108,7 @@ exit:
 
 /* todo: add logs for each property once finalised */
 static int msm_venc_set_colorformat(struct msm_vidc_inst *inst,
-				    enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 pixelformat;
@@ -130,24 +132,25 @@ static int msm_venc_set_colorformat(struct msm_vidc_inst *inst,
 	i_vpr_h(inst, "%s: hfi colorformat: %#x", __func__,
 		hfi_colorformat);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_COLOR_FORMAT,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_U32_ENUM,
-					&hfi_colorformat,
-					sizeof(u32));
+			HFI_PROP_COLOR_FORMAT,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_U32_ENUM,
+			&hfi_colorformat,
+			sizeof(u32));
 	if (rc)
 		return rc;
 	return 0;
 }
 
 static int msm_venc_set_stride_scanline(struct msm_vidc_inst *inst,
-					enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 color_format, stride_y, scanline_y;
 	u32 stride_uv = 0, scanline_uv = 0;
 	u32 payload[2];
+	u32 grid_size;
 
 	if (port != INPUT_PORT) {
 		i_vpr_e(inst, "%s: invalid port %d\n", __func__, port);
@@ -162,37 +165,40 @@ static int msm_venc_set_stride_scanline(struct msm_vidc_inst *inst,
 		return 0;
 	}
 
-	if (is_rgba_colorformat(color_format)) {
+	if (is_image_session(inst)) {
+		grid_size = inst->capabilities[GRID_SIZE].value;
+		stride_y = ALIGN(inst->fmts[INPUT_PORT].fmt.pix_mp.width, grid_size);
+		scanline_y = ALIGN(inst->fmts[INPUT_PORT].fmt.pix_mp.height, grid_size);
+	} else if (is_rgba_colorformat(color_format)) {
 		stride_y = video_rgb_stride_pix(color_format,
-						inst->fmts[INPUT_PORT].fmt.pix_mp.width);
+			inst->fmts[INPUT_PORT].fmt.pix_mp.width);
 		scanline_y = video_rgb_scanlines(color_format,
-						 inst->fmts[INPUT_PORT].fmt.pix_mp.height);
+			inst->fmts[INPUT_PORT].fmt.pix_mp.height);
 	} else {
 		stride_y = video_y_stride_pix(color_format,
-					      inst->fmts[INPUT_PORT].fmt.pix_mp.width);
+			inst->fmts[INPUT_PORT].fmt.pix_mp.width);
 		scanline_y = video_y_scanlines(color_format,
-					       inst->fmts[INPUT_PORT].fmt.pix_mp.height);
+			inst->fmts[INPUT_PORT].fmt.pix_mp.height);
 	}
 	if (color_format == MSM_VIDC_FMT_NV12 ||
-	    color_format == MSM_VIDC_FMT_P010 ||
-	    color_format == MSM_VIDC_FMT_NV21) {
+		color_format == MSM_VIDC_FMT_P010 ||
+		color_format == MSM_VIDC_FMT_NV21) {
 		stride_uv = stride_y;
 		scanline_uv = scanline_y / 2;
 	}
 
 	payload[0] = stride_y << 16 | scanline_y;
 	payload[1] = stride_uv << 16 | scanline_uv;
-	i_vpr_h(inst,
-		"%s: y: stride %d scanline, %d uv: stride %d scanline_uv %d",
-		__func__,
+	i_vpr_h(inst, "%s: stride_y: %d scanline_y: %d "
+		"stride_uv: %d, scanline_uv: %d", __func__,
 		stride_y, scanline_y, stride_uv, scanline_uv);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_LINEAR_STRIDE_SCANLINE,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_64_PACKED,
-					&payload,
-					sizeof(u64));
+			HFI_PROP_LINEAR_STRIDE_SCANLINE,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_64_PACKED,
+			&payload,
+			sizeof(u64));
 	if (rc)
 		return rc;
 
@@ -200,7 +206,7 @@ static int msm_venc_set_stride_scanline(struct msm_vidc_inst *inst,
 }
 
 static int msm_venc_set_raw_resolution(struct msm_vidc_inst *inst,
-				       enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 resolution;
@@ -213,21 +219,21 @@ static int msm_venc_set_raw_resolution(struct msm_vidc_inst *inst,
 	resolution = (inst->fmts[port].fmt.pix_mp.width << 16) |
 		inst->fmts[port].fmt.pix_mp.height;
 	i_vpr_h(inst, "%s: width: %d height: %d\n", __func__,
-		inst->fmts[port].fmt.pix_mp.width, inst->fmts[port].fmt.pix_mp.height);
+			inst->fmts[port].fmt.pix_mp.width, inst->fmts[port].fmt.pix_mp.height);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_RAW_RESOLUTION,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_32_PACKED,
-					&resolution,
-					sizeof(u32));
+			HFI_PROP_RAW_RESOLUTION,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_32_PACKED,
+			&resolution,
+			sizeof(u32));
 	if (rc)
 		return rc;
 	return 0;
 }
 
 static int msm_venc_set_bitstream_resolution(struct msm_vidc_inst *inst,
-					     enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 resolution;
@@ -240,22 +246,22 @@ static int msm_venc_set_bitstream_resolution(struct msm_vidc_inst *inst,
 	resolution = (inst->fmts[port].fmt.pix_mp.width << 16) |
 		inst->fmts[port].fmt.pix_mp.height;
 	i_vpr_h(inst, "%s: width: %d height: %d\n", __func__,
-		inst->fmts[port].fmt.pix_mp.width,
-		inst->fmts[port].fmt.pix_mp.height);
+			inst->fmts[port].fmt.pix_mp.width,
+			inst->fmts[port].fmt.pix_mp.height);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_BITSTREAM_RESOLUTION,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_32_PACKED,
-					&resolution,
-					sizeof(u32));
+			HFI_PROP_BITSTREAM_RESOLUTION,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_32_PACKED,
+			&resolution,
+			sizeof(u32));
 	if (rc)
 		return rc;
 	return 0;
 }
 
 static int msm_venc_set_crop_offsets(struct msm_vidc_inst *inst,
-				     enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 left_offset, top_offset, right_offset, bottom_offset;
@@ -286,27 +292,29 @@ static int msm_venc_set_crop_offsets(struct msm_vidc_inst *inst,
 	right_offset = (inst->fmts[port].fmt.pix_mp.width - width);
 	bottom_offset = (inst->fmts[port].fmt.pix_mp.height - height);
 
+	if (is_image_session(inst))
+		right_offset = bottom_offset = 0;
+
 	crop[0] = left_offset << 16 | top_offset;
 	crop[1] = right_offset << 16 | bottom_offset;
-	i_vpr_h(inst,
-		"%s: l_off: %d t_off: %d r_off: %d b_off: %d",
-		__func__,
+	i_vpr_h(inst, "%s: left_offset: %d top_offset: %d "
+		"right_offset: %d bottom_offset: %d", __func__,
 		left_offset, top_offset, right_offset, bottom_offset);
 
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_CROP_OFFSETS,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_64_PACKED,
-					&crop,
-					sizeof(u64));
+			HFI_PROP_CROP_OFFSETS,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_64_PACKED,
+			&crop,
+			sizeof(u64));
 	if (rc)
 		return rc;
 	return 0;
 }
 
 static int msm_venc_set_colorspace(struct msm_vidc_inst *inst,
-				   enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	u32 primaries = MSM_VIDC_PRIMARIES_RESERVED;
@@ -319,7 +327,6 @@ static int msm_venc_set_colorspace(struct msm_vidc_inst *inst,
 	u32 video_format = 5;
 	struct v4l2_format *input_fmt;
 	u32 pix_fmt;
-	struct v4l2_pix_format_mplane *pixmp = NULL;
 
 	if (port != INPUT_PORT) {
 		i_vpr_e(inst, "%s: invalid port %d\n", __func__, port);
@@ -332,20 +339,19 @@ static int msm_venc_set_colorspace(struct msm_vidc_inst *inst,
 	}
 
 	input_fmt = &inst->fmts[INPUT_PORT];
-	pixmp = &inst->fmts[port].fmt.pix_mp;
 	pix_fmt = v4l2_colorformat_to_driver(inst,
-					     input_fmt->fmt.pix_mp.pixelformat, __func__);
-	if (pixmp->colorspace != V4L2_COLORSPACE_DEFAULT ||
-	    pixmp->ycbcr_enc != V4L2_YCBCR_ENC_DEFAULT ||
-	    pixmp->xfer_func != V4L2_XFER_FUNC_DEFAULT) {
+		input_fmt->fmt.pix_mp.pixelformat, __func__);
+	if (inst->fmts[port].fmt.pix_mp.colorspace != V4L2_COLORSPACE_DEFAULT ||
+	    inst->fmts[port].fmt.pix_mp.ycbcr_enc != V4L2_YCBCR_ENC_DEFAULT ||
+	    inst->fmts[port].fmt.pix_mp.xfer_func != V4L2_XFER_FUNC_DEFAULT) {
 		colour_description_present_flag = 1;
 		video_signal_type_present_flag = 1;
 		primaries = v4l2_color_primaries_to_driver(inst,
-							   pixmp->colorspace, __func__);
+			inst->fmts[port].fmt.pix_mp.colorspace, __func__);
 		matrix_coeff = v4l2_matrix_coeff_to_driver(inst,
-							   pixmp->ycbcr_enc, __func__);
+			inst->fmts[port].fmt.pix_mp.ycbcr_enc, __func__);
 		transfer_char = v4l2_transfer_char_to_driver(inst,
-							     pixmp->xfer_func, __func__);
+			inst->fmts[port].fmt.pix_mp.xfer_func, __func__);
 	} else if (is_rgba_colorformat(pix_fmt)) {
 		colour_description_present_flag = 1;
 		video_signal_type_present_flag = 1;
@@ -355,10 +361,10 @@ static int msm_venc_set_colorspace(struct msm_vidc_inst *inst,
 		full_range = 0;
 	}
 
-	if (pixmp->quantization !=
+	if (inst->fmts[port].fmt.pix_mp.quantization !=
 	    V4L2_QUANTIZATION_DEFAULT) {
 		video_signal_type_present_flag = 1;
-		full_range = pixmp->quantization ==
+		full_range = inst->fmts[port].fmt.pix_mp.quantization ==
 			V4L2_QUANTIZATION_FULL_RANGE ? 1 : 0;
 	}
 
@@ -371,14 +377,40 @@ static int msm_venc_set_colorspace(struct msm_vidc_inst *inst,
 		((video_signal_type_present_flag << 29) & 0x20000000);
 	i_vpr_h(inst, "%s: color info: %#x\n", __func__, payload);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_SIGNAL_COLOR_INFO,
-					HFI_HOST_FLAGS_NONE,
-					get_hfi_port(inst, port),
-					HFI_PAYLOAD_32_PACKED,
-					&payload,
-					sizeof(u32));
+		HFI_PROP_SIGNAL_COLOR_INFO,
+		HFI_HOST_FLAGS_NONE,
+		get_hfi_port(inst, port),
+		HFI_PAYLOAD_32_PACKED,
+		&payload,
+		sizeof(u32));
 	if (rc)
 		return rc;
+	return 0;
+}
+
+static int msm_venc_set_csc(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 csc = 0;
+
+	if (port != OUTPUT_PORT) {
+		i_vpr_e(inst, "%s: invalid port %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	csc = inst->capabilities[CSC].value;
+	i_vpr_h(inst, "%s: csc: %u\n", __func__, csc);
+	rc = venus_hfi_session_property(inst,
+		HFI_PROP_CSC,
+		HFI_HOST_FLAGS_NONE,
+		get_hfi_port(inst, port),
+		HFI_PAYLOAD_U32,
+		&csc,
+		sizeof(u32));
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
@@ -398,12 +430,12 @@ static int msm_venc_set_quality_mode(struct msm_vidc_inst *inst)
 	mode = inst->capabilities[QUALITY_MODE].value;
 	i_vpr_h(inst, "%s: quality_mode: %u\n", __func__, mode);
 	rc = venus_hfi_session_property(inst,
-					HFI_PROP_QUALITY_MODE,
-					HFI_HOST_FLAGS_NONE,
-					HFI_PORT_BITSTREAM,
-					HFI_PAYLOAD_U32_ENUM,
-					&mode,
-					sizeof(u32));
+			HFI_PROP_QUALITY_MODE,
+			HFI_HOST_FLAGS_NONE,
+			HFI_PORT_BITSTREAM,
+			HFI_PAYLOAD_U32_ENUM,
+			&mode,
+			sizeof(u32));
 	if (rc)
 		return rc;
 	return 0;
@@ -439,6 +471,7 @@ static int msm_venc_set_input_properties(struct msm_vidc_inst *inst)
 		{HFI_PROP_SIGNAL_COLOR_INFO,          msm_venc_set_colorspace                  },
 	};
 
+	i_vpr_h(inst, "%s()\n", __func__);
 	for (i = 0; i < ARRAY_SIZE(msm_venc_input_set_prop); i++) {
 		/* set session input properties */
 		for (j = 0; j < ARRAY_SIZE(prop_type_handle_arr); j++) {
@@ -466,8 +499,10 @@ static int msm_venc_set_output_properties(struct msm_vidc_inst *inst)
 	static const struct msm_venc_prop_type_handle prop_type_handle_arr[] = {
 		{HFI_PROP_BITSTREAM_RESOLUTION,       msm_venc_set_bitstream_resolution    },
 		{HFI_PROP_CROP_OFFSETS,               msm_venc_set_crop_offsets            },
+		{HFI_PROP_CSC,                        msm_venc_set_csc                     },
 	};
 
+	i_vpr_h(inst, "%s()\n", __func__);
 	for (i = 0; i < ARRAY_SIZE(msm_venc_output_set_prop); i++) {
 		/* set session output properties */
 		for (j = 0; j < ARRAY_SIZE(prop_type_handle_arr); j++) {
@@ -493,11 +528,15 @@ static int msm_venc_set_internal_properties(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
 
+	i_vpr_h(inst, "%s()\n", __func__);
+
 	rc = msm_venc_set_quality_mode(inst);
 	if (rc)
 		return rc;
 
 	rc = msm_venc_set_ring_buffer_count(inst);
+	if (rc)
+		return rc;
 
 	return rc;
 }
@@ -507,7 +546,8 @@ static int msm_venc_get_input_internal_buffers(struct msm_vidc_inst *inst)
 	int i, rc = 0;
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_input_internal_buffer_type); i++) {
-		rc = msm_vidc_get_internal_buffers(inst, msm_venc_input_internal_buffer_type[i]);
+		rc = msm_vidc_get_internal_buffers(inst,
+			msm_venc_input_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -516,7 +556,7 @@ static int msm_venc_get_input_internal_buffers(struct msm_vidc_inst *inst)
 }
 
 static int msm_venc_destroy_internal_buffers(struct msm_vidc_inst *inst,
-					     enum msm_vidc_port_type port)
+		enum msm_vidc_port_type port)
 {
 	int rc = 0;
 	struct msm_vidc_buffers *buffers;
@@ -563,7 +603,8 @@ static int msm_venc_create_input_internal_buffers(struct msm_vidc_inst *inst)
 	int i, rc = 0;
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_input_internal_buffer_type); i++) {
-		rc = msm_vidc_create_internal_buffers(inst, msm_venc_input_internal_buffer_type[i]);
+		rc = msm_vidc_create_internal_buffers(inst,
+			msm_venc_input_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -576,7 +617,8 @@ static int msm_venc_queue_input_internal_buffers(struct msm_vidc_inst *inst)
 	int i, rc = 0;
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_input_internal_buffer_type); i++) {
-		rc = msm_vidc_queue_internal_buffers(inst, msm_venc_input_internal_buffer_type[i]);
+		rc = msm_vidc_queue_internal_buffers(inst,
+			msm_venc_input_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -589,7 +631,8 @@ static int msm_venc_get_output_internal_buffers(struct msm_vidc_inst *inst)
 	int i, rc = 0;
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_output_internal_buffer_type); i++) {
-		rc = msm_vidc_get_internal_buffers(inst, msm_venc_output_internal_buffer_type[i]);
+		rc = msm_vidc_get_internal_buffers(inst,
+			msm_venc_output_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -603,7 +646,7 @@ static int msm_venc_create_output_internal_buffers(struct msm_vidc_inst *inst)
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_output_internal_buffer_type); i++) {
 		rc = msm_vidc_create_internal_buffers(inst,
-						      msm_venc_output_internal_buffer_type[i]);
+			msm_venc_output_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -616,7 +659,8 @@ static int msm_venc_queue_output_internal_buffers(struct msm_vidc_inst *inst)
 	int i, rc = 0;
 
 	for (i = 0; i < ARRAY_SIZE(msm_venc_output_internal_buffer_type); i++) {
-		rc = msm_vidc_queue_internal_buffers(inst, msm_venc_output_internal_buffer_type[i]);
+		rc = msm_vidc_queue_internal_buffers(inst,
+			msm_venc_output_internal_buffer_type[i]);
 		if (rc)
 			return rc;
 	}
@@ -625,11 +669,14 @@ static int msm_venc_queue_output_internal_buffers(struct msm_vidc_inst *inst)
 }
 
 static int msm_venc_property_subscription(struct msm_vidc_inst *inst,
-					  enum msm_vidc_port_type port)
+	enum msm_vidc_port_type port)
 {
+	int rc = 0;
 	u32 payload[32] = {0};
 	u32 i;
 	u32 payload_size = 0;
+
+	i_vpr_h(inst, "%s()\n", __func__);
 
 	payload[0] = HFI_MODE_PROPERTY;
 	if (port == INPUT_PORT) {
@@ -647,22 +694,189 @@ static int msm_venc_property_subscription(struct msm_vidc_inst *inst,
 		return -EINVAL;
 	}
 
-	return venus_hfi_session_command(inst,
-				       HFI_CMD_SUBSCRIBE_MODE,
-				       port,
-				       HFI_PAYLOAD_U32_ARRAY,
-				       &payload[0],
-				       payload_size);
+	rc = venus_hfi_session_command(inst,
+			HFI_CMD_SUBSCRIBE_MODE,
+			port,
+			HFI_PAYLOAD_U32_ARRAY,
+			&payload[0],
+			payload_size);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int msm_venc_metadata_delivery(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 payload[32] = {0};
+	u32 i, count = 0;
+
+	i_vpr_h(inst, "%s()\n", __func__);
+
+	payload[0] = HFI_MODE_METADATA;
+
+	if (port == INPUT_PORT) {
+		for (i = INST_CAP_NONE + 1; i < INST_CAP_MAX; i++) {
+			if (is_meta_tx_inp_enabled(inst, i)) {
+				if (count + 1 >= sizeof(payload) / sizeof(u32)) {
+					i_vpr_e(inst,
+						"%s: input metadatas (%d) exceeded limit (%d)\n",
+						__func__, count, sizeof(payload) / sizeof(u32));
+					return -EINVAL;
+				}
+				payload[count + 1] = inst->capabilities[i].hfi_id;
+				count++;
+			}
+		}
+	} else if (port == OUTPUT_PORT) {
+		for (i = INST_CAP_NONE + 1; i < INST_CAP_MAX; i++) {
+			if (is_meta_tx_out_enabled(inst, i)) {
+				if (count + 1 >= sizeof(payload) / sizeof(u32)) {
+					i_vpr_e(inst,
+						"%s: input metadatas (%d) exceeded limit (%d)\n",
+						__func__, count, sizeof(payload) / sizeof(u32));
+					return -EINVAL;
+				}
+				payload[count + 1] = inst->capabilities[i].hfi_id;
+				count++;
+			}
+		}
+	} else {
+		i_vpr_e(inst, "%s: invalid port: %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	rc = venus_hfi_session_command(inst,
+			HFI_CMD_DELIVERY_MODE,
+			port,
+			HFI_PAYLOAD_U32_ARRAY,
+			&payload[0],
+			(count + 1) * sizeof(u32));
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int msm_venc_dynamic_metadata_delivery(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 payload[32] = {0};
+	u32 i, count = 0;
+
+	i_vpr_h(inst, "%s()\n", __func__);
+
+	payload[0] = HFI_MODE_DYNAMIC_METADATA;
+
+	if (port != INPUT_PORT) {
+		i_vpr_e(inst, "%s: invalid port: %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	for (i = INST_CAP_NONE + 1; i < INST_CAP_MAX; i++) {
+		if (is_dyn_meta_tx_inp_enabled(inst, i)) {
+			if (count + 1 >= sizeof(payload) / sizeof(u32)) {
+				i_vpr_e(inst,
+					"%s: dynamic input metadatas (%d) exceeded limit (%d)\n",
+					__func__, count, sizeof(payload) / sizeof(u32));
+				return -EINVAL;
+			}
+			payload[count + 1] = inst->capabilities[i].hfi_id;
+			count++;
+		}
+	}
+
+	rc = venus_hfi_session_command(inst,
+			HFI_CMD_DELIVERY_MODE,
+			port,
+			HFI_PAYLOAD_U32_ARRAY,
+			&payload[0],
+			(count + 1) * sizeof(u32));
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int msm_venc_metadata_subscription(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 payload[32] = {0};
+	u32 i, count = 0;
+
+	i_vpr_h(inst, "%s()\n", __func__);
+
+	payload[0] = HFI_MODE_METADATA;
+
+	if (port == INPUT_PORT) {
+		for (i = INST_CAP_NONE + 1; i < INST_CAP_MAX; i++) {
+			if (is_meta_rx_inp_enabled(inst, i)) {
+				if (count + 1 >= sizeof(payload) / sizeof(u32)) {
+					i_vpr_e(inst,
+						"%s: input metadatas (%d) exceeded limit (%d)\n",
+						__func__, count, sizeof(payload) / sizeof(u32));
+					return -EINVAL;
+				}
+				payload[count + 1] = inst->capabilities[i].hfi_id;
+				count++;
+			}
+		}
+	} else if (port == OUTPUT_PORT) {
+		for (i = INST_CAP_NONE + 1; i < INST_CAP_MAX; i++) {
+			if (is_meta_rx_out_enabled(inst, i)) {
+				if (count + 1 >= sizeof(payload) / sizeof(u32)) {
+					i_vpr_e(inst,
+						"%s: input metadatas (%d) exceeded limit (%d)\n",
+						__func__, count, sizeof(payload) / sizeof(u32));
+					return -EINVAL;
+				}
+				payload[count + 1] = inst->capabilities[i].hfi_id;
+				count++;
+			}
+		}
+	} else {
+		i_vpr_e(inst, "%s: invalid port: %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	rc = venus_hfi_session_command(inst,
+			HFI_CMD_SUBSCRIBE_MODE,
+			port,
+			HFI_PAYLOAD_U32_ARRAY,
+			&payload[0],
+			(count + 1) * sizeof(u32));
+	if (rc)
+		return rc;
+
+	return rc;
 }
 
 int msm_venc_streamoff_input(struct msm_vidc_inst *inst)
 {
-	return msm_vidc_session_streamoff(inst, INPUT_PORT);
+	int rc = 0;
+
+	rc = msm_vidc_session_streamoff(inst, INPUT_PORT);
+	if (rc)
+		return rc;
+
+	return 0;
 }
 
 int msm_venc_streamon_input(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+
+	if (is_input_meta_enabled(inst) &&
+		!inst->bufq[INPUT_META_PORT].vb2q->streaming) {
+		i_vpr_e(inst,
+			"%s: Meta port must be streamed on before data port\n",
+			__func__);
+		return -EINVAL;
+	}
 
 	rc = msm_vidc_check_session_supported(inst);
 	if (rc)
@@ -675,6 +889,9 @@ int msm_venc_streamon_input(struct msm_vidc_inst *inst)
 	rc = msm_venc_set_input_properties(inst);
 	if (rc)
 		goto error;
+
+	/* Decide bse vpp delay after work mode */
+	//msm_vidc_set_bse_vpp_delay(inst);
 
 	rc = msm_venc_get_input_internal_buffers(inst);
 	if (rc)
@@ -696,6 +913,14 @@ int msm_venc_streamon_input(struct msm_vidc_inst *inst)
 	if (rc)
 		goto error;
 
+	rc = msm_venc_metadata_delivery(inst, INPUT_PORT);
+	if (rc)
+		goto error;
+
+	rc = msm_venc_dynamic_metadata_delivery(inst, INPUT_PORT);
+	if (rc)
+		goto error;
+
 	rc = msm_vidc_process_streamon_input(inst);
 	if (rc)
 		goto error;
@@ -709,19 +934,34 @@ error:
 
 int msm_venc_qbuf(struct msm_vidc_inst *inst, struct vb2_buffer *vb2)
 {
-	return msm_vidc_queue_buffer_single(inst, vb2);
+	int rc = 0;
+
+	rc = msm_vidc_queue_buffer_single(inst, vb2);
+	if (rc)
+		return rc;
+
+	return rc;
 }
 
 int msm_venc_stop_cmd(struct msm_vidc_inst *inst)
 {
+	int rc = 0;
+
 	i_vpr_h(inst, "received cmd: drain\n");
-	return msm_vidc_process_drain(inst);
+	rc = msm_vidc_process_drain(inst);
+	if (rc)
+		return rc;
+
+	return rc;
 }
 
 int msm_venc_start_cmd(struct msm_vidc_inst *inst)
 {
+	int rc = 0;
+
 	i_vpr_h(inst, "received cmd: resume\n");
 
+	vb2_clear_last_buffer_dequeued(inst->bufq[OUTPUT_META_PORT].vb2q);
 	vb2_clear_last_buffer_dequeued(inst->bufq[OUTPUT_PORT].vb2q);
 
 	/* tune power features */
@@ -734,7 +974,11 @@ int msm_venc_start_cmd(struct msm_vidc_inst *inst)
 	/* print internal buffer memory usage stats */
 	msm_vidc_print_memory_stats(inst);
 
-	return msm_vidc_process_resume(inst);
+	rc = msm_vidc_process_resume(inst);
+	if (rc)
+		return rc;
+
+	return rc;
 }
 
 int msm_venc_streamoff_output(struct msm_vidc_inst *inst)
@@ -758,6 +1002,14 @@ int msm_venc_streamoff_output(struct msm_vidc_inst *inst)
 int msm_venc_streamon_output(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+
+	if (is_output_meta_enabled(inst) &&
+		!inst->bufq[OUTPUT_META_PORT].vb2q->streaming) {
+		i_vpr_e(inst,
+			"%s: Meta port must be streamed on before data port\n",
+			__func__);
+		return -EINVAL;
+	}
 
 	rc = msm_venc_set_output_properties(inst);
 	if (rc)
@@ -791,6 +1043,10 @@ int msm_venc_streamon_output(struct msm_vidc_inst *inst)
 	if (rc)
 		goto error;
 
+	rc = msm_venc_metadata_subscription(inst, OUTPUT_PORT);
+	if (rc)
+		goto error;
+
 	rc = msm_vidc_process_streamon_output(inst);
 	if (rc)
 		goto error;
@@ -818,8 +1074,8 @@ int msm_venc_try_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			f->fmt.pix_mp.pixelformat = inst->fmts[INPUT_PORT].fmt.pix_mp.pixelformat;
 			f->fmt.pix_mp.width = inst->fmts[INPUT_PORT].fmt.pix_mp.width;
 			f->fmt.pix_mp.height = inst->fmts[INPUT_PORT].fmt.pix_mp.height;
-			pix_fmt = v4l2_colorformat_to_driver(inst, f->fmt.pix_mp.pixelformat,
-							     __func__);
+			pix_fmt = v4l2_colorformat_to_driver(inst,
+				f->fmt.pix_mp.pixelformat, __func__);
 		}
 	} else if (f->type == OUTPUT_MPLANE) {
 		pix_fmt = v4l2_codec_to_driver(inst, f->fmt.pix_mp.pixelformat, __func__);
@@ -829,6 +1085,12 @@ int msm_venc_try_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			f->fmt.pix_mp.height = inst->fmts[OUTPUT_PORT].fmt.pix_mp.height;
 			f->fmt.pix_mp.pixelformat = inst->fmts[OUTPUT_PORT].fmt.pix_mp.pixelformat;
 		}
+	} else if (f->type == INPUT_META_PLANE) {
+		f->fmt.meta.dataformat = inst->fmts[INPUT_META_PORT].fmt.meta.dataformat;
+		f->fmt.meta.buffersize = inst->fmts[INPUT_META_PORT].fmt.meta.buffersize;
+	} else if (f->type == OUTPUT_META_PLANE) {
+		f->fmt.meta.dataformat = inst->fmts[OUTPUT_META_PORT].fmt.meta.dataformat;
+		f->fmt.meta.buffersize = inst->fmts[OUTPUT_META_PORT].fmt.meta.buffersize;
 	} else {
 		i_vpr_e(inst, "%s: invalid type %d\n", __func__, f->type);
 		return -EINVAL;
@@ -863,7 +1125,8 @@ int msm_venc_s_fmt_output(struct msm_vidc_inst *inst, struct v4l2_format *f)
 
 	codec = v4l2_codec_to_driver(inst, f->fmt.pix_mp.pixelformat, __func__);
 
-	codec_align = (codec == MSM_VIDC_HEVC) ? 32 : 16;
+	codec_align = (codec == MSM_VIDC_HEVC ||
+		codec == MSM_VIDC_HEIC) ? 32 : 16;
 	/* use rotated width height if rotation is enabled */
 	width = inst->compose.width;
 	height = inst->compose.height;
@@ -874,10 +1137,14 @@ int msm_venc_s_fmt_output(struct msm_vidc_inst *inst, struct v4l2_format *f)
 	/* width, height is readonly for client */
 	fmt->fmt.pix_mp.width = ALIGN(width, codec_align);
 	fmt->fmt.pix_mp.height = ALIGN(height, codec_align);
+	/* use grid dimension for image session */
+	if (is_image_session(inst))
+		fmt->fmt.pix_mp.width = fmt->fmt.pix_mp.height =
+			inst->capabilities[GRID_SIZE].value;
 	fmt->fmt.pix_mp.num_planes = 1;
 	fmt->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
-	fmt->fmt.pix_mp.plane_fmt[0].sizeimage =
-		call_session_op(core, buffer_size, inst, MSM_VIDC_BUF_OUTPUT);
+	fmt->fmt.pix_mp.plane_fmt[0].sizeimage = call_session_op(core,
+		buffer_size, inst, MSM_VIDC_BUF_OUTPUT);
 	/* video hw supports conversion to V4L2_COLORSPACE_REC709 only */
 	if (f->fmt.pix_mp.colorspace != V4L2_COLORSPACE_DEFAULT &&
 	    f->fmt.pix_mp.colorspace != V4L2_COLORSPACE_REC709)
@@ -886,10 +1153,10 @@ int msm_venc_s_fmt_output(struct msm_vidc_inst *inst, struct v4l2_format *f)
 	fmt->fmt.pix_mp.xfer_func = f->fmt.pix_mp.xfer_func;
 	fmt->fmt.pix_mp.ycbcr_enc = f->fmt.pix_mp.ycbcr_enc;
 	fmt->fmt.pix_mp.quantization = f->fmt.pix_mp.quantization;
-	inst->buffers.output.min_count =
-		call_session_op(core, min_count, inst, MSM_VIDC_BUF_OUTPUT);
-	inst->buffers.output.extra_count =
-		call_session_op(core, extra_count, inst, MSM_VIDC_BUF_OUTPUT);
+	inst->buffers.output.min_count = call_session_op(core,
+		min_count, inst, MSM_VIDC_BUF_OUTPUT);
+	inst->buffers.output.extra_count = call_session_op(core,
+		extra_count, inst, MSM_VIDC_BUF_OUTPUT);
 	if (inst->buffers.output.actual_count <
 		inst->buffers.output.min_count +
 		inst->buffers.output.extra_count) {
@@ -899,6 +1166,9 @@ int msm_venc_s_fmt_output(struct msm_vidc_inst *inst, struct v4l2_format *f)
 	}
 	inst->buffers.output.size =
 		fmt->fmt.pix_mp.plane_fmt[0].sizeimage;
+
+	/* reset metadata buffer size with updated resolution*/
+	msm_vidc_update_meta_port_settings(inst);
 
 	i_vpr_h(inst,
 		"%s: type: OUTPUT, codec %s width %d height %d size %u min_count %d extra_count %d\n",
@@ -910,6 +1180,38 @@ int msm_venc_s_fmt_output(struct msm_vidc_inst *inst, struct v4l2_format *f)
 
 	/* finally update client format */
 	memcpy(f, fmt, sizeof(struct v4l2_format));
+	return rc;
+}
+
+static int msm_venc_s_fmt_output_meta(struct msm_vidc_inst *inst, struct v4l2_format *f)
+{
+	int rc = 0;
+	struct v4l2_format *fmt;
+	struct msm_vidc_core *core;
+
+	core = inst->core;
+
+	fmt = &inst->fmts[OUTPUT_META_PORT];
+	fmt->type = OUTPUT_META_PLANE;
+	fmt->fmt.meta.dataformat =
+		v4l2_colorformat_from_driver(inst, MSM_VIDC_FMT_META, __func__);
+	fmt->fmt.meta.buffersize = call_session_op(core,
+		buffer_size, inst, MSM_VIDC_BUF_OUTPUT_META);
+	inst->buffers.output_meta.min_count =
+			inst->buffers.output.min_count;
+	inst->buffers.output_meta.extra_count =
+			inst->buffers.output.extra_count;
+	inst->buffers.output_meta.actual_count =
+			inst->buffers.output.actual_count;
+	inst->buffers.output_meta.size = fmt->fmt.meta.buffersize;
+
+	memcpy(f, fmt, sizeof(struct v4l2_format));
+
+	i_vpr_h(inst, "%s: type: OUTPUT_META, size %u min_count %d extra_count %d\n",
+		__func__, fmt->fmt.meta.buffersize,
+		inst->buffers.output_meta.min_count,
+		inst->buffers.output_meta.extra_count);
+
 	return rc;
 }
 
@@ -929,10 +1231,15 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 	width = f->fmt.pix_mp.width;
 	height = f->fmt.pix_mp.height;
 
-	if (is_rgba_colorformat(pix_fmt))
+	if (is_image_session(inst)) {
+		bytesperline = ALIGN(f->fmt.pix_mp.width,
+			inst->capabilities[GRID_SIZE].value) *
+			(is_10bit_colorformat(pix_fmt) ? 2 : 1);
+	} else if (is_rgba_colorformat(pix_fmt)) {
 		bytesperline = video_rgb_stride_bytes(pix_fmt, f->fmt.pix_mp.width);
-	else
+	} else {
 		bytesperline = video_y_stride_bytes(pix_fmt, f->fmt.pix_mp.width);
+	}
 
 	fmt = &inst->fmts[INPUT_PORT];
 	fmt->type = INPUT_MPLANE;
@@ -950,6 +1257,8 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 	fmt->fmt.pix_mp.quantization = f->fmt.pix_mp.quantization;
 	/*
 	 * Update output port colorspace info.
+	 * NOTE: If client needs CSC, then client needs to ensure setting
+	 * output port color after setting input color info.
 	 */
 	output_fmt = &inst->fmts[OUTPUT_PORT];
 	output_fmt->fmt.pix_mp.colorspace = fmt->fmt.pix_mp.colorspace;
@@ -957,13 +1266,13 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 	output_fmt->fmt.pix_mp.ycbcr_enc = fmt->fmt.pix_mp.ycbcr_enc;
 	output_fmt->fmt.pix_mp.quantization = fmt->fmt.pix_mp.quantization;
 
-	inst->buffers.input.min_count =
-		call_session_op(core, min_count, inst, MSM_VIDC_BUF_INPUT);
-	inst->buffers.input.extra_count =
-		call_session_op(core, extra_count, inst, MSM_VIDC_BUF_INPUT);
+	inst->buffers.input.min_count = call_session_op(core,
+		min_count, inst, MSM_VIDC_BUF_INPUT);
+	inst->buffers.input.extra_count = call_session_op(core,
+		extra_count, inst, MSM_VIDC_BUF_INPUT);
 	if (inst->buffers.input.actual_count <
-	    inst->buffers.input.min_count +
-	    inst->buffers.input.extra_count) {
+		inst->buffers.input.min_count +
+		inst->buffers.input.extra_count) {
 		inst->buffers.input.actual_count =
 			inst->buffers.input.min_count +
 			inst->buffers.input.extra_count;
@@ -971,16 +1280,15 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 	inst->buffers.input.size = size;
 
 	if (f->fmt.pix_mp.width != inst->crop.width ||
-	    f->fmt.pix_mp.height != inst->crop.height) {
+		f->fmt.pix_mp.height != inst->crop.height) {
+
 		/* reset crop dimensions with updated resolution */
-		inst->crop.top = 0;
-		inst->crop.left = 0;
+		inst->crop.top = inst->crop.left = 0;
 		inst->crop.width = f->fmt.pix_mp.width;
 		inst->crop.height = f->fmt.pix_mp.height;
 
 		/* reset compose dimensions with updated resolution */
-		inst->compose.top = 0;
-		inst->compose.left = 0;
+		inst->compose.top = inst->compose.left = 0;
 		inst->compose.width = f->fmt.pix_mp.width;
 		inst->compose.height = f->fmt.pix_mp.height;
 
@@ -989,6 +1297,9 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 		if (rc)
 			return rc;
 	}
+
+	/* reset metadata buffer size with updated resolution*/
+	msm_vidc_update_meta_port_settings(inst);
 
 	i_vpr_h(inst,
 		"%s: type: INPUT, format %s width %d height %d size %u min_count %d extra_count %d\n",
@@ -1004,6 +1315,38 @@ static int msm_venc_s_fmt_input(struct msm_vidc_inst *inst, struct v4l2_format *
 	return rc;
 }
 
+static int msm_venc_s_fmt_input_meta(struct msm_vidc_inst *inst, struct v4l2_format *f)
+{
+	int rc = 0;
+	struct v4l2_format *fmt;
+	struct msm_vidc_core *core;
+
+	core = inst->core;
+
+	fmt = &inst->fmts[INPUT_META_PORT];
+	fmt->type = INPUT_META_PLANE;
+	fmt->fmt.meta.dataformat =
+		v4l2_colorformat_from_driver(inst, MSM_VIDC_FMT_META, __func__);
+	fmt->fmt.meta.buffersize = call_session_op(core,
+		buffer_size, inst, MSM_VIDC_BUF_INPUT_META);
+	inst->buffers.input_meta.min_count =
+			inst->buffers.input.min_count;
+	inst->buffers.input_meta.extra_count =
+			inst->buffers.input.extra_count;
+	inst->buffers.input_meta.actual_count =
+			inst->buffers.input.actual_count;
+	inst->buffers.input_meta.size = fmt->fmt.meta.buffersize;
+
+	memcpy(f, fmt, sizeof(struct v4l2_format));
+
+	i_vpr_h(inst, "%s: type: INPUT_META, size %u min_count %d extra_count %d\n",
+		__func__, fmt->fmt.meta.buffersize,
+		inst->buffers.input_meta.min_count,
+		inst->buffers.input_meta.extra_count);
+
+	return rc;
+}
+
 int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 {
 	int rc = 0;
@@ -1012,8 +1355,16 @@ int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 		rc = msm_venc_s_fmt_input(inst, f);
 		if (rc)
 			goto exit;
+	} else if (f->type == INPUT_META_PLANE) {
+		rc = msm_venc_s_fmt_input_meta(inst, f);
+		if (rc)
+			goto exit;
 	} else if (f->type == OUTPUT_MPLANE) {
 		rc = msm_venc_s_fmt_output(inst, f);
+		if (rc)
+			goto exit;
+	} else if (f->type == OUTPUT_META_PLANE) {
+		rc = msm_venc_s_fmt_output_meta(inst, f);
 		if (rc)
 			goto exit;
 	} else {
@@ -1058,8 +1409,7 @@ int msm_venc_s_selection(struct msm_vidc_inst *inst, struct v4l2_selection *s)
 		if (s->r.left || s->r.top) {
 			i_vpr_h(inst, "%s: unsupported top %d or left %d\n",
 				__func__, s->r.left, s->r.top);
-			s->r.left = 0;
-			s->r.top = 0;
+			s->r.left = s->r.top = 0;
 		}
 		if (s->r.width > inst->fmts[INPUT_PORT].fmt.pix_mp.width) {
 			i_vpr_h(inst, "%s: unsupported width %d, fmt width %d\n",
@@ -1136,7 +1486,7 @@ int msm_venc_s_selection(struct msm_vidc_inst *inst, struct v4l2_selection *s)
 		break;
 	default:
 		i_vpr_e(inst, "%s: invalid target %d\n",
-			__func__, s->target);
+				__func__, s->target);
 		rc = -EINVAL;
 		break;
 	}
@@ -1188,67 +1538,64 @@ int msm_venc_g_selection(struct msm_vidc_inst *inst, struct v4l2_selection *s)
 }
 
 int msm_venc_s_param(struct msm_vidc_inst *inst,
-		     struct v4l2_streamparm *s_parm)
+		struct v4l2_streamparm *s_parm)
 {
 	int rc = 0;
 	struct v4l2_fract *timeperframe = NULL;
-	u32 q16_rate, max_rate, default_rate;
-	u64 us_per_frame = 0, input_rate = 0;
+	u32 input_rate_q16, max_rate_q16;
+	u32 input_rate, default_rate;
 	bool is_frame_rate = false;
 
 	if (s_parm->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		/* operating rate */
 		timeperframe = &s_parm->parm.output.timeperframe;
-		max_rate = inst->capabilities[OPERATING_RATE].max >> 16;
+		max_rate_q16 = inst->capabilities[OPERATING_RATE].max;
 		default_rate = inst->capabilities[OPERATING_RATE].value >> 16;
 		s_parm->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
 	} else {
+		/* frame rate */
 		timeperframe = &s_parm->parm.capture.timeperframe;
 		is_frame_rate = true;
-		max_rate = inst->capabilities[FRAME_RATE].max >> 16;
+		max_rate_q16 = inst->capabilities[FRAME_RATE].max;
 		default_rate = inst->capabilities[FRAME_RATE].value >> 16;
 		s_parm->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	}
 
 	if (!timeperframe->denominator || !timeperframe->numerator) {
 		i_vpr_e(inst, "%s: type %s, invalid rate, update with default\n",
-			__func__, v4l2_type_name(s_parm->type));
+			 __func__, v4l2_type_name(s_parm->type));
 		if (!timeperframe->numerator)
 			timeperframe->numerator = 1;
 		if (!timeperframe->denominator)
 			timeperframe->denominator = default_rate;
 	}
 
-	us_per_frame = timeperframe->numerator * (u64)USEC_PER_SEC;
-	do_div(us_per_frame, timeperframe->denominator);
-
-	if (!us_per_frame) {
-		i_vpr_e(inst, "%s: us_per_frame is zero\n", __func__);
-		rc = -EINVAL;
-		goto exit;
+	input_rate = (timeperframe->denominator / timeperframe->numerator);
+	if (input_rate > (max_rate_q16 >> 16)) {
+		input_rate_q16 = max_rate_q16;
+		i_vpr_h(inst, "%s: type %s, %s value %u limited to %u\n",
+			__func__, v4l2_type_name(s_parm->type),
+			is_frame_rate ? "frame rate" : "operating rate",
+			input_rate_q16, max_rate_q16);
+	} else {
+		input_rate_q16 = input_rate << 16;
+		input_rate_q16 |=
+			(timeperframe->denominator % timeperframe->numerator);
 	}
 
-	input_rate = (u64)USEC_PER_SEC;
-	do_div(input_rate, us_per_frame);
-
-	i_vpr_h(inst, "%s: type %s, %s value %llu\n",
+	i_vpr_h(inst, "%s: type %s, %s value %u.%u\n",
 		__func__, v4l2_type_name(s_parm->type),
-		is_frame_rate ? "frame rate" : "operating rate", input_rate);
+		is_frame_rate ? "frame rate" : "operating rate",
+		input_rate_q16 >> 16, input_rate_q16 & 0xffff);
 
-	q16_rate = (u32)input_rate << 16;
 	msm_vidc_update_cap_value(inst, is_frame_rate ? FRAME_RATE : OPERATING_RATE,
-				  q16_rate, __func__);
-	if ((s_parm->type == INPUT_MPLANE && inst->bufq[INPUT_PORT].vb2q->streaming) ||
-	    (s_parm->type == OUTPUT_MPLANE && inst->bufq[OUTPUT_PORT].vb2q->streaming)) {
+		input_rate_q16, __func__);
+	if (is_realtime_session(inst) &&
+		((s_parm->type == INPUT_MPLANE && inst->bufq[INPUT_PORT].vb2q->streaming) ||
+		(s_parm->type == OUTPUT_MPLANE && inst->bufq[OUTPUT_PORT].vb2q->streaming))) {
 		rc = msm_vidc_check_core_mbps(inst);
 		if (rc) {
 			i_vpr_e(inst, "%s: unsupported load\n", __func__);
-			goto reset_rate;
-		}
-		rc = input_rate > max_rate;
-		if (rc) {
-			i_vpr_e(inst, "%s: unsupported rate %llu, max %u\n", __func__,
-				input_rate, max_rate);
-			rc = -ENOMEM;
 			goto reset_rate;
 		}
 	}
@@ -1265,34 +1612,35 @@ int msm_venc_s_param(struct msm_vidc_inst *inst,
 	 */
 	if (inst->bufq[OUTPUT_PORT].vb2q->streaming) {
 		rc = venus_hfi_session_property(inst,
-						HFI_PROP_FRAME_RATE,
-						HFI_HOST_FLAGS_NONE,
-						HFI_PORT_BITSTREAM,
-						HFI_PAYLOAD_Q16,
-						&q16_rate,
-						sizeof(u32));
+			HFI_PROP_FRAME_RATE,
+			HFI_HOST_FLAGS_NONE,
+			HFI_PORT_BITSTREAM,
+			HFI_PAYLOAD_Q16,
+			&input_rate_q16,
+			sizeof(u32));
 		if (rc) {
 			i_vpr_e(inst,
 				"%s: failed to set frame rate to fw\n", __func__);
 			goto exit;
 		}
+		inst->auto_framerate = input_rate_q16;
 	}
 
 	return 0;
 
 reset_rate:
 	if (rc) {
-		i_vpr_e(inst, "%s: setting rate %llu failed, reset to %u\n", __func__,
-			input_rate, default_rate);
+		i_vpr_e(inst, "%s: setting rate %u failed, reset to %u\n", __func__,
+			input_rate_q16 >> 16, default_rate);
 		msm_vidc_update_cap_value(inst, is_frame_rate ? FRAME_RATE : OPERATING_RATE,
-					  default_rate << 16, __func__);
+			default_rate << 16, __func__);
 	}
 exit:
 	return rc;
 }
 
 int msm_venc_g_param(struct msm_vidc_inst *inst,
-		     struct v4l2_streamparm *s_parm)
+		struct v4l2_streamparm *s_parm)
 {
 	struct v4l2_fract *timeperframe = NULL;
 
@@ -1317,7 +1665,7 @@ int msm_venc_g_param(struct msm_vidc_inst *inst,
 }
 
 int msm_venc_subscribe_event(struct msm_vidc_inst *inst,
-			     const struct v4l2_event_subscription *sub)
+		const struct v4l2_event_subscription *sub)
 {
 	int rc = 0;
 
@@ -1346,6 +1694,10 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 	u32 array[32] = {0};
 	u32 i = 0;
 
+	if (f->index >= ARRAY_SIZE(array)) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
 	core = inst->core;
 
 	if (f->type == OUTPUT_MPLANE) {
@@ -1356,6 +1708,9 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 			if (codecs & BIT(i)) {
 				if (idx >= ARRAY_SIZE(array))
 					break;
+				/* v4l2-compliance does not support private codecs */
+				if ((codecs & BIT(i)) == MSM_VIDC_HEIC)
+					continue;
 				array[idx] = codecs & BIT(i);
 				idx++;
 			}
@@ -1363,11 +1718,11 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 		if (!array[f->index])
 			return -EINVAL;
 		f->pixelformat = v4l2_codec_from_driver(inst, array[f->index],
-							__func__);
+				__func__);
 		if (!f->pixelformat)
 			return -EINVAL;
 		f->flags = V4L2_FMT_FLAG_COMPRESSED;
-		strscpy(f->description, "codec", sizeof(f->description));
+		strlcpy(f->description, "codec", sizeof(f->description));
 	} else if (f->type == INPUT_MPLANE) {
 		u32 formats = inst->capabilities[PIX_FMTS].step_or_mask;
 		u32 idx = 0;
@@ -1383,12 +1738,19 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 		if (!array[f->index])
 			return -EINVAL;
 		f->pixelformat = v4l2_colorformat_from_driver(inst, array[f->index],
-							      __func__);
+				__func__);
 		if (!f->pixelformat)
 			return -EINVAL;
-		strscpy(f->description, "colorformat", sizeof(f->description));
+		strlcpy(f->description, "colorformat", sizeof(f->description));
+	} else if (f->type == INPUT_META_PLANE || f->type == OUTPUT_META_PLANE) {
+		if (!f->index) {
+			f->pixelformat =
+				v4l2_colorformat_from_driver(inst, MSM_VIDC_FMT_META, __func__);
+			strlcpy(f->description, "metadata", sizeof(f->description));
+		} else {
+			return -EINVAL;
+		}
 	}
-
 	memset(f->reserved, 0, sizeof(f->reserved));
 
 	i_vpr_h(inst, "%s: index %d, %s: %s, flags %#x\n",
@@ -1404,6 +1766,8 @@ int msm_venc_inst_init(struct msm_vidc_inst *inst)
 	struct v4l2_format *f;
 	enum msm_vidc_colorformat_type colorformat;
 
+	i_vpr_h(inst, "%s()\n", __func__);
+
 	core = inst->core;
 
 	if (core->capabilities[DCVS].value)
@@ -1416,31 +1780,39 @@ int msm_venc_inst_init(struct msm_vidc_inst *inst)
 	f->fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
 	f->fmt.pix_mp.num_planes = 1;
 	f->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
-	f->fmt.pix_mp.plane_fmt[0].sizeimage =
-		call_session_op(core, buffer_size, inst, MSM_VIDC_BUF_OUTPUT);
+	f->fmt.pix_mp.plane_fmt[0].sizeimage = call_session_op(core,
+		buffer_size, inst, MSM_VIDC_BUF_OUTPUT);
 	f->fmt.pix_mp.field = V4L2_FIELD_NONE;
 	f->fmt.pix_mp.colorspace = V4L2_COLORSPACE_DEFAULT;
 	f->fmt.pix_mp.xfer_func = V4L2_XFER_FUNC_DEFAULT;
 	f->fmt.pix_mp.ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	f->fmt.pix_mp.quantization = V4L2_QUANTIZATION_DEFAULT;
-	inst->buffers.output.min_count =
-		call_session_op(core, min_count, inst, MSM_VIDC_BUF_OUTPUT);
-	inst->buffers.output.extra_count =
-		call_session_op(core, extra_count, inst, MSM_VIDC_BUF_OUTPUT);
+	inst->buffers.output.min_count = call_session_op(core,
+		min_count, inst, MSM_VIDC_BUF_OUTPUT);
+	inst->buffers.output.extra_count = call_session_op(core,
+		extra_count, inst, MSM_VIDC_BUF_OUTPUT);
 	inst->buffers.output.actual_count =
 			inst->buffers.output.min_count +
 			inst->buffers.output.extra_count;
 	inst->buffers.output.size = f->fmt.pix_mp.plane_fmt[0].sizeimage;
 
-	inst->crop.left = 0;
-	inst->crop.top = 0;
+	inst->crop.left = inst->crop.top = 0;
 	inst->crop.width = f->fmt.pix_mp.width;
 	inst->crop.height = f->fmt.pix_mp.height;
 
-	inst->compose.left = 0;
-	inst->compose.top = 0;
+	inst->compose.left = inst->compose.top = 0;
 	inst->compose.width = f->fmt.pix_mp.width;
 	inst->compose.height = f->fmt.pix_mp.height;
+
+	f = &inst->fmts[OUTPUT_META_PORT];
+	f->type = OUTPUT_META_PLANE;
+	f->fmt.meta.dataformat =
+		v4l2_colorformat_from_driver(inst, MSM_VIDC_FMT_META, __func__);
+	f->fmt.meta.buffersize = MSM_VIDC_METADATA_SIZE;
+	inst->buffers.output_meta.min_count = 0;
+	inst->buffers.output_meta.extra_count = 0;
+	inst->buffers.output_meta.actual_count = 0;
+	inst->buffers.output_meta.size = 0;
 
 	f = &inst->fmts[INPUT_PORT];
 	f->type = INPUT_MPLANE;
@@ -1450,35 +1822,53 @@ int msm_venc_inst_init(struct msm_vidc_inst *inst)
 	f->fmt.pix_mp.height = DEFAULT_HEIGHT;
 	f->fmt.pix_mp.num_planes = 1;
 	colorformat = v4l2_colorformat_to_driver(inst, f->fmt.pix_mp.pixelformat,
-						 __func__);
+		__func__);
 	f->fmt.pix_mp.plane_fmt[0].bytesperline =
 		video_y_stride_bytes(colorformat, DEFAULT_WIDTH);
-	f->fmt.pix_mp.plane_fmt[0].sizeimage =
-		call_session_op(core, buffer_size, inst, MSM_VIDC_BUF_INPUT);
+	f->fmt.pix_mp.plane_fmt[0].sizeimage = call_session_op(core,
+		buffer_size, inst, MSM_VIDC_BUF_INPUT);
 	f->fmt.pix_mp.field = V4L2_FIELD_NONE;
 	f->fmt.pix_mp.colorspace = V4L2_COLORSPACE_DEFAULT;
 	f->fmt.pix_mp.xfer_func = V4L2_XFER_FUNC_DEFAULT;
 	f->fmt.pix_mp.ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	f->fmt.pix_mp.quantization = V4L2_QUANTIZATION_DEFAULT;
-	inst->buffers.input.min_count =
-		call_session_op(core, min_count, inst, MSM_VIDC_BUF_INPUT);
-	inst->buffers.input.extra_count =
-		call_session_op(core, extra_count, inst, MSM_VIDC_BUF_INPUT);
+	inst->buffers.input.min_count = call_session_op(core,
+		min_count, inst, MSM_VIDC_BUF_INPUT);
+	inst->buffers.input.extra_count = call_session_op(core,
+		extra_count, inst, MSM_VIDC_BUF_INPUT);
 	inst->buffers.input.actual_count =
 			inst->buffers.input.min_count +
 			inst->buffers.input.extra_count;
 	inst->buffers.input.size = f->fmt.pix_mp.plane_fmt[0].sizeimage;
 
+	f = &inst->fmts[INPUT_META_PORT];
+	f->type = INPUT_META_PLANE;
+	f->fmt.meta.dataformat =
+		v4l2_colorformat_from_driver(inst, MSM_VIDC_FMT_META, __func__);
+	f->fmt.meta.buffersize = MSM_VIDC_METADATA_SIZE;
+	inst->buffers.input_meta.min_count = 0;
+	inst->buffers.input_meta.extra_count = 0;
+	inst->buffers.input_meta.actual_count = 0;
+	inst->buffers.input_meta.size = 0;
+
 	inst->hfi_rc_type = HFI_RC_VBR_CFR;
 	inst->hfi_layer_type = HFI_HIER_P_SLIDING_WINDOW;
 
 	rc = msm_venc_codec_change(inst,
-				   inst->fmts[OUTPUT_PORT].fmt.pix_mp.pixelformat);
+			inst->fmts[OUTPUT_PORT].fmt.pix_mp.pixelformat);
+	if (rc)
+		return rc;
 
 	return rc;
 }
 
 int msm_venc_inst_deinit(struct msm_vidc_inst *inst)
 {
-	return msm_vidc_ctrl_handler_deinit(inst);
+	int rc = 0;
+
+	rc = msm_vidc_ctrl_handler_deinit(inst);
+	if (rc)
+		return rc;
+
+	return rc;
 }

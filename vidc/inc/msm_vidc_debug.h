@@ -7,12 +7,12 @@
 #ifndef __MSM_VIDC_DEBUG__
 #define __MSM_VIDC_DEBUG__
 
+#include <linux/types.h>
+#include <linux/errno.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
-#include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/types.h>
 
 struct msm_vidc_core;
 struct msm_vidc_inst;
@@ -36,7 +36,14 @@ struct msm_vidc_inst;
 
 extern unsigned int msm_vidc_debug;
 extern unsigned int msm_fw_debug;
+extern bool msm_vidc_lossless_encode;
+extern bool msm_vidc_syscache_disable;
+extern int msm_vidc_clock_voting;
+extern int msm_vidc_ddr_bw;
+extern int msm_vidc_llc_bw;
 extern bool msm_vidc_fw_dump;
+extern unsigned int msm_vidc_enable_bugon;
+extern bool msm_vidc_synx_fence_enable;
 
 /* do not modify the log message as it is used in test scripts */
 #define FMT_STRING_SET_CTRL \
@@ -156,6 +163,14 @@ enum vidc_msg_prio_fw {
 		} \
 	} while (0)
 
+#define MSM_VIDC_FATAL(value)	\
+	do { \
+		if (value) { \
+			d_vpr_e("bug on\n"); \
+			BUG_ON(value); \
+		} \
+	} while (0)
+
 enum msm_vidc_debugfs_event {
 	MSM_VIDC_DEBUGFS_EVENT_ETB,
 	MSM_VIDC_DEBUGFS_EVENT_EBD,
@@ -177,6 +192,7 @@ void msm_vidc_debugfs_deinit_inst(struct msm_vidc_inst *inst);
 void msm_vidc_debugfs_update(struct msm_vidc_inst *inst,
 			     enum msm_vidc_debugfs_event e);
 int msm_vidc_check_ratelimit(void);
+void msm_vidc_show_stats(struct msm_vidc_inst *inst);
 
 static inline bool is_stats_enabled(void)
 {

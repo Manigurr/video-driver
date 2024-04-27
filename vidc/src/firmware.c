@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
-#include <linux/firmware.h>
+#include <linux/types.h>
 #include <linux/list.h>
 #include <linux/of_address.h>
 #include <linux/devcoredump.h>
+#include <linux/firmware.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/smem.h>
-#include <linux/types.h>
 
-#include "firmware.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_debug.h"
+#include "msm_vidc_events.h"
 #include "msm_vidc_platform.h"
+#include "firmware.h"
 
 #define MAX_FIRMWARE_NAME_SIZE	128
 
@@ -62,12 +62,13 @@ static int protect_cp_mem(struct msm_vidc_core *core)
 		}
 	}
 
-	rc = qcom_scm_mem_protect_video_var(memprot.cp_start,
-					    memprot.cp_size,
-					    memprot.cp_nonpixel_start,
-					    memprot.cp_nonpixel_size);
+	rc = qcom_scm_mem_protect_video_var(memprot.cp_start, memprot.cp_size,
+			memprot.cp_nonpixel_start, memprot.cp_nonpixel_size);
 	if (rc)
 		d_vpr_e("Failed to protect memory(%d)\n", rc);
+
+	trace_venus_hfi_var_done(memprot.cp_start, memprot.cp_size,
+				 memprot.cp_nonpixel_start, memprot.cp_nonpixel_size);
 
 	return rc;
 }

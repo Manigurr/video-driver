@@ -9,6 +9,11 @@
 
 #include "msm_vidc_internal.h"
 
+struct msm_vidc_core;
+struct msm_vidc_inst;
+
+#define MSM_MEM_POOL_PACKET_SIZE 1024
+
 struct msm_memory_dmabuf {
 	struct list_head       list;
 	struct dma_buf        *dmabuf;
@@ -20,15 +25,10 @@ enum msm_memory_pool_type {
 	MSM_MEM_POOL_ALLOC_MAP,
 	MSM_MEM_POOL_TIMESTAMP,
 	MSM_MEM_POOL_DMABUF,
+	MSM_MEM_POOL_PACKET,
 	MSM_MEM_POOL_BUF_TIMER,
 	MSM_MEM_POOL_BUF_STATS,
 	MSM_MEM_POOL_MAX,
-};
-
-enum msm_memory_cache_type {
-	MSM_MEM_CACHE_CLEAN = 0,
-	MSM_MEM_CACHE_INVALIDATE,
-	MSM_MEM_CACHE_CLEAN_INVALIDATE,
 };
 
 struct msm_memory_alloc_header {
@@ -63,12 +63,12 @@ struct msm_vidc_memory_ops {
 	void (*dma_buf_put_completely)(struct msm_vidc_inst *inst,
 				       struct msm_memory_dmabuf *buf);
 	struct dma_buf_attachment *(*dma_buf_attach)(struct msm_vidc_core *core,
-						     struct dma_buf *dbuf,
-						     struct device *dev);
+						     struct dma_buf *dbuf, struct device *dev);
 	int (*dma_buf_detach)(struct msm_vidc_core *core, struct dma_buf *dbuf,
 			      struct dma_buf_attachment *attach);
-	struct sg_table *(*dma_buf_map_attachment)(struct msm_vidc_core *core,
-						   struct dma_buf_attachment *attach);
+	struct sg_table
+		*(*dma_buf_map_attachment)(struct msm_vidc_core *core,
+					   struct dma_buf_attachment *attach);
 	int (*dma_buf_unmap_attachment)(struct msm_vidc_core *core,
 					struct dma_buf_attachment *attach,
 					struct sg_table *table);
@@ -82,11 +82,12 @@ struct msm_vidc_memory_ops {
 				  struct msm_vidc_mem *mem);
 	u32 (*buffer_region)(struct msm_vidc_inst *inst,
 			     enum msm_vidc_buffer_type buffer_type);
+	int (*iommu_map)(struct msm_vidc_core *core,
+			 struct msm_vidc_mem *mem);
+	int (*iommu_unmap)(struct msm_vidc_core *core,
+			   struct msm_vidc_mem *mem);
 };
 
 const struct msm_vidc_memory_ops *get_mem_ops(void);
-
-int msm_memory_cache_operations(struct msm_vidc_inst *inst,
-	struct dma_buf *dbuf, enum msm_memory_cache_type cache_type);
 
 #endif // _MSM_VIDC_MEMORY_H_

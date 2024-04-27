@@ -6,41 +6,14 @@
 
 #include "msm_vidc_power_iris2.h"
 #include "msm_vidc_inst.h"
-#include "msm_vidc_core.h"
 #include "msm_vidc_driver.h"
+#include "msm_vidc_core.h"
 #include "msm_vidc_debug.h"
-#include "msm_vidc_bus.h"
-#include "fixedpoint.h"
-
-struct lut const *__lut(int width, int height, int fps)
-{
-	int frame_size = height * width, c = 0;
-
-	do {
-		if (LUT[c].frame_size >= frame_size && LUT[c].frame_rate >= fps)
-			return &LUT[c];
-	} while (++c < ARRAY_SIZE(LUT));
-
-	return &LUT[ARRAY_SIZE(LUT) - 1];
-}
-
-fp_t __compression_ratio(struct lut const *entry, int bpp)
-{
-	int c = 0;
-
-	for (c = 0; c < COMPRESSION_RATIO_MAX; ++c) {
-		if (entry->compression_ratio[c].bpp == bpp)
-			return entry->compression_ratio[c].ratio;
-	}
-
-	WARN(true, "Shouldn't be here, LUT possibly corrupted?\n");
-	return FP_ZERO; /* impossible */
-}
 
 u64 msm_vidc_calc_freq_iris2(struct msm_vidc_inst *inst, u32 data_size)
 {
 	u64 freq = 0;
-	struct msm_vidc_core* core;
+	struct msm_vidc_core *core;
 	u64 vsp_cycles = 0, vpp_cycles = 0, fw_cycles = 0;
 	u64 fw_vpp_cycles = 0, bitrate = 0;
 	u32 vpp_cycles_per_mb;
@@ -48,11 +21,6 @@ u64 msm_vidc_calc_freq_iris2(struct msm_vidc_inst *inst, u32 data_size)
 	u32 operating_rate, vsp_factor_num = 1, vsp_factor_den = 1;
 	u32 base_cycles = 0;
 	u32 fps, mbpf;
-
-	if (!inst || !inst->core || !inst->capabilities) {
-		d_vpr_e("%s: invalid params\n", __func__);
-		return freq;
-	}
 
 	core = inst->core;
 
@@ -68,7 +36,7 @@ u64 msm_vidc_calc_freq_iris2(struct msm_vidc_inst *inst, u32 data_size)
 	fw_cycles = fps * inst->capabilities[MB_CYCLES_FW].value;
 	fw_vpp_cycles = fps * inst->capabilities[MB_CYCLES_FW_VPP].value;
 
-	if (inst->domain == MSM_VIDC_ENCODER) {
+	if (is_encode_session(inst)) {
 		vpp_cycles_per_mb = is_low_power_session(inst) ?
 			inst->capabilities[MB_CYCLES_LP].value :
 			inst->capabilities[MB_CYCLES_VPP].value;
@@ -131,7 +99,7 @@ u64 msm_vidc_calc_freq_iris2(struct msm_vidc_inst *inst, u32 data_size)
 
 		vsp_cycles += mbs_per_second * base_cycles;
 
-	} else if (inst->domain == MSM_VIDC_DECODER) {
+	} else if (is_decode_session(inst)) {
 		/* VPP */
 		vpp_cycles = mbs_per_second * inst->capabilities[MB_CYCLES_VPP].value /
 			inst->capabilities[PIPE].value;
@@ -264,6 +232,7 @@ static u64 __calculate_decoder(struct vidc_bus_vote_data *d)
 	num_vpp_pipes = d->num_vpp_pipes;
 
 	if (d->codec == MSM_VIDC_HEVC ||
+		d->codec == MSM_VIDC_HEIC ||
 		d->codec == MSM_VIDC_VP9) {
 		/* H264, VP8, MPEG2 use the same settings */
 		/* HEVC, VP9 use the same setting */
@@ -595,9 +564,9 @@ static u64 __calculate_encoder(struct vidc_bus_vote_data *d)
 	}
 
 	if (llc_ref_chroma_cache_enabled) {
-	total_ref_read_crcb = ddr.ref_read_crcb;
-	ddr.ref_read_crcb = fp_div(ddr.ref_read_crcb,
-			ref_cbcr_read_bw_factor);
+		total_ref_read_crcb = ddr.ref_read_crcb;
+		ddr.ref_read_crcb = fp_div(ddr.ref_read_crcb,
+					   ref_cbcr_read_bw_factor);
 		llc.ref_read_crcb = total_ref_read_crcb - ddr.ref_read_crcb;
 	}
 
@@ -705,7 +674,7 @@ static u64 __calculate_encoder(struct vidc_bus_vote_data *d)
 	return ret;
 }
 
-static u64 __calculate(struct msm_vidc_inst* inst, struct vidc_bus_vote_data *d)
+static u64 __calculate(struct msm_vidc_inst *inst, struct vidc_bus_vote_data *d)
 {
 	u64 value = 0;
 

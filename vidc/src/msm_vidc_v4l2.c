@@ -4,13 +4,16 @@
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "msm_vidc.h"
-#include "msm_vidc_core.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
-#include "msm_vidc_inst.h"
-#include "msm_vidc_internal.h"
 #include "msm_vidc_v4l2.h"
+#include "msm_vidc_internal.h"
+#include "msm_vidc_core.h"
+#include "msm_vidc_inst.h"
+#include "msm_vidc_driver.h"
+#include "msm_vidc_debug.h"
+#include "msm_vidc.h"
+#include "msm_vidc_events.h"
+
+extern struct msm_vidc_core *g_core;
 
 static struct msm_vidc_inst *get_vidc_inst(struct file *filp, void *fh)
 {
@@ -35,7 +38,6 @@ unsigned int msm_v4l2_poll(struct file *filp, struct poll_table_struct *pt)
 		poll = POLLERR;
 		goto exit;
 	}
-
 	poll = msm_vidc_poll((void *)inst, filp, pt);
 	if (poll)
 		goto exit;
@@ -53,13 +55,16 @@ int msm_v4l2_open(struct file *filp)
 	struct msm_vidc_core *core = video_drvdata(filp);
 	struct msm_vidc_inst *inst;
 
+	trace_msm_v4l2_vidc_open("START", NULL);
 	inst = msm_vidc_open(core, vid_dev->type);
 	if (!inst) {
 		d_vpr_e("Failed to create instance, type = %d\n",
 			vid_dev->type);
+		trace_msm_v4l2_vidc_open("END", NULL);
 		return -ENOMEM;
 	}
-	filp->private_data = &inst->fh;
+	filp->private_data = &(inst->fh);
+	trace_msm_v4l2_vidc_open("END", inst);
 	return 0;
 }
 
@@ -74,13 +79,16 @@ int msm_v4l2_close(struct file *filp)
 		return -EINVAL;
 	}
 
+	trace_msm_v4l2_vidc_close("START", inst);
+
 	rc = msm_vidc_close(inst);
 	filp->private_data = NULL;
+	trace_msm_v4l2_vidc_close("END", NULL);
 	return rc;
 }
 
 int msm_v4l2_querycap(struct file *filp, void *fh,
-		      struct v4l2_capability *cap)
+			struct v4l2_capability *cap)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -111,7 +119,7 @@ unlock:
 }
 
 int msm_v4l2_enum_fmt(struct file *filp, void *fh,
-		      struct v4l2_fmtdesc *f)
+					struct v4l2_fmtdesc *f)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -172,7 +180,7 @@ unlock:
 }
 
 int msm_v4l2_s_fmt(struct file *filp, void *fh,
-		   struct v4l2_format *f)
+					struct v4l2_format *f)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -203,7 +211,7 @@ unlock:
 }
 
 int msm_v4l2_g_fmt(struct file *filp, void *fh,
-		   struct v4l2_format *f)
+					struct v4l2_format *f)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -234,7 +242,7 @@ unlock:
 }
 
 int msm_v4l2_s_selection(struct file *filp, void *fh,
-			 struct v4l2_selection *s)
+					struct v4l2_selection *s)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -265,7 +273,7 @@ unlock:
 }
 
 int msm_v4l2_g_selection(struct file *filp, void *fh,
-			 struct v4l2_selection *s)
+					struct v4l2_selection *s)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -296,7 +304,7 @@ unlock:
 }
 
 int msm_v4l2_s_parm(struct file *filp, void *fh,
-		    struct v4l2_streamparm *a)
+					struct v4l2_streamparm *a)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -327,7 +335,7 @@ unlock:
 }
 
 int msm_v4l2_g_parm(struct file *filp, void *fh,
-		    struct v4l2_streamparm *a)
+					struct v4l2_streamparm *a)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -358,7 +366,7 @@ unlock:
 }
 
 int msm_v4l2_reqbufs(struct file *filp, void *fh,
-		     struct v4l2_requestbuffers *b)
+				struct v4l2_requestbuffers *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -389,7 +397,7 @@ unlock:
 }
 
 int msm_v4l2_querybuf(struct file *filp, void *fh,
-		      struct v4l2_buffer *b)
+				struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -420,7 +428,7 @@ unlock:
 }
 
 int msm_v4l2_create_bufs(struct file *filp, void *fh,
-			 struct v4l2_create_buffers *b)
+				struct v4l2_create_buffers *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -451,7 +459,7 @@ unlock:
 }
 
 int msm_v4l2_prepare_buf(struct file *filp, void *fh,
-			 struct v4l2_buffer *b)
+				struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	struct video_device *vdev = video_devdata(filp);
@@ -483,7 +491,7 @@ unlock:
 }
 
 int msm_v4l2_qbuf(struct file *filp, void *fh,
-		  struct v4l2_buffer *b)
+				struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	struct video_device *vdev = video_devdata(filp);
@@ -495,6 +503,19 @@ int msm_v4l2_qbuf(struct file *filp, void *fh,
 		return -EINVAL;
 	}
 
+	/*
+	 * [1] If request_fd enabled, msm_vb2_buf_queue() is not called from here.
+	 *   instead it's called as part of msm_v4l2_request_queue().
+	 *   Hence inst lock should be acquired in common function i.e
+	 *   msm_vb2_buf_queue, to handle both requests and non-request
+	 *   scenarios.
+	 * [2] If request_fd is disabled, inst_lock can be acquired here.
+	 *   Acquiring inst_lock from here will ensure RO list insertion
+	 *   and deletion i.e. attach/map will happen under lock.
+	 * Currently, request_fd is disabled. Therefore, acquire inst_lock
+	 * from this function to ensure RO list insertion/updation is under
+	 * lock to avoid stability usecase.
+	 */
 	client_lock(inst, __func__);
 	inst_lock(inst, __func__);
 	if (is_session_error(inst)) {
@@ -516,7 +537,7 @@ exit:
 }
 
 int msm_v4l2_dqbuf(struct file *filp, void *fh,
-		   struct v4l2_buffer *b)
+				struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -542,7 +563,7 @@ unlock:
 }
 
 int msm_v4l2_streamon(struct file *filp, void *fh,
-		      enum v4l2_buf_type i)
+				enum v4l2_buf_type i)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -574,7 +595,7 @@ exit:
 }
 
 int msm_v4l2_streamoff(struct file *filp, void *fh,
-		       enum v4l2_buf_type i)
+				enum v4l2_buf_type i)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -599,7 +620,7 @@ int msm_v4l2_streamoff(struct file *filp, void *fh,
 }
 
 int msm_v4l2_subscribe_event(struct v4l2_fh *fh,
-			     const struct v4l2_event_subscription *sub)
+				const struct v4l2_event_subscription *sub)
 {
 	struct msm_vidc_inst *inst;
 	int rc = 0;
@@ -631,7 +652,7 @@ unlock:
 }
 
 int msm_v4l2_unsubscribe_event(struct v4l2_fh *fh,
-			       const struct v4l2_event_subscription *sub)
+				const struct v4l2_event_subscription *sub)
 {
 	struct msm_vidc_inst *inst;
 	int rc = 0;
@@ -689,7 +710,7 @@ unlock:
 }
 
 int msm_v4l2_decoder_cmd(struct file *filp, void *fh,
-			 struct v4l2_decoder_cmd *dec)
+				struct v4l2_decoder_cmd *dec)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	enum msm_vidc_event event;
@@ -714,7 +735,7 @@ int msm_v4l2_decoder_cmd(struct file *filp, void *fh,
 		goto unlock;
 	}
 	if (dec->cmd != V4L2_DEC_CMD_START &&
-	    dec->cmd != V4L2_DEC_CMD_STOP) {
+		dec->cmd != V4L2_DEC_CMD_STOP) {
 		i_vpr_e(inst, "%s: invalid cmd %#x\n", __func__, dec->cmd);
 		rc = -EINVAL;
 		goto unlock;
@@ -764,7 +785,7 @@ unlock:
 }
 
 int msm_v4l2_encoder_cmd(struct file *filp, void *fh,
-			 struct v4l2_encoder_cmd *enc)
+				struct v4l2_encoder_cmd *enc)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	enum msm_vidc_event event;
@@ -789,7 +810,7 @@ int msm_v4l2_encoder_cmd(struct file *filp, void *fh,
 		goto unlock;
 	}
 	if (enc->cmd != V4L2_ENC_CMD_START &&
-	    enc->cmd != V4L2_ENC_CMD_STOP) {
+		enc->cmd != V4L2_ENC_CMD_STOP) {
 		i_vpr_e(inst, "%s: invalid cmd %#x\n", __func__, enc->cmd);
 		rc = -EINVAL;
 		goto unlock;
@@ -808,7 +829,7 @@ unlock:
 }
 
 int msm_v4l2_enum_framesizes(struct file *filp, void *fh,
-			     struct v4l2_frmsizeenum *fsize)
+				struct v4l2_frmsizeenum *fsize)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -816,7 +837,7 @@ int msm_v4l2_enum_framesizes(struct file *filp, void *fh,
 	inst = get_inst_ref(g_core, inst);
 	if (!inst || !fsize) {
 		d_vpr_e("%s: invalid params: %pK %pK\n",
-			__func__, inst, fsize);
+				__func__, inst, fsize);
 		return -EINVAL;
 	}
 
@@ -840,8 +861,7 @@ unlock:
 }
 
 int msm_v4l2_enum_frameintervals(struct file *filp, void *fh,
-				 struct v4l2_frmivalenum *fival)
-
+				struct v4l2_frmivalenum *fival)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -873,7 +893,7 @@ unlock:
 }
 
 int msm_v4l2_queryctrl(struct file *filp, void *fh,
-		       struct v4l2_queryctrl *ctrl)
+	struct v4l2_queryctrl *ctrl)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -904,7 +924,7 @@ unlock:
 }
 
 int msm_v4l2_querymenu(struct file *filp, void *fh,
-		       struct v4l2_querymenu *qmenu)
+	struct v4l2_querymenu *qmenu)
 {
 	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
 	int rc = 0;
@@ -935,9 +955,21 @@ unlock:
 	return rc;
 }
 
+int msm_v4l2_request_validate(struct media_request *req)
+{
+	d_vpr_l("%s()\n", __func__);
+	return vb2_request_validate(req);
+}
+
+void msm_v4l2_request_queue(struct media_request *req)
+{
+	d_vpr_l("%s()\n", __func__);
+	v4l2_m2m_request_queue(req);
+}
+
 void msm_v4l2_m2m_device_run(void *priv)
 {
-	d_vpr_l("%s(): device_run\n", __func__);
+	d_vpr_l("%s()\n", __func__);
 }
 
 void msm_v4l2_m2m_job_abort(void *priv)

@@ -13,21 +13,25 @@ video_include_dirs := $(shell dirname `find $(VIDEO_KERNEL_ROOT) -name '*.h'` | 
 
 # Include Kernel headers
 LINUXINCLUDE +=                                 \
-	-I$(KERNEL_ROOT)                            \
-	$(addprefix -I,$(video_include_dirs))         \
-	-I$(VIDEO_KERNEL_ROOT)/vidc/inc \
-	-I$(VIDEO_KERNEL_ROOT)/variant/common/inc \
-	-I$(VIDEO_KERNEL_ROOT)/variant/iris2/inc \
-	-I$(VIDEO_KERNEL_ROOT)/variant/iris3/inc \
-	-I$(VIDEO_KERNEL_ROOT)/platform/common/inc \
-	-I$(VIDEO_KERNEL_ROOT)/platform/qcm6490/inc \
-	-I$(VIDEO_KERNEL_ROOT)/platform/sm8550/inc \
-	-I$(VIDEO_KERNEL_ROOT)/
+    -I$(KERNEL_ROOT)                            \
+    $(addprefix -I,$(video_include_dirs))         \
+    -I$(VIDEO_KERNEL_ROOT)/vidc/inc \
+    -I$(VIDEO_KERNEL_ROOT)/variant/common/inc \
+    -I$(VIDEO_KERNEL_ROOT)/variant/iris2/inc \
+    -I$(VIDEO_KERNEL_ROOT)/variant/iris3/inc \
+    -I$(VIDEO_KERNEL_ROOT)/platform/common/inc \
+    -I$(VIDEO_KERNEL_ROOT)/platform/qcm6490/inc \
+    -I$(VIDEO_KERNEL_ROOT)/platform/sm8550/inc \
+    -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/media \
+    -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/ \
+    -I$(VIDEO_KERNEL_ROOT)/
 
 # After creating lists, add content of 'ccflags-m' variable to 'ccflags-y' one.
 ccflags-y += ${ccflags-m}
 
 iris_vpu-y := \
+                  vidc/src/msm_vidc_debug.o \
+                  platform/common/src/msm_vidc_platform_ext.o \
                   vidc/src/msm_vidc_debug.o \
                   vidc/src/msm_vidc_v4l2.o \
                   vidc/src/msm_vidc_vb2.o \
@@ -46,9 +50,9 @@ iris_vpu-y := \
                   vidc/src/venus_hfi_queue.o \
                   vidc/src/hfi_packet.o \
                   vidc/src/venus_hfi_response.o \
+                  vidc/src/msm_vidc_fence.o \
                   vidc/src/msm_vidc_state.o \
                   platform/common/src/msm_vidc_platform.o \
-                  platform/sm8550/src/msm_vidc_sm8550.o \
                   platform/qcm6490/src/msm_vidc_qcm6490.o \
                   variant/common/src/msm_vidc_variant.o \
                   variant/iris3/src/msm_vidc_buffer_iris3.o \

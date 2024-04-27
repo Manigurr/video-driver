@@ -7,11 +7,11 @@
 #ifndef _MSM_VIDC_V4L2_H_
 #define _MSM_VIDC_V4L2_H_
 
-#include <linux/fs.h>
 #include <linux/poll.h>
-#include <media/v4l2-ctrls.h>
+#include <linux/fs.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-ioctl.h>
+#include <media/v4l2-ctrls.h>
 
 int msm_v4l2_open(struct file *filp);
 int msm_v4l2_close(struct file *filp);
@@ -71,6 +71,8 @@ int msm_v4l2_querymenu(struct file *file, void *fh,
 		       struct v4l2_querymenu *qmenu);
 unsigned int msm_v4l2_poll(struct file *filp,
 			   struct poll_table_struct *pt);
+int msm_v4l2_request_validate(struct media_request *req);
+void msm_v4l2_request_queue(struct media_request *req);
 void msm_v4l2_m2m_device_run(void *priv);
 void msm_v4l2_m2m_job_abort(void *priv);
 

@@ -94,7 +94,6 @@
  * --------------------------------------------------------------------------
  */
 #define WRAPPER_BASE_OFFS_IRIS2		0x000B0000
-#define WRAPPER_CORE_POWER_STATUS   (WRAPPER_BASE_OFFS_IRIS2 + 0x80)
 #define WRAPPER_INTR_STATUS_IRIS2	(WRAPPER_BASE_OFFS_IRIS2 + 0x0C)
 #define WRAPPER_INTR_STATUS_A2HWD_BMSK_IRIS2	0x8
 #define WRAPPER_INTR_STATUS_A2H_BMSK_IRIS2	0x4
@@ -183,7 +182,7 @@ static int __interrupt_init_iris2(struct msm_vidc_core *core)
 		return rc;
 
 	/* Write 0 to unmask CPU and WD interrupts */
-	mask_val &= ~(WRAPPER_INTR_MASK_A2HWD_BMSK_IRIS2|
+	mask_val &= ~(WRAPPER_INTR_MASK_A2HWD_BMSK_IRIS2 |
 			WRAPPER_INTR_MASK_A2HCPU_BMSK_IRIS2);
 	rc = __write_register(core, WRAPPER_INTR_MASK_IRIS2, mask_val);
 	if (rc)
@@ -237,54 +236,60 @@ static int __setup_ucregion_memory_map_iris2(struct msm_vidc_core *core)
 	return 0;
 }
 
-static bool is_iris2_hw_power_collapsed(struct msm_vidc_core *core)
-{
-	u32 value = 0, pwr_status = 0;
-	int rc;
-
-	rc = __read_register(core, WRAPPER_CORE_POWER_STATUS, &value);
-	if (rc)
-		return false;
-
-	pwr_status = value & BIT(1);
-
-	return pwr_status ? false : true;
-}
-
 static int __power_off_iris2_hardware(struct msm_vidc_core *core)
 {
+	int rc = 0, i;
 	u32 value = 0;
-	int rc, i;
 
-	if (is_iris2_hw_power_collapsed(core))
+	if (is_core_sub_state(core, CORE_SUBSTATE_FW_PWR_CTRL)) {
+		d_vpr_h("%s: hardware power control enabled\n", __func__);
 		goto disable_power;
+	}
 
+	/*
+	 * check to make sure core clock branch enabled else
+	 * we cannot read vcodec top idle register
+	 */
 	rc = __read_register(core, WRAPPER_CORE_CLOCK_CONFIG_IRIS2, &value);
 	if (rc)
-		goto disable_power;
+		return rc;
 
 	if (value) {
+		d_vpr_h("%s: core clock config not enabled, enabling it to read vcodec registers\n",
+			__func__);
 		rc = __write_register(core, WRAPPER_CORE_CLOCK_CONFIG_IRIS2, 0);
 		if (rc)
-			goto disable_power;
+			return rc;
 	}
 
+	/*
+	 * add MNoC idle check before collapsing MVS0 per HPG update
+	 * poll for NoC DMA idle -> HPG 6.1.1
+	 */
 	for (i = 0; i < core->capabilities[NUM_VPP_PIPE].value; i++) {
-		rc = __read_register_with_poll_timeout(core, VCODEC_SS_IDLE_STATUSn + 4 * i,
-						      0x400000, 0x400000, 2000, 20000);
+		rc = __read_register_with_poll_timeout(core, VCODEC_SS_IDLE_STATUSn + 4*i,
+				0x400000, 0x400000, 2000, 20000);
+		if (rc)
+			d_vpr_h("%s: VCODEC_SS_IDLE_STATUSn (%d) is not idle (%#x)\n",
+				__func__, i, value);
 	}
 
+	/*
+	 * Reset both sides of 2 ahb2ahb_bridges (TZ and non-TZ)
+	 * do we need to check status register here?
+	 */
 	rc = __write_register(core, CPU_CS_AHB_BRIDGE_SYNC_RESET, 0x3);
 	if (rc)
-		goto disable_power;
+		return rc;
 	rc = __write_register(core, CPU_CS_AHB_BRIDGE_SYNC_RESET, 0x2);
 	if (rc)
-		goto disable_power;
+		return rc;
 	rc = __write_register(core, CPU_CS_AHB_BRIDGE_SYNC_RESET, 0x0);
 	if (rc)
-		goto disable_power;
+		return rc;
 
 disable_power:
+	/* power down process */
 	rc = call_res_op(core, gdsc_off, core, "vcodec0");
 	if (rc) {
 		d_vpr_e("%s: disable power domain vcodec failed\n", __func__);
@@ -397,7 +402,7 @@ static int __power_off_iris2(struct msm_vidc_core *core)
 	if (rc)
 		d_vpr_e("%s: failed to unvote buses\n", __func__);
 
-	if (!call_iris_op(core, watchdog, core, core->intr_status))
+	if (!call_venus_op(core, watchdog, core, core->intr_status))
 		disable_irq_nosync(core->resource->irq);
 
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_POWER_ENABLE, 0, __func__);
@@ -417,7 +422,7 @@ static int __power_on_iris2_controller(struct msm_vidc_core *core)
 	if (rc)
 		goto fail_reset_ahb2axi;
 
-	rc = call_res_op(core, clk_enable, core, "bus");
+	rc = call_res_op(core, clk_enable, core, "core");
 	if (rc)
 		goto fail_clk_axi;
 
@@ -425,7 +430,7 @@ static int __power_on_iris2_controller(struct msm_vidc_core *core)
 	if (rc)
 		goto fail_clk_axi;
 
-	rc = call_res_op(core, clk_enable, core, "core");
+	rc = call_res_op(core, clk_enable, core, "bus");
 	if (rc)
 		goto fail_clk_controller;
 
@@ -623,6 +628,47 @@ static int __watchdog_iris2(struct msm_vidc_core *core, u32 intr_status)
 	return rc;
 }
 
+static int __noc_error_info_iris2(struct msm_vidc_core *core)
+{
+	/*
+	 * we are not supposed to access vcodec subsystem registers
+	 * unless vcodec core clock WRAPPER_CORE_CLOCK_CONFIG_IRIS2 is enabled.
+	 * core clock might have been disabled by video firmware as part of
+	 * inter frame power collapse (power plane control feature).
+	 */
+
+	/*
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_SWID_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_SWID_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_SWID_HIGH);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_SWID_HIGH:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_MAINCTL_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_MAINCTL_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRVLD_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRVLD_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRCLR_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRCLR_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG0_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG0_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG0_HIGH);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG0_HIGH:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG1_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG1_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG1_HIGH);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG1_HIGH:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG2_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG2_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG2_HIGH);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG2_HIGH:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG3_LOW);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG3_LOW:     %#x\n", val);
+	val = __read_register(core, VCODEC_NOC_ERL_MAIN_ERRLOG3_HIGH);
+	d_vpr_e("VCODEC_NOC_ERL_MAIN_ERRLOG3_HIGH:     %#x\n", val);
+	 */
+
+	return 0;
+}
+
 static int __clear_interrupt_iris2(struct msm_vidc_core *core)
 {
 	u32 intr_status = 0, mask = 0;
@@ -692,6 +738,8 @@ static int __boot_firmware_iris2(struct msm_vidc_core *core)
 		return rc;
 
 	rc = __write_register(core, CPU_CS_X2RPMh_IRIS2, 0x0);
+	if (rc)
+		return rc;
 
 	return rc;
 }
@@ -706,27 +754,30 @@ int msm_vidc_decide_work_mode_iris2(struct msm_vidc_inst *inst)
 	work_mode = MSM_VIDC_STAGE_2;
 	inp_f = &inst->fmts[INPUT_PORT];
 
+	if (is_image_decode_session(inst))
+		work_mode = MSM_VIDC_STAGE_1;
+
+	if (is_image_session(inst))
+		goto exit;
+
 	if (is_decode_session(inst)) {
 		height = inp_f->fmt.pix_mp.height;
 		width = inp_f->fmt.pix_mp.width;
 		res_ok = res_is_less_than(width, height, 1280, 720);
 		if (inst->capabilities[CODED_FRAMES].value ==
-				CODED_FRAMES_INTERLACE || res_ok) {
+				CODED_FRAMES_INTERLACE ||
+			inst->capabilities[LOWLATENCY_MODE].value ||
+			res_ok) {
 			work_mode = MSM_VIDC_STAGE_1;
 		}
 	} else if (is_encode_session(inst)) {
 		height = inst->crop.height;
 		width = inst->crop.width;
 		res_ok = !res_is_greater_than(width, height, 4096, 2160);
-		if (inst->capabilities[SLICE_MODE].value ==
-			V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES) {
+		if (res_ok &&
+			(inst->capabilities[LOWLATENCY_MODE].value)) {
 			work_mode = MSM_VIDC_STAGE_1;
 		}
-
-		if (inst->hfi_rc_type == HFI_RC_CBR_CFR ||
-			inst->hfi_rc_type == HFI_RC_CBR_VFR)
-				work_mode = MSM_VIDC_STAGE_1;
-
 		if (inst->capabilities[LOSSLESS].value)
 			work_mode = MSM_VIDC_STAGE_2;
 
@@ -737,8 +788,10 @@ int msm_vidc_decide_work_mode_iris2(struct msm_vidc_inst *inst)
 		return -EINVAL;
 	}
 
-	i_vpr_h(inst, "Configuring work mode = %u gop size = %u\n",
-		work_mode, inst->capabilities[GOP_SIZE].value);
+exit:
+	i_vpr_h(inst, "Configuring work mode = %u low latency = %u, gop size = %u\n",
+		work_mode, inst->capabilities[LOWLATENCY_MODE].value,
+		inst->capabilities[GOP_SIZE].value);
 	msm_vidc_update_cap_value(inst, STAGE, work_mode, __func__);
 
 	return 0;
@@ -751,6 +804,9 @@ int msm_vidc_decide_work_route_iris2(struct msm_vidc_inst *inst)
 
 	core = inst->core;
 	work_route = core->capabilities[NUM_VPP_PIPE].value;
+
+	if (is_image_session(inst))
+		goto exit;
 
 	if (is_decode_session(inst)) {
 		if (inst->capabilities[CODED_FRAMES].value ==
@@ -770,8 +826,50 @@ int msm_vidc_decide_work_route_iris2(struct msm_vidc_inst *inst)
 		return -EINVAL;
 	}
 
+exit:
 	i_vpr_h(inst, "Configuring work route = %u", work_route);
 	msm_vidc_update_cap_value(inst, PIPE, work_route, __func__);
+
+	return 0;
+}
+
+int msm_vidc_adjust_blur_type_iris2(void *instance, struct v4l2_ctrl *ctrl)
+{
+	s32 adjusted_value;
+	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
+	s32 rc_type = -1, cac = -1;
+	s32 pix_fmts = -1, min_quality = -1;
+
+	adjusted_value = ctrl ? ctrl->val :
+		inst->capabilities[BLUR_TYPES].value;
+
+	if (adjusted_value == MSM_VIDC_BLUR_NONE)
+		return 0;
+
+	if (msm_vidc_get_parent_value(inst, BLUR_TYPES, BITRATE_MODE,
+		&rc_type, __func__) ||
+		msm_vidc_get_parent_value(inst, BLUR_TYPES,
+		CONTENT_ADAPTIVE_CODING, &cac, __func__) ||
+		msm_vidc_get_parent_value(inst, BLUR_TYPES, PIX_FMTS,
+		&pix_fmts, __func__) ||
+		msm_vidc_get_parent_value(inst, BLUR_TYPES, MIN_QUALITY,
+		&min_quality, __func__))
+		return -EINVAL;
+
+	if (adjusted_value == MSM_VIDC_BLUR_EXTERNAL) {
+		if (is_scaling_enabled(inst) || min_quality)
+			adjusted_value = MSM_VIDC_BLUR_NONE;
+	} else if (adjusted_value == MSM_VIDC_BLUR_ADAPTIVE) {
+		if (is_scaling_enabled(inst) || min_quality ||
+			(rc_type != HFI_RC_VBR_CFR) ||
+			!cac ||
+			is_10bit_colorformat(pix_fmts)) {
+			adjusted_value = MSM_VIDC_BLUR_NONE;
+		}
+	}
+
+	msm_vidc_update_cap_value(inst, BLUR_TYPES,
+		adjusted_value, __func__);
 
 	return 0;
 }
@@ -785,93 +883,38 @@ int msm_vidc_decide_quality_mode_iris2(struct msm_vidc_inst *inst)
 	if (!is_encode_session(inst))
 		return 0;
 
-	/* lossless or all intra runs at quality mode */
-	if (inst->capabilities[LOSSLESS].value ||
-	    inst->capabilities[ALL_INTRA].value) {
+	/* image session always runs at quality mode */
+	if (is_image_session(inst)) {
 		mode = MSM_VIDC_MAX_QUALITY_MODE;
-		goto decision_done;
+		goto exit;
 	}
 
 	mbpf = msm_vidc_get_mbs_per_frame(inst);
 	mbps = mbpf * msm_vidc_get_fps(inst);
 	core = inst->core;
-	max_hq_mbpf = core->capabilities[MAX_MBPF_HQ].value;
-	max_hq_mbps = core->capabilities[MAX_MBPS_HQ].value;
+	max_hq_mbpf = core->capabilities[MAX_MBPF_HQ].value;;
+	max_hq_mbps = core->capabilities[MAX_MBPS_HQ].value;;
 
-	if (mbpf <= max_hq_mbpf && mbps <= max_hq_mbps)
+	/* NRT session to have max quality unless client configures lesser complexity */
+	if (!is_realtime_session(inst) && mbpf <= max_hq_mbpf) {
+		mode = MSM_VIDC_MAX_QUALITY_MODE;
+		if (inst->capabilities[COMPLEXITY].value < DEFAULT_COMPLEXITY)
+			mode = MSM_VIDC_POWER_SAVE_MODE;
+		goto exit;
+	}
+
+	/* Power saving always disabled for CQ and LOSSLESS RC modes. */
+	if (inst->capabilities[LOSSLESS].value ||
+		(mbpf <= max_hq_mbpf && mbps <= max_hq_mbps))
 		mode = MSM_VIDC_MAX_QUALITY_MODE;
 
-decision_done:
+exit:
 	msm_vidc_update_cap_value(inst, QUALITY_MODE, mode, __func__);
 
 	return 0;
 }
 
-int msm_vidc_adjust_bitrate_boost_iris2(void *instance, struct v4l2_ctrl *ctrl)
-{
-	s32 adjusted_value;
-	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
-	s32 rc_type = -1;
-	u32 width, height, frame_rate;
-	struct v4l2_format *f;
-	u32 max_bitrate = 0, bitrate = 0;
-
-	adjusted_value = ctrl ? ctrl->val :
-		inst->capabilities[BITRATE_BOOST].value;
-
-	if (inst->bufq[OUTPUT_PORT].vb2q->streaming)
-		return 0;
-
-	if (msm_vidc_get_parent_value(inst, BITRATE_BOOST,
-				      BITRATE_MODE, &rc_type, __func__))
-		return -EINVAL;
-
-	/*
-	 * Bitrate Boost are supported only for VBR rc type.
-	 * Hence, do not adjust or set to firmware for non VBR rc's
-	 */
-	if (rc_type != HFI_RC_VBR_CFR) {
-		adjusted_value = 0;
-		goto adjust;
-	}
-
-	frame_rate = inst->capabilities[FRAME_RATE].value >> 16;
-	f = &inst->fmts[OUTPUT_PORT];
-	width = f->fmt.pix_mp.width;
-	height = f->fmt.pix_mp.height;
-
-	/*
-	 * honor client set bitrate boost
-	 * if client did not set, keep max bitrate boost up to 4k@60fps
-	 * and remove bitrate boost after 4k@60fps
-	 */
-	if (inst->capabilities[BITRATE_BOOST].flags & CAP_FLAG_CLIENT_SET) {
-		/* accept client set bitrate boost value as is */
-	} else {
-		if (res_is_less_than_or_equal_to(width, height, 4096, 2176) &&
-		    frame_rate <= 60)
-			adjusted_value = MAX_BITRATE_BOOST;
-		else
-			adjusted_value = 0;
-	}
-
-	max_bitrate = msm_vidc_get_max_bitrate(inst);
-	bitrate = inst->capabilities[BIT_RATE].value;
-	if (adjusted_value) {
-		if ((bitrate + bitrate / (100 / adjusted_value)) > max_bitrate) {
-			i_vpr_h(inst,
-				"%s: bitrate %d is beyond max bitrate %d, remove bitrate boost\n",
-				__func__, max_bitrate, bitrate);
-			adjusted_value = 0;
-		}
-	}
-adjust:
-	msm_vidc_update_cap_value(inst, BITRATE_BOOST, adjusted_value, __func__);
-
-	return 0;
-}
-
-static struct msm_vidc_iris_ops iris2_ops = {
+static struct msm_vidc_venus_ops iris2_ops = {
 	.boot_firmware = __boot_firmware_iris2,
 	.raise_interrupt = __raise_interrupt_iris2,
 	.clear_interrupt = __clear_interrupt_iris2,
@@ -879,6 +922,7 @@ static struct msm_vidc_iris_ops iris2_ops = {
 	.power_off = __power_off_iris2,
 	.prepare_pc = __prepare_pc_iris2,
 	.watchdog = __watchdog_iris2,
+	.noc_error_info = __noc_error_info_iris2,
 };
 
 static struct msm_vidc_session_ops msm_session_ops = {
@@ -894,7 +938,8 @@ static struct msm_vidc_session_ops msm_session_ops = {
 
 int msm_vidc_init_iris2(struct msm_vidc_core *core)
 {
-	core->iris_ops = &iris2_ops;
+	d_vpr_h("%s()\n", __func__);
+	core->venus_ops = &iris2_ops;
 	core->session_ops = &msm_session_ops;
 
 	return 0;

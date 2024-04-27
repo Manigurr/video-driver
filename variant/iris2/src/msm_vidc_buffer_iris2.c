@@ -43,7 +43,7 @@ static u32 msm_vidc_decoder_bin_size_iris2(struct msm_vidc_inst *inst)
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_BIN_H264D(size, width, height,
 			is_interlaced, vpp_delay, num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_BIN_H265D(size, width, height,
 			0, vpp_delay, num_vpp_pipes);
 	else if (inst->codec == MSM_VIDC_VP9)
@@ -72,7 +72,7 @@ static u32 msm_vidc_decoder_comv_size_iris2(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_COMV_H264D(size, width, height, out_min_count);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_COMV_H265D(size, width, height, out_min_count);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -96,7 +96,7 @@ static u32 msm_vidc_decoder_non_comv_size_iris2(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_NON_COMV_H264D(size, width, height, num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_NON_COMV_H265D(size, width, height, num_vpp_pipes);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -141,7 +141,7 @@ static u32 msm_vidc_decoder_line_size_iris2(struct msm_vidc_inst *inst)
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_LINE_H264D(size, width, height, is_opb,
 			num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_LINE_H265D(size, width, height, is_opb,
 			num_vpp_pipes);
 	else if (inst->codec == MSM_VIDC_VP9)
@@ -155,11 +155,15 @@ static u32 msm_vidc_decoder_line_size_iris2(struct msm_vidc_inst *inst)
 static u32 msm_vidc_decoder_persist_size_iris2(struct msm_vidc_inst *inst)
 {
 	u32 size = 0;
+	u32 rpu_enabled = 0;
+
+	if (inst->capabilities[META_DOLBY_RPU].value)
+		rpu_enabled = 1;
 
 	if (inst->codec == MSM_VIDC_H264)
-		HFI_BUFFER_PERSIST_H264D(size, 0);
-	else if (inst->codec == MSM_VIDC_HEVC)
-		HFI_BUFFER_PERSIST_H265D(size, 0);
+		HFI_BUFFER_PERSIST_H264D(size, rpu_enabled);
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
+		HFI_BUFFER_PERSIST_H265D(size, rpu_enabled);
 	else if (inst->codec == MSM_VIDC_VP9)
 		HFI_BUFFER_PERSIST_VP9D(size);
 
@@ -228,7 +232,7 @@ static u32 msm_vidc_encoder_bin_size_iris2(struct msm_vidc_inst *inst)
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_BIN_H264E(size, inst->hfi_rc_type, width,
 			height, stage, num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_BIN_H265E(size, inst->hfi_rc_type, width,
 			height, stage, num_vpp_pipes);
 
@@ -256,7 +260,7 @@ static u32 msm_vidc_get_recon_buf_count(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		hfi_codec = HFI_CODEC_ENCODE_AVC;
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		hfi_codec = HFI_CODEC_ENCODE_HEVC;
 
 	HFI_IRIS2_ENC_RECON_BUF_COUNT(num_buf_recon, n_bframe, ltr_count,
@@ -278,7 +282,7 @@ static u32 msm_vidc_encoder_comv_size_iris2(struct msm_vidc_inst *inst)
 	num_recon = msm_vidc_get_recon_buf_count(inst);
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_COMV_H264E(size, width, height, num_recon);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_COMV_H265E(size, width, height, num_recon);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -301,7 +305,7 @@ static u32 msm_vidc_encoder_non_comv_size_iris2(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_NON_COMV_H264E(size, width, height, num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_NON_COMV_H265E(size, width, height, num_vpp_pipes);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -328,7 +332,7 @@ static u32 msm_vidc_encoder_line_size_iris2(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_LINE_H264E(size, width, height, is_tenbit, num_vpp_pipes);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_LINE_H265E(size, width, height, is_tenbit, num_vpp_pipes);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -351,7 +355,7 @@ static u32 msm_vidc_encoder_dpb_size_iris2(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_DPB_H264E(size, width, height);
-	else if (inst->codec == MSM_VIDC_HEVC)
+	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_DPB_H265E(size, width, height, is_tenbit);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
@@ -370,7 +374,7 @@ static u32 msm_vidc_encoder_arp_size_iris2(struct msm_vidc_inst *inst)
 static u32 msm_vidc_encoder_vpss_size_iris2(struct msm_vidc_inst *inst)
 {
 	u32 size = 0;
-	bool ds_enable = false, is_tenbit = false;
+	bool ds_enable = false, is_tenbit = false, blur = false;
 	u32 rotation_val = HFI_ROTATION_NONE;
 	u32 width, height, driver_colorfmt;
 	struct v4l2_format *f;
@@ -396,8 +400,10 @@ static u32 msm_vidc_encoder_vpss_size_iris2(struct msm_vidc_inst *inst)
 	driver_colorfmt = v4l2_colorformat_to_driver(inst,
 			f->fmt.pix_mp.pixelformat, __func__);
 	is_tenbit = is_10bit_colorformat(driver_colorfmt);
+	if (inst->capabilities[BLUR_TYPES].value != MSM_VIDC_BLUR_NONE)
+		blur = true;
 
-	HFI_BUFFER_VPSS_ENC(size, width, height, ds_enable, 0, is_tenbit);
+	HFI_BUFFER_VPSS_ENC(size, width, height, ds_enable, blur, is_tenbit);
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
 	return size;
 }
@@ -416,6 +422,8 @@ int msm_buffer_size_iris2(struct msm_vidc_inst *inst,
 	static const struct msm_vidc_buf_type_handle dec_buf_type_handle[] = {
 		{MSM_VIDC_BUF_INPUT,           msm_vidc_decoder_input_size              },
 		{MSM_VIDC_BUF_OUTPUT,          msm_vidc_decoder_output_size             },
+		{MSM_VIDC_BUF_INPUT_META,      msm_vidc_decoder_input_meta_size         },
+		{MSM_VIDC_BUF_OUTPUT_META,     msm_vidc_decoder_output_meta_size        },
 		{MSM_VIDC_BUF_BIN,             msm_vidc_decoder_bin_size_iris2          },
 		{MSM_VIDC_BUF_COMV,            msm_vidc_decoder_comv_size_iris2         },
 		{MSM_VIDC_BUF_NON_COMV,        msm_vidc_decoder_non_comv_size_iris2     },
@@ -426,6 +434,8 @@ int msm_buffer_size_iris2(struct msm_vidc_inst *inst,
 	static const struct msm_vidc_buf_type_handle enc_buf_type_handle[] = {
 		{MSM_VIDC_BUF_INPUT,           msm_vidc_encoder_input_size              },
 		{MSM_VIDC_BUF_OUTPUT,          msm_vidc_encoder_output_size             },
+		{MSM_VIDC_BUF_INPUT_META,      msm_vidc_encoder_input_meta_size         },
+		{MSM_VIDC_BUF_OUTPUT_META,     msm_vidc_encoder_output_meta_size        },
 		{MSM_VIDC_BUF_BIN,             msm_vidc_encoder_bin_size_iris2          },
 		{MSM_VIDC_BUF_COMV,            msm_vidc_encoder_comv_size_iris2         },
 		{MSM_VIDC_BUF_NON_COMV,        msm_vidc_encoder_non_comv_size_iris2     },
@@ -490,24 +500,28 @@ static int msm_vidc_input_min_count_iris2(struct msm_vidc_inst *inst)
 		return 0;
 	}
 
+	if (is_thumbnail_session(inst) || is_image_session(inst))
+		input_min_count = 1;
+
 	return input_min_count;
 }
 
 static int msm_buffer_dpb_count(struct msm_vidc_inst *inst)
 {
 	int count = 0;
-
-	/* encoder dpb buffer count */
-	if (is_encode_session(inst))
-		return msm_vidc_get_recon_buf_count(inst);
+	u32 color_fmt;
 
 	/* decoder dpb buffer count */
-	if (is_split_mode_enabled(inst)) {
-		count = inst->fw_min_count ?
-			inst->fw_min_count : inst->buffers.output.min_count;
+	if (is_decode_session(inst)) {
+		color_fmt = inst->capabilities[PIX_FMTS].value;
+		if (is_linear_colorformat(color_fmt))
+			count = inst->buffers.output.min_count;
+
+		return count;
 	}
 
-	return count;
+	/* encoder dpb buffer count */
+	return msm_vidc_get_recon_buf_count(inst);
 }
 
 int msm_buffer_min_count_iris2(struct msm_vidc_inst *inst,
@@ -517,9 +531,11 @@ int msm_buffer_min_count_iris2(struct msm_vidc_inst *inst,
 
 	switch (buffer_type) {
 	case MSM_VIDC_BUF_INPUT:
+	case MSM_VIDC_BUF_INPUT_META:
 		count = msm_vidc_input_min_count_iris2(inst);
 		break;
 	case MSM_VIDC_BUF_OUTPUT:
+	case MSM_VIDC_BUF_OUTPUT_META:
 		count = msm_vidc_output_min_count(inst);
 		break;
 	case MSM_VIDC_BUF_BIN:
@@ -549,9 +565,11 @@ int msm_buffer_extra_count_iris2(struct msm_vidc_inst *inst,
 
 	switch (buffer_type) {
 	case MSM_VIDC_BUF_INPUT:
+	case MSM_VIDC_BUF_INPUT_META:
 		count = msm_vidc_input_extra_count(inst);
 		break;
 	case MSM_VIDC_BUF_OUTPUT:
+	case MSM_VIDC_BUF_OUTPUT_META:
 		count = msm_vidc_output_extra_count(inst);
 		break;
 	default:

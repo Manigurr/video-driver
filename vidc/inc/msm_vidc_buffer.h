@@ -26,7 +26,13 @@ u32 msm_vidc_internal_buffer_count(struct msm_vidc_inst *inst,
 				   enum msm_vidc_buffer_type buffer_type);
 u32 msm_vidc_decoder_input_size(struct msm_vidc_inst *inst);
 u32 msm_vidc_decoder_output_size(struct msm_vidc_inst *inst);
+u32 msm_vidc_decoder_input_meta_size(struct msm_vidc_inst *inst);
+u32 msm_vidc_decoder_output_meta_size(struct msm_vidc_inst *inst);
 u32 msm_vidc_encoder_input_size(struct msm_vidc_inst *inst);
 u32 msm_vidc_encoder_output_size(struct msm_vidc_inst *inst);
+u32 msm_vidc_encoder_input_meta_size(struct msm_vidc_inst *inst);
+u32 msm_vidc_encoder_output_meta_size(struct msm_vidc_inst *inst);
+u32 msm_vidc_enc_delivery_mode_based_output_buf_size(struct msm_vidc_inst *inst,
+						     u32 frame_size);
 
 #endif // __H_MSM_VIDC_BUFFER_H__

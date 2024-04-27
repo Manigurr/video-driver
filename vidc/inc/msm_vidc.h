@@ -10,9 +10,6 @@
 #include <linux/videodev2.h>
 #include <media/media-device.h>
 
-struct msm_vidc_core;
-struct msm_vidc_inst;
-
 union msm_v4l2_cmd {
 	struct v4l2_decoder_cmd dec;
 	struct v4l2_encoder_cmd enc;
@@ -38,7 +35,7 @@ int msm_vidc_release_buffer(struct msm_vidc_inst *inst, int buffer_type,
 			    unsigned int buffer_index);
 int msm_vidc_qbuf(struct msm_vidc_inst *inst, struct media_device *mdev,
 		  struct v4l2_buffer *b);
-int msm_vidc_dqbuf(struct msm_vidc_inst *inste, struct v4l2_buffer *b);
+int msm_vidc_dqbuf(struct msm_vidc_inst *inst, struct v4l2_buffer *b);
 int msm_vidc_streamon(struct msm_vidc_inst *inst, enum v4l2_buf_type i);
 int msm_vidc_query_ctrl(struct msm_vidc_inst *inst, struct v4l2_queryctrl *ctrl);
 int msm_vidc_query_menu(struct msm_vidc_inst *inst, struct v4l2_querymenu *qmenu);

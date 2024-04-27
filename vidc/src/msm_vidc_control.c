@@ -4,11 +4,138 @@
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "msm_venc.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
 #include "msm_vidc_internal.h"
+#include "msm_vidc_driver.h"
+#include "msm_venc.h"
 #include "msm_vidc_platform.h"
+#include "msm_vidc_debug.h"
+
+extern struct msm_vidc_core *g_core;
+
+static bool is_priv_ctrl(u32 id)
+{
+	bool private = false;
+
+	if (IS_PRIV_CTRL(id))
+		return true;
+
+	/*
+	 * Treat below standard controls as private because
+	 * we have added custom values to the controls
+	 */
+	switch (id) {
+	/*
+	 * TODO: V4L2_CID_MPEG_VIDEO_HEVC_PROFILE is std ctrl. But
+	 * V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10_STILL_PICTURE support is not
+	 * available yet. Hence, make this as private ctrl for time being
+	 */
+	case V4L2_CID_MPEG_VIDEO_HEVC_PROFILE:
+		private = true;
+		break;
+	default:
+		private = false;
+		break;
+	}
+
+	return private;
+}
+
+static const char *const mpeg_video_blur_types[] = {
+	"Blur None",
+	"Blur External",
+	"Blur Adaptive",
+	NULL,
+};
+
+static const char *const mpeg_video_hevc_profile[] = {
+	"Main",
+	"Main Still Picture",
+	"Main 10",
+	"Main 10 Still Picture",
+	NULL,
+};
+
+static const char * const av1_profile[] = {
+	"Main",
+	"High",
+	"Professional",
+	NULL,
+};
+
+static const char * const av1_level[] = {
+	"2.0",
+	"2.1",
+	"2.2",
+	"2.3",
+	"3.0",
+	"3.1",
+	"3.2",
+	"3.3",
+	"4.0",
+	"4.1",
+	"4.2",
+	"4.3",
+	"5.0",
+	"5.1",
+	"5.2",
+	"5.3",
+	"6.0",
+	"6.1",
+	"6.2",
+	"6.3",
+	"7.0",
+	"7.1",
+	"7.2",
+	"7.3",
+	NULL,
+};
+
+static const char * const av1_tier[] = {
+	"Main",
+	"High",
+	NULL,
+};
+
+static const char *const mpeg_video_vidc_ir_type[] = {
+	"Random",
+	"Cyclic",
+	NULL,
+};
+
+static const char * const *msm_vidc_get_qmenu_type(
+		struct msm_vidc_inst *inst, u32 cap_id)
+{
+	switch (cap_id) {
+	case BLUR_TYPES:
+		return mpeg_video_blur_types;
+	case PROFILE:
+		if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC) {
+			return mpeg_video_hevc_profile;
+		} else if (inst->codec == MSM_VIDC_AV1) {
+			return av1_profile;
+		} else {
+			i_vpr_e(inst, "%s: invalid codec type %d for cap id %d\n",
+				__func__, inst->codec, cap_id);
+			return NULL;
+		}
+	case LEVEL:
+		if (inst->codec == MSM_VIDC_AV1) {
+			return av1_level;
+		} else {
+			i_vpr_e(inst, "%s: invalid codec type %d for cap id %d\n",
+				__func__, inst->codec, cap_id);
+			return NULL;
+		}
+	case AV1_TIER:
+		return av1_tier;
+	case IR_TYPE:
+		return mpeg_video_vidc_ir_type;
+	default:
+		i_vpr_e(inst, "%s: No available qmenu for cap id %d\n",
+			__func__, cap_id);
+		return NULL;
+	}
+}
 
 static inline bool has_children(struct msm_vidc_inst_cap *cap)
 {
@@ -26,7 +153,7 @@ bool is_valid_cap_id(enum msm_vidc_inst_capability_type cap_id)
 }
 
 bool is_valid_cap(struct msm_vidc_inst *inst,
-		  enum msm_vidc_inst_capability_type cap_id)
+		enum msm_vidc_inst_capability_type cap_id)
 {
 	if (cap_id <= INST_CAP_NONE || cap_id >= INST_CAP_MAX)
 		return false;
@@ -34,9 +161,8 @@ bool is_valid_cap(struct msm_vidc_inst *inst,
 	return !!inst->capabilities[cap_id].cap_id;
 }
 
-static inline bool is_all_childrens_visited(struct msm_vidc_inst_cap *cap,
-					    bool lookup[INST_CAP_MAX])
-{
+static inline bool is_all_childrens_visited(
+	struct msm_vidc_inst_cap *cap, bool lookup[INST_CAP_MAX]) {
 	bool found = true;
 	int i;
 
@@ -54,6 +180,7 @@ static inline bool is_all_childrens_visited(struct msm_vidc_inst_cap *cap,
 
 static int add_node_list(struct list_head *list, enum msm_vidc_inst_capability_type cap_id)
 {
+	int rc = 0;
 	struct msm_vidc_inst_cap_entry *entry = NULL;
 
 	entry = vzalloc(sizeof(*entry));
@@ -66,11 +193,11 @@ static int add_node_list(struct list_head *list, enum msm_vidc_inst_capability_t
 	entry->cap_id = cap_id;
 	list_add(&entry->list, list);
 
-	return 0;
+	return rc;
 }
 
-static int add_node(struct list_head *list, struct msm_vidc_inst_cap *lcap,
-		    bool lookup[INST_CAP_MAX])
+static int add_node(
+	struct list_head *list, struct msm_vidc_inst_cap *lcap, bool lookup[INST_CAP_MAX])
 {
 	int rc = 0;
 
@@ -85,8 +212,10 @@ static int add_node(struct list_head *list, struct msm_vidc_inst_cap *lcap,
 	return 0;
 }
 
+
+
 static int msm_vidc_add_capid_to_fw_list(struct msm_vidc_inst *inst,
-					 enum msm_vidc_inst_capability_type cap_id)
+	enum msm_vidc_inst_capability_type cap_id)
 {
 	struct msm_vidc_inst_cap_entry *entry = NULL;
 	int rc = 0;
@@ -109,7 +238,7 @@ static int msm_vidc_add_capid_to_fw_list(struct msm_vidc_inst *inst,
 }
 
 static int msm_vidc_add_children(struct msm_vidc_inst *inst,
-				 enum msm_vidc_inst_capability_type cap_id)
+	enum msm_vidc_inst_capability_type cap_id)
 {
 	struct msm_vidc_inst_cap *cap;
 	int i, rc = 0;
@@ -132,8 +261,8 @@ static int msm_vidc_add_children(struct msm_vidc_inst *inst,
 }
 
 static int msm_vidc_adjust_cap(struct msm_vidc_inst *inst,
-			       enum msm_vidc_inst_capability_type cap_id,
-			       struct v4l2_ctrl *ctrl, const char *func)
+	enum msm_vidc_inst_capability_type cap_id,
+	struct v4l2_ctrl *ctrl, const char *func)
 {
 	struct msm_vidc_inst_cap *cap;
 	int rc = 0;
@@ -165,8 +294,8 @@ static int msm_vidc_adjust_cap(struct msm_vidc_inst *inst,
 }
 
 static int msm_vidc_set_cap(struct msm_vidc_inst *inst,
-			    enum msm_vidc_inst_capability_type cap_id,
-			    const char *func)
+	enum msm_vidc_inst_capability_type cap_id,
+	const char *func)
 {
 	struct msm_vidc_inst_cap *cap;
 	int rc = 0;
@@ -195,8 +324,7 @@ static int msm_vidc_set_cap(struct msm_vidc_inst *inst,
 }
 
 static int msm_vidc_adjust_dynamic_property(struct msm_vidc_inst *inst,
-					    enum msm_vidc_inst_capability_type cap_id,
-					    struct v4l2_ctrl *ctrl)
+	enum msm_vidc_inst_capability_type cap_id, struct v4l2_ctrl *ctrl)
 {
 	struct msm_vidc_inst_cap_entry *entry = NULL, *temp = NULL;
 	struct msm_vidc_inst_cap *cap;
@@ -307,6 +435,8 @@ static int msm_vidc_set_dynamic_property(struct msm_vidc_inst *inst)
 	struct msm_vidc_inst_cap_entry *entry = NULL, *temp = NULL;
 	int rc = 0;
 
+	i_vpr_h(inst, "%s()\n", __func__);
+
 	list_for_each_entry_safe(entry, temp, &inst->firmware_list, list) {
 		rc = msm_vidc_set_cap(inst, entry->cap_id, __func__);
 		if (rc)
@@ -369,10 +499,10 @@ int msm_vidc_ctrl_handler_init(struct msm_vidc_inst *inst, bool init)
 			core->enc_codecs_count :
 			core->dec_codecs_count;
 		rc = v4l2_ctrl_handler_init(&inst->ctrl_handler,
-					    INST_CAP_MAX * codecs_count);
+			INST_CAP_MAX * codecs_count);
 		if (rc) {
 			i_vpr_e(inst, "control handler init failed, %d\n",
-				inst->ctrl_handler.error);
+					inst->ctrl_handler.error);
 			goto error;
 		}
 	}
@@ -420,31 +550,76 @@ int msm_vidc_ctrl_handler_init(struct msm_vidc_inst *inst, bool init)
 				ctrl_priv_data.skip_s_ctrl = true;
 				ctrl->priv = &ctrl_priv_data;
 				v4l2_ctrl_modify_range(ctrl,
-						       cap[idx].min,
-						       cap[idx].max,
-						       step_or_mask,
-						       cap[idx].value);
+					cap[idx].min,
+					cap[idx].max,
+					step_or_mask,
+					cap[idx].value);
 				/* reset private data to null to ensure s_ctrl not skipped */
 				ctrl->priv = NULL;
 				continue;
 			}
 		}
 
-		if (cap[idx].flags & CAP_FLAG_MENU) {
-			ctrl = v4l2_ctrl_new_std_menu(&inst->ctrl_handler,
-						      core->v4l2_ctrl_ops,
-						      cap[idx].v4l2_id,
-						      cap[idx].max,
-						      ~(cap[idx].step_or_mask),
-						      cap[idx].value);
+		if (is_priv_ctrl(cap[idx].v4l2_id)) {
+			/* add private control */
+			ctrl_cfg.def = cap[idx].value;
+			ctrl_cfg.flags = 0;
+			ctrl_cfg.id = cap[idx].v4l2_id;
+			ctrl_cfg.max = cap[idx].max;
+			ctrl_cfg.min = cap[idx].min;
+			ctrl_cfg.ops = core->v4l2_ctrl_ops;
+			if (cap[idx].flags & CAP_FLAG_MENU)
+				ctrl_cfg.type = V4L2_CTRL_TYPE_MENU;
+			else if (cap[idx].flags & CAP_FLAG_BITMASK)
+				ctrl_cfg.type = V4L2_CTRL_TYPE_BITMASK;
+			else
+				ctrl_cfg.type = V4L2_CTRL_TYPE_INTEGER;
+			if (is_meta_cap(inst, idx)) {
+				/* bitmask is expected to be enabled for meta controls */
+				if (ctrl_cfg.type != V4L2_CTRL_TYPE_BITMASK) {
+					i_vpr_e(inst,
+						"%s: missing bitmask for cap %s\n",
+						__func__, cap_name(idx));
+					rc = -EINVAL;
+					goto error;
+				}
+			}
+			if (ctrl_cfg.type == V4L2_CTRL_TYPE_MENU) {
+				ctrl_cfg.menu_skip_mask =
+					~(cap[idx].step_or_mask);
+				ctrl_cfg.qmenu = msm_vidc_get_qmenu_type(inst,
+					cap[idx].cap_id);
+			} else {
+				ctrl_cfg.step =
+					cap[idx].step_or_mask;
+			}
+			ctrl_cfg.name = cap_name(cap[idx].cap_id);
+			if (!ctrl_cfg.name) {
+				i_vpr_e(inst, "%s: %#x ctrl name is null\n",
+					__func__, ctrl_cfg.id);
+				rc = -EINVAL;
+				goto error;
+			}
+			ctrl = v4l2_ctrl_new_custom(&inst->ctrl_handler,
+					&ctrl_cfg, NULL);
 		} else {
-			ctrl = v4l2_ctrl_new_std(&inst->ctrl_handler,
-						 core->v4l2_ctrl_ops,
-						 cap[idx].v4l2_id,
-						 cap[idx].min,
-						 cap[idx].max,
-						 cap[idx].step_or_mask,
-						 cap[idx].value);
+			if (cap[idx].flags & CAP_FLAG_MENU) {
+				ctrl = v4l2_ctrl_new_std_menu(
+					&inst->ctrl_handler,
+					core->v4l2_ctrl_ops,
+					cap[idx].v4l2_id,
+					cap[idx].max,
+					~(cap[idx].step_or_mask),
+					cap[idx].value);
+			} else {
+				ctrl = v4l2_ctrl_new_std(&inst->ctrl_handler,
+					core->v4l2_ctrl_ops,
+					cap[idx].v4l2_id,
+					cap[idx].min,
+					cap[idx].max,
+					cap[idx].step_or_mask,
+					cap[idx].value);
+			}
 		}
 		if (!ctrl) {
 			i_vpr_e(inst, "%s: invalid ctrl %#x cap %24s\n", __func__,
@@ -478,9 +653,8 @@ error:
 	return rc;
 }
 
-static int
-msm_vidc_update_buffer_count_if_needed(struct msm_vidc_inst *inst,
-				       enum msm_vidc_inst_capability_type cap_id)
+static int msm_vidc_update_buffer_count_if_needed(struct msm_vidc_inst *inst,
+	enum msm_vidc_inst_capability_type cap_id)
 {
 	int rc = 0;
 	bool update_input_port = false, update_output_port = false;
@@ -490,6 +664,11 @@ msm_vidc_update_buffer_count_if_needed(struct msm_vidc_inst *inst,
 	case ENH_LAYER_COUNT:
 	case LAYER_ENABLE:
 		update_input_port = true;
+		break;
+	case THUMBNAIL_MODE:
+	case PRIORITY:
+		update_input_port = true;
+		update_output_port = true;
 		break;
 	default:
 		update_input_port = false;
@@ -507,6 +686,33 @@ msm_vidc_update_buffer_count_if_needed(struct msm_vidc_inst *inst,
 		if (rc)
 			return rc;
 	}
+
+	return rc;
+}
+
+static int msm_vidc_allow_secure_session(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+	struct msm_vidc_inst *i;
+	struct msm_vidc_core *core;
+	u32 count = 0;
+
+	core = inst->core;
+
+	core_lock(core, __func__);
+	list_for_each_entry(i, &core->instances, list) {
+		if (i->capabilities[SECURE_MODE].value)
+			count++;
+	}
+
+	if (count > core->capabilities[MAX_SECURE_SESSION_COUNT].value) {
+		i_vpr_e(inst,
+			"%s: total secure sessions %d exceeded max limit %d\n",
+			__func__, count,
+			core->capabilities[MAX_SECURE_SESSION_COUNT].value);
+		rc = -EINVAL;
+	}
+	core_unlock(core, __func__);
 
 	return rc;
 }
@@ -549,17 +755,44 @@ unlock:
 	return rc;
 }
 
-static int
-msm_vidc_update_static_property(struct msm_vidc_inst *inst,
-				enum msm_vidc_inst_capability_type cap_id,
-				struct v4l2_ctrl *ctrl)
+static int msm_vidc_update_static_property(struct msm_vidc_inst *inst,
+	enum msm_vidc_inst_capability_type cap_id, struct v4l2_ctrl *ctrl)
 {
 	int rc = 0;
+
+	if (cap_id == DRV_VERSION) {
+		i_vpr_h(inst, "%s: driver version update not allowed\n",
+			__func__);
+		return 0;
+	}
 
 	/* update value to db */
 	msm_vidc_update_cap_value(inst, cap_id, ctrl->val, __func__);
 
+	if (cap_id == CLIENT_ID) {
+		rc = msm_vidc_update_debug_str(inst);
+		if (rc)
+			return rc;
+	}
+
+	if (cap_id == SECURE_MODE) {
+		if (ctrl->val) {
+			rc = msm_vidc_allow_secure_session(inst);
+			if (rc)
+				return rc;
+		}
+	}
+
 	if (cap_id == ROTATION) {
+		struct v4l2_format *output_fmt;
+
+		output_fmt = &inst->fmts[OUTPUT_PORT];
+		rc = msm_venc_s_fmt_output(inst, output_fmt);
+		if (rc)
+			return rc;
+	}
+
+	if (cap_id == DELIVERY_MODE) {
 		struct v4l2_format *output_fmt;
 
 		output_fmt = &inst->fmts[OUTPUT_PORT];
@@ -574,6 +807,16 @@ msm_vidc_update_static_property(struct msm_vidc_inst *inst,
 			return rc;
 	}
 
+	/* call this explicitly to adjust client priority */
+	if (cap_id == PRIORITY) {
+		rc = msm_vidc_adjust_session_priority(inst, ctrl);
+		if (rc)
+			return rc;
+	}
+
+	if (cap_id == CRITICAL_PRIORITY)
+		msm_vidc_update_cap_value(inst, PRIORITY, 0, __func__);
+
 	if (cap_id == ENH_LAYER_COUNT && inst->codec == MSM_VIDC_HEVC) {
 		u32 enable;
 
@@ -585,8 +828,15 @@ msm_vidc_update_static_property(struct msm_vidc_inst *inst,
 
 		msm_vidc_update_cap_value(inst, LAYER_ENABLE, enable, __func__);
 	}
+	if (is_meta_cap(inst, cap_id)) {
+		rc = msm_vidc_update_meta_port_settings(inst);
+		if (rc)
+			return rc;
+	}
 
 	rc = msm_vidc_update_buffer_count_if_needed(inst, cap_id);
+	if (rc)
+		return rc;
 
 	return rc;
 }
@@ -795,6 +1045,8 @@ int msm_vidc_adjust_v4l2_properties(struct msm_vidc_inst *inst)
 	struct msm_vidc_inst_cap_entry *entry = NULL, *temp = NULL;
 	int rc = 0;
 
+	i_vpr_h(inst, "%s()\n", __func__);
+
 	/* adjust all possible caps from caps_list */
 	list_for_each_entry_safe(entry, temp, &inst->caps_list, list) {
 		i_vpr_l(inst, "%s: cap: id %3u, name %s\n", __func__,
@@ -812,6 +1064,8 @@ int msm_vidc_set_v4l2_properties(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_inst_cap_entry *entry = NULL, *temp = NULL;
 	int rc = 0;
+
+	i_vpr_h(inst, "%s()\n", __func__);
 
 	/* set all caps from caps_list */
 	list_for_each_entry_safe(entry, temp, &inst->caps_list, list) {

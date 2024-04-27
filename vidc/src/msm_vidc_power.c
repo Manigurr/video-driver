@@ -1,24 +1,56 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "msm_vidc_buffer.h"
-#include "msm_vidc_core.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
-#include "msm_vidc_inst.h"
-#include "msm_vidc_internal.h"
-#include "msm_vidc_platform.h"
 #include "msm_vidc_power.h"
+#include "msm_vidc_internal.h"
+#include "msm_vidc_debug.h"
+#include "msm_vidc_inst.h"
+#include "msm_vidc_core.h"
+#include "msm_vidc_driver.h"
+#include "msm_vidc_platform.h"
+#include "msm_vidc_buffer.h"
 #include "venus_hfi.h"
+#include "msm_vidc_events.h"
 
 /* Q16 Format */
 #define MSM_VIDC_MIN_UBWC_COMPLEXITY_FACTOR (1 << 16)
 #define MSM_VIDC_MAX_UBWC_COMPLEXITY_FACTOR (4 << 16)
 #define MSM_VIDC_MIN_UBWC_COMPRESSION_RATIO (1 << 16)
 #define MSM_VIDC_MAX_UBWC_COMPRESSION_RATIO (5 << 16)
+#define PASSIVE_VOTE 1000
+
+/**
+ * Utility function to enforce some of our assumptions.  Spam calls to this
+ * in hotspots in code to double check some of the assumptions that we hold.
+ */
+struct lut const *__lut(int width, int height, int fps)
+{
+	int frame_size = height * width, c = 0;
+
+	do {
+		if (LUT[c].frame_size >= frame_size && LUT[c].frame_rate >= fps)
+			return &LUT[c];
+	} while (++c < ARRAY_SIZE(LUT));
+
+	return &LUT[ARRAY_SIZE(LUT) - 1];
+}
+
+fp_t __compression_ratio(struct lut const *entry, int bpp)
+{
+	int c = 0;
+
+	for (c = 0; c < COMPRESSION_RATIO_MAX; ++c) {
+		if (entry->compression_ratio[c].bpp == bpp)
+			return entry->compression_ratio[c].ratio;
+	}
+
+	WARN(true, "Shouldn't be here, LUT possibly corrupted?\n");
+	return FP_ZERO; /* impossible */
+}
+
 
 void __dump(struct dump dump[], int len)
 {
@@ -29,13 +61,29 @@ void __dump(struct dump dump[], int len)
 
 		if (dump[c].val == DUMP_HEADER_MAGIC) {
 			snprintf(formatted_line, sizeof(formatted_line), "%s\n",
-				 dump[c].key);
+					 dump[c].key);
 		} else {
-			snprintf(format_line, sizeof(format_line),
-				 "    %-35s: %s\n", dump[c].key,
-					 dump[c].format);
-			snprintf(formatted_line, sizeof(formatted_line),
-				 format_line, dump[c].val);
+			bool fp_format = !strcmp(dump[c].format, DUMP_FP_FMT);
+
+			if (!fp_format) {
+				snprintf(format_line, sizeof(format_line),
+						 "    %-35s: %s\n", dump[c].key,
+						 dump[c].format);
+				snprintf(formatted_line, sizeof(formatted_line),
+						 format_line, dump[c].val);
+			} else {
+				size_t integer_part, fractional_part;
+
+				integer_part = fp_int(dump[c].val);
+				fractional_part = fp_frac(dump[c].val);
+				snprintf(formatted_line, sizeof(formatted_line),
+						 "    %-35s: %zd + %zd/%zd\n",
+						 dump[c].key, integer_part,
+						 fractional_part,
+						 fp_frac_base());
+
+
+			}
 		}
 		d_vpr_b("%s", formatted_line);
 	}
@@ -50,7 +98,7 @@ u64 msm_vidc_max_freq(struct msm_vidc_inst *inst)
 	core = inst->core;
 
 	if (!core->resource || !core->resource->freq_set.freq_tbl ||
-	    !core->resource->freq_set.count) {
+		!core->resource->freq_set.count) {
 		i_vpr_e(inst, "%s: invalid frequency table\n", __func__);
 		return freq;
 	}
@@ -62,7 +110,7 @@ u64 msm_vidc_max_freq(struct msm_vidc_inst *inst)
 }
 
 static int fill_dynamic_stats(struct msm_vidc_inst *inst,
-			      struct vidc_bus_vote_data *vote_data)
+	struct vidc_bus_vote_data *vote_data)
 {
 	struct msm_vidc_input_cr_data *temp, *next;
 	u32 cf = MSM_VIDC_MAX_UBWC_COMPLEXITY_FACTOR;
@@ -89,11 +137,11 @@ static int fill_dynamic_stats(struct msm_vidc_inst *inst,
 
 	/* Sanitize CF values from HW */
 	cf = clamp_t(u32, cf, MSM_VIDC_MIN_UBWC_COMPLEXITY_FACTOR,
-		     MSM_VIDC_MAX_UBWC_COMPLEXITY_FACTOR);
+			MSM_VIDC_MAX_UBWC_COMPLEXITY_FACTOR);
 	cr = clamp_t(u32, cr, MSM_VIDC_MIN_UBWC_COMPRESSION_RATIO,
-		     MSM_VIDC_MAX_UBWC_COMPRESSION_RATIO);
+			MSM_VIDC_MAX_UBWC_COMPRESSION_RATIO);
 	input_cr = clamp_t(u32, input_cr, MSM_VIDC_MIN_UBWC_COMPRESSION_RATIO,
-			   MSM_VIDC_MAX_UBWC_COMPRESSION_RATIO);
+			MSM_VIDC_MAX_UBWC_COMPRESSION_RATIO);
 
 	vote_data->compression_ratio = cr;
 	vote_data->complexity_factor = cf;
@@ -131,8 +179,7 @@ static int msm_vidc_set_buses(struct msm_vidc_inst *inst)
 		}
 
 		if (temp->power.power_mode == VIDC_POWER_TURBO) {
-			total_bw_ddr = INT_MAX;
-			total_bw_llcc = INT_MAX;
+			total_bw_ddr = total_bw_llcc = INT_MAX;
 			break;
 		}
 
@@ -140,6 +187,20 @@ static int msm_vidc_set_buses(struct msm_vidc_inst *inst)
 		total_bw_llcc += temp->power.sys_cache_bw;
 	}
 	mutex_unlock(&core->lock);
+
+	/* Incase of no video frames to process ensure min passive voting for Tensilica */
+	if (!total_bw_ddr)
+		total_bw_ddr = PASSIVE_VOTE;
+
+	if (msm_vidc_ddr_bw) {
+		d_vpr_l("msm_vidc_ddr_bw %d\n", msm_vidc_ddr_bw);
+		total_bw_ddr = msm_vidc_ddr_bw;
+	}
+
+	if (msm_vidc_llc_bw) {
+		d_vpr_l("msm_vidc_llc_bw %d\n", msm_vidc_llc_bw);
+		total_bw_llcc = msm_vidc_llc_bw;
+	}
 
 	rc = venus_hfi_scale_buses(inst, total_bw_ddr, total_bw_llcc);
 	if (rc)
@@ -165,7 +226,7 @@ int msm_vidc_scale_buses(struct msm_vidc_inst *inst)
 	vote_data = &inst->bus_data;
 
 	vote_data->power_mode = VIDC_POWER_NORMAL;
-	if (inst->power.buffer_counter < DCVS_WINDOW)
+	if (inst->power.buffer_counter < DCVS_WINDOW || is_image_session(inst))
 		vote_data->power_mode = VIDC_POWER_TURBO;
 
 	if (vote_data->power_mode == VIDC_POWER_TURBO)
@@ -181,6 +242,9 @@ int msm_vidc_scale_buses(struct msm_vidc_inst *inst)
 	vote_data->output_height = out_f->fmt.pix_mp.height;
 	vote_data->lcu_size = (inst->codec == MSM_VIDC_HEVC ||
 			inst->codec == MSM_VIDC_VP9) ? 32 : 16;
+	if (inst->codec == MSM_VIDC_AV1)
+		vote_data->lcu_size =
+			inst->capabilities[SUPER_BLOCK].value ? 128 : 64;
 	vote_data->fps = inst->max_rate;
 
 	if (is_encode_session(inst)) {
@@ -197,19 +261,17 @@ int msm_vidc_scale_buses(struct msm_vidc_inst *inst)
 			vote_data->bitrate = (vote_data->bitrate / frame_rate) * operating_rate;
 
 		vote_data->num_formats = 1;
-		vote_data->color_formats[0] =
-			v4l2_colorformat_to_driver(inst,
-						   inst->fmts[INPUT_PORT].fmt.pix_mp.pixelformat,
-						   __func__);
+		vote_data->color_formats[0] = v4l2_colorformat_to_driver(inst,
+			inst->fmts[INPUT_PORT].fmt.pix_mp.pixelformat, __func__);
+		vote_data->vpss_preprocessing_enabled =
+			inst->capabilities[REQUEST_PREPROCESS].value;
 	} else if (is_decode_session(inst)) {
 		u32 color_format;
 
 		vote_data->domain = MSM_VIDC_DECODER;
 		vote_data->bitrate = inst->max_input_data_size * vote_data->fps * 8;
-		color_format =
-			v4l2_colorformat_to_driver(inst,
-						   inst->fmts[OUTPUT_PORT].fmt.pix_mp.pixelformat,
-						   __func__);
+		color_format = v4l2_colorformat_to_driver(inst,
+			inst->fmts[OUTPUT_PORT].fmt.pix_mp.pixelformat, __func__);
 		if (is_linear_colorformat(color_format)) {
 			vote_data->num_formats = 2;
 			/*
@@ -220,7 +282,17 @@ int msm_vidc_scale_buses(struct msm_vidc_inst *inst)
 				vote_data->color_formats[0] = MSM_VIDC_FMT_TP10C;
 			else
 				vote_data->color_formats[0] = MSM_VIDC_FMT_NV12;
+
 			vote_data->color_formats[1] = color_format;
+		} else if (inst->codec == MSM_VIDC_AV1 &&
+			inst->capabilities[FILM_GRAIN].value) {
+			/*
+			 * UBWC formats with AV1 film grain requires dpb-opb
+			 * split mode
+			 */
+			vote_data->num_formats = 2;
+			vote_data->color_formats[0] =
+				vote_data->color_formats[1] = color_format;
 		} else {
 			vote_data->num_formats = 1;
 			vote_data->color_formats[0] = color_format;
@@ -272,7 +344,7 @@ int msm_vidc_set_clocks(struct msm_vidc_inst *inst)
 	core = inst->core;
 
 	if (!core->resource || !core->resource->freq_set.freq_tbl ||
-	    !core->resource->freq_set.count) {
+		!core->resource->freq_set.count) {
 		d_vpr_e("%s: invalid frequency table\n", __func__);
 		return -EINVAL;
 	}
@@ -294,6 +366,12 @@ int msm_vidc_set_clocks(struct msm_vidc_inst *inst)
 		}
 		freq += temp->power.min_freq;
 
+		if (msm_vidc_clock_voting) {
+			d_vpr_l("msm_vidc_clock_voting %d\n", msm_vidc_clock_voting);
+			freq = msm_vidc_clock_voting;
+			decrement = false;
+			break;
+		}
 		/* increment even if one session requested for it */
 		if (temp->power.dcvs_flags & MSM_VIDC_DCVS_INCR)
 			increment = true;
@@ -346,11 +424,11 @@ static int msm_vidc_apply_dcvs(struct msm_vidc_inst *inst)
 	power = &inst->power;
 
 	if (is_decode_session(inst)) {
-		bufs_with_fw = msm_vidc_num_buffers(inst, MSM_VIDC_BUF_OUTPUT,
-						    MSM_VIDC_ATTR_QUEUED);
+		bufs_with_fw = msm_vidc_num_buffers(inst,
+			MSM_VIDC_BUF_OUTPUT, MSM_VIDC_ATTR_QUEUED);
 	} else {
-		bufs_with_fw = msm_vidc_num_buffers(inst, MSM_VIDC_BUF_INPUT,
-						    MSM_VIDC_ATTR_QUEUED);
+		bufs_with_fw = msm_vidc_num_buffers(inst,
+			MSM_VIDC_BUF_INPUT, MSM_VIDC_ATTR_QUEUED);
 	}
 
 	/* +1 as one buffer is going to be queued after the function */
@@ -392,7 +470,7 @@ static int msm_vidc_apply_dcvs(struct msm_vidc_inst *inst)
 
 	/* decoder: dcvs window handling */
 	if ((power->dcvs_flags & MSM_VIDC_DCVS_DECR && bufs_with_fw >= power->nom_threshold) ||
-	    (power->dcvs_flags & MSM_VIDC_DCVS_INCR && bufs_with_fw <= power->nom_threshold)) {
+		(power->dcvs_flags & MSM_VIDC_DCVS_INCR && bufs_with_fw <= power->nom_threshold)) {
 		power->dcvs_flags = 0;
 	}
 
@@ -412,9 +490,13 @@ int msm_vidc_scale_clocks(struct msm_vidc_inst *inst)
 	core = inst->core;
 
 	if (inst->power.buffer_counter < DCVS_WINDOW ||
+	    is_image_session(inst) ||
 	    is_sub_state(inst, MSM_VIDC_DRC) ||
 	    is_sub_state(inst, MSM_VIDC_DRAIN)) {
 		inst->power.min_freq = msm_vidc_max_freq(inst);
+		inst->power.dcvs_flags = 0;
+	} else if (msm_vidc_clock_voting) {
+		inst->power.min_freq = msm_vidc_clock_voting;
 		inst->power.dcvs_flags = 0;
 	} else {
 		inst->power.min_freq =
@@ -453,7 +535,7 @@ int msm_vidc_scale_power(struct msm_vidc_inst *inst, bool scale_buses)
 	if (inst->decode_batch.enable) {
 		list_for_each_entry(vbuf, &inst->buffers.input.list, list) {
 			if (vbuf->attr & MSM_VIDC_ATTR_DEFERRED ||
-			    vbuf->attr & MSM_VIDC_ATTR_QUEUED) {
+				vbuf->attr & MSM_VIDC_ATTR_QUEUED) {
 				data_size += vbuf->data_size;
 				cnt++;
 			}
@@ -470,11 +552,15 @@ int msm_vidc_scale_power(struct msm_vidc_inst *inst, bool scale_buses)
 	operating_rate = msm_vidc_get_operating_rate(inst);
 	fps = max(frame_rate, operating_rate);
 	/*
-	 * Consider input queuing rate in power scaling in
-	 * because client may not set the frame rate / operating rate
-	 * and we need to rely on input queue rate
+	 * Consider input queuing rate power scaling in below scenarios
+	 * decoder: non-realtime and realtime as well because client
+	 *          may not set the frame rate / operating rate and
+	 *          we need to rely on input queue rate
+	 * encoder: non-realtime only, for realtime client is expected to
+	 *          queue input buffers at the set frame rate / operating rate
 	 */
-	if (is_decode_session(inst)) {
+	if (is_decode_session(inst) ||
+		(is_encode_session(inst) && !is_realtime_session(inst))) {
 		/*
 		 * when buffer detected fps is more than client set value by 12.5%,
 		 * utilize buffer detected fps to scale clock.
@@ -484,8 +570,15 @@ int msm_vidc_scale_power(struct msm_vidc_inst *inst, bool scale_buses)
 		if (timestamp_rate > (fps + fps / 8))
 			fps = timestamp_rate;
 
-		if (input_rate > fps)
+		if (input_rate > fps) {
 			fps = input_rate;
+			/*
+			 * add 6.25% more fps for NRT session to increase power to make
+			 * firmware processing little faster than client queuing rate
+			 */
+			if (!is_realtime_session(inst))
+				fps = fps + fps / 16;
+		}
 	}
 	inst->max_rate = fps;
 
@@ -502,12 +595,15 @@ int msm_vidc_scale_power(struct msm_vidc_inst *inst, bool scale_buses)
 	}
 
 	i_vpr_hp(inst,
-		 "power: inst: clk %lld ddr %d llcc %d dcvs flags %#x fps %u (%u %u %u %u) core: clk %lld ddr %lld llcc %lld\n",
-		 inst->power.curr_freq, inst->power.ddr_bw,
-		 inst->power.sys_cache_bw, inst->power.dcvs_flags,
-		 inst->max_rate, frame_rate, operating_rate, timestamp_rate,
-		 input_rate, core->power.clk_freq, core->power.bw_ddr,
-		 core->power.bw_llcc);
+		"power: inst: clk %lld ddr %d llcc %d dcvs flags %#x fps %u (%u %u %u %u) core: clk %lld ddr %lld llcc %lld\n",
+		inst->power.curr_freq, inst->power.ddr_bw,
+		inst->power.sys_cache_bw, inst->power.dcvs_flags,
+		inst->max_rate, frame_rate, operating_rate, timestamp_rate,
+		input_rate, core->power.clk_freq, core->power.bw_ddr,
+		core->power.bw_llcc);
+
+	trace_msm_vidc_perf_power_scale(inst, core->power.clk_freq,
+		core->power.bw_ddr, core->power.bw_llcc);
 
 	return 0;
 }
@@ -548,11 +644,15 @@ void msm_vidc_power_data_reset(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
 
+	i_vpr_hp(inst, "%s\n", __func__);
+
 	msm_vidc_dcvs_data_reset(inst);
 
 	inst->power.buffer_counter = 0;
 	inst->power.fw_cr = 0;
 	inst->power.fw_cf = INT_MAX;
+	inst->power.fw_av1_tile_rows = 1;
+	inst->power.fw_av1_tile_columns = 1;
 
 	rc = msm_vidc_scale_power(inst, true);
 	if (rc)

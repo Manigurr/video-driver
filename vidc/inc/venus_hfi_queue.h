@@ -63,23 +63,30 @@ struct hfi_queue_header {
 	VIDC_IFACEQ_MAX_BUF_COUNT * VIDC_IFACE_MAX_PARALLEL_CLNTS)
 
 #define VIDC_IFACEQ_GET_QHDR_START_ADDR(ptr, i)     \
-	((void *)(((ptr) + sizeof(struct hfi_queue_table_header)) + \
-		((i) * sizeof(struct hfi_queue_header))))
+	((void *)((ptr + sizeof(struct hfi_queue_table_header)) + \
+		(i * sizeof(struct hfi_queue_header))))
 
 #define QDSS_SIZE	4096
 #define SFR_SIZE	4096
+#define MMAP_BUF_SIZE	4096
 
 #define QUEUE_SIZE	(VIDC_IFACEQ_TABLE_SIZE + \
 			(VIDC_IFACEQ_QUEUE_SIZE * VIDC_IFACEQ_NUMQ))
 
 #define ALIGNED_QDSS_SIZE	ALIGN(QDSS_SIZE, SZ_4K)
 #define ALIGNED_SFR_SIZE	ALIGN(SFR_SIZE, SZ_4K)
+#define ALIGNED_MMAP_BUF_SIZE	ALIGN(MMAP_BUF_SIZE, SZ_4K)
 #define ALIGNED_QUEUE_SIZE	ALIGN(QUEUE_SIZE, SZ_4K)
 #define SHARED_QSIZE		ALIGN(ALIGNED_SFR_SIZE + ALIGNED_QUEUE_SIZE + \
-				      ALIGNED_QDSS_SIZE, SZ_1M)
-#define TOTAL_QSIZE	(SHARED_QSIZE - ALIGNED_SFR_SIZE - ALIGNED_QDSS_SIZE)
+				      ALIGNED_QDSS_SIZE + ALIGNED_MMAP_BUF_SIZE, SZ_1M)
+#define TOTAL_QSIZE	(SHARED_QSIZE - ALIGNED_SFR_SIZE - ALIGNED_QDSS_SIZE - \
+					ALIGNED_MMAP_BUF_SIZE)
+
+struct msm_vidc_core;
 
 int venus_hfi_queue_cmd_write(struct msm_vidc_core *core, void *pkt);
+int venus_hfi_queue_cmd_write_intr(struct msm_vidc_core *core, void *pkt,
+				   bool allow_intr);
 int venus_hfi_queue_msg_read(struct msm_vidc_core *core, void *pkt);
 int venus_hfi_queue_dbg_read(struct msm_vidc_core *core, void *pkt);
 void venus_hfi_queue_deinit(struct msm_vidc_core *core);

@@ -8,8 +8,8 @@
 #define __H_HFI_COMMAND_H__
 
 //todo: DP: remove below headers
-#include <linux/bits.h>
 #include <linux/types.h>
+#include <linux/bits.h>
 
 #define HFI_VIDEO_ARCH_LX               0x1
 

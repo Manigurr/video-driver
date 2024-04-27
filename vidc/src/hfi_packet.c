@@ -6,10 +6,10 @@
 
 #include "hfi_packet.h"
 #include "msm_vidc_core.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
 #include "msm_vidc_inst.h"
+#include "msm_vidc_driver.h"
 #include "msm_vidc_platform.h"
+#include "msm_vidc_debug.h"
 
 u32 get_hfi_port(struct msm_vidc_inst *inst,
 		 enum msm_vidc_port_type port)
@@ -19,9 +19,11 @@ u32 get_hfi_port(struct msm_vidc_inst *inst,
 	if (is_decode_session(inst)) {
 		switch (port) {
 		case INPUT_PORT:
+		case INPUT_META_PORT:
 			hfi_port = HFI_PORT_BITSTREAM;
 			break;
 		case OUTPUT_PORT:
+		case OUTPUT_META_PORT:
 			hfi_port = HFI_PORT_RAW;
 			break;
 		default:
@@ -32,9 +34,11 @@ u32 get_hfi_port(struct msm_vidc_inst *inst,
 	} else if (is_encode_session(inst)) {
 		switch (port) {
 		case INPUT_PORT:
+		case INPUT_META_PORT:
 			hfi_port = HFI_PORT_RAW;
 			break;
 		case OUTPUT_PORT:
+		case OUTPUT_META_PORT:
 			hfi_port = HFI_PORT_BITSTREAM;
 			break;
 		default:
@@ -58,13 +62,16 @@ u32 get_hfi_port_from_buffer_type(struct msm_vidc_inst *inst,
 	if (is_decode_session(inst)) {
 		switch (buffer_type) {
 		case MSM_VIDC_BUF_INPUT:
+		case MSM_VIDC_BUF_INPUT_META:
 		case MSM_VIDC_BUF_BIN:
 		case MSM_VIDC_BUF_COMV:
 		case MSM_VIDC_BUF_NON_COMV:
 		case MSM_VIDC_BUF_LINE:
+		case MSM_VIDC_BUF_PARTIAL_DATA:
 			hfi_port = HFI_PORT_BITSTREAM;
 			break;
 		case MSM_VIDC_BUF_OUTPUT:
+		case MSM_VIDC_BUF_OUTPUT_META:
 		case MSM_VIDC_BUF_DPB:
 			hfi_port = HFI_PORT_RAW;
 			break;
@@ -79,10 +86,12 @@ u32 get_hfi_port_from_buffer_type(struct msm_vidc_inst *inst,
 	} else if (is_encode_session(inst)) {
 		switch (buffer_type) {
 		case MSM_VIDC_BUF_INPUT:
+		case MSM_VIDC_BUF_INPUT_META:
 		case MSM_VIDC_BUF_VPSS:
 			hfi_port = HFI_PORT_RAW;
 			break;
 		case MSM_VIDC_BUF_OUTPUT:
+		case MSM_VIDC_BUF_OUTPUT_META:
 		case MSM_VIDC_BUF_BIN:
 		case MSM_VIDC_BUF_COMV:
 		case MSM_VIDC_BUF_NON_COMV:
@@ -120,6 +129,9 @@ u32 hfi_buf_type_from_driver(enum msm_vidc_domain_type domain,
 			return HFI_BUFFER_RAW;
 		else
 			return HFI_BUFFER_BITSTREAM;
+	case MSM_VIDC_BUF_INPUT_META:
+	case MSM_VIDC_BUF_OUTPUT_META:
+		return HFI_BUFFER_METADATA;
 	case MSM_VIDC_BUF_BIN:
 		return HFI_BUFFER_BIN;
 	case MSM_VIDC_BUF_ARP:
@@ -136,6 +148,8 @@ u32 hfi_buf_type_from_driver(enum msm_vidc_domain_type domain,
 		return HFI_BUFFER_PERSIST;
 	case MSM_VIDC_BUF_VPSS:
 		return HFI_BUFFER_VPSS;
+	case MSM_VIDC_BUF_PARTIAL_DATA:
+		return HFI_BUFFER_PARTIAL_DATA;
 	default:
 		d_vpr_e("invalid buffer type %d\n",
 			buffer_type);
@@ -144,8 +158,7 @@ u32 hfi_buf_type_from_driver(enum msm_vidc_domain_type domain,
 }
 
 u32 hfi_buf_type_to_driver(enum msm_vidc_domain_type domain,
-			   enum hfi_buffer_type buffer_type,
-			   enum hfi_packet_port_type port_type)
+			   enum hfi_buffer_type buffer_type, enum hfi_packet_port_type port_type)
 {
 	switch (buffer_type) {
 	case HFI_BUFFER_BITSTREAM:
@@ -158,6 +171,17 @@ u32 hfi_buf_type_to_driver(enum msm_vidc_domain_type domain,
 			return MSM_VIDC_BUF_OUTPUT;
 		else
 			return MSM_VIDC_BUF_INPUT;
+	case HFI_BUFFER_METADATA:
+		if (domain == MSM_VIDC_DECODER)
+			if (port_type == HFI_PORT_BITSTREAM)
+				return MSM_VIDC_BUF_INPUT_META;
+			else
+				return MSM_VIDC_BUF_OUTPUT_META;
+		else
+			if (port_type == HFI_PORT_BITSTREAM)
+				return MSM_VIDC_BUF_OUTPUT_META;
+			else
+				return MSM_VIDC_BUF_INPUT_META;
 	case HFI_BUFFER_BIN:
 		return MSM_VIDC_BUF_BIN;
 	case HFI_BUFFER_ARP:
@@ -174,6 +198,8 @@ u32 hfi_buf_type_to_driver(enum msm_vidc_domain_type domain,
 		return MSM_VIDC_BUF_PERSIST;
 	case HFI_BUFFER_VPSS:
 		return MSM_VIDC_BUF_VPSS;
+	case HFI_BUFFER_PARTIAL_DATA:
+		return MSM_VIDC_BUF_PARTIAL_DATA;
 	default:
 		d_vpr_e("invalid buffer type %d\n",
 			buffer_type);
@@ -190,12 +216,15 @@ u32 get_hfi_codec(struct msm_vidc_inst *inst)
 		else
 			return HFI_CODEC_DECODE_AVC;
 	case MSM_VIDC_HEVC:
+	case MSM_VIDC_HEIC:
 		if (is_encode_session(inst))
 			return HFI_CODEC_ENCODE_HEVC;
 		else
 			return HFI_CODEC_DECODE_HEVC;
 	case MSM_VIDC_VP9:
 		return HFI_CODEC_DECODE_VP9;
+	case MSM_VIDC_AV1:
+		return HFI_CODEC_DECODE_AV1;
 	default:
 		i_vpr_e(inst, "invalid codec %d, domain %d\n",
 			inst->codec, inst->domain);
@@ -281,6 +310,8 @@ int get_hfi_buffer(struct msm_vidc_inst *inst,
 		buf->flags |= HFI_BUF_HOST_FLAG_READONLY;
 	if (buffer->attr & MSM_VIDC_ATTR_PENDING_RELEASE)
 		buf->flags |= HFI_BUF_HOST_FLAG_RELEASE;
+	if (buffer->flags & MSM_VIDC_BUF_FLAG_CODECCONFIG)
+		buf->flags |= HFI_BUF_HOST_FLAG_CODEC_CONFIG;
 	buf->flags |= get_hfi_region_flag(buffer->region);
 	buf->timestamp = buffer->timestamp;
 
@@ -306,8 +337,8 @@ int hfi_create_header(u8 *packet, u32 packet_size, u32 session_id,
 	return 0;
 }
 
-int hfi_create_packet(u8 *packet, u32 packet_size, u32 pkt_type,
-		      u32 pkt_flags, u32 payload_type, u32 port,
+int hfi_create_packet(u8 *packet, u32 packet_size,
+		      u32 pkt_type, u32 pkt_flags, u32 payload_type, u32 port,
 		      u32 packet_id, void *payload, u32 payload_size)
 {
 	struct hfi_header *hdr;
@@ -351,6 +382,7 @@ int hfi_packet_sys_init(struct msm_vidc_core *core,
 {
 	int rc = 0;
 	u32 payload = 0;
+	u32 synx_client_data[2];
 
 	rc = hfi_create_header(pkt, pkt_size,
 			       0 /*session_id*/,
@@ -421,13 +453,13 @@ int hfi_packet_sys_init(struct msm_vidc_core *core,
 	payload = core->platform->data.ubwc_config->bank_swzl_level;
 	d_vpr_h("%s: ubwc swzl1 %d\n", __func__, payload);
 	rc = hfi_create_packet(pkt, pkt_size,
-			       HFI_PROP_UBWC_BANK_SWZL_LEVEL1,
-			       HFI_HOST_FLAGS_NONE,
-			       HFI_PAYLOAD_U32,
-			       HFI_PORT_NONE,
-			       core->packet_id++,
-			       &payload,
-			       sizeof(u32));
+				   HFI_PROP_UBWC_BANK_SWZL_LEVEL1,
+				   HFI_HOST_FLAGS_NONE,
+				   HFI_PAYLOAD_U32,
+				   HFI_PORT_NONE,
+				   core->packet_id++,
+				   &payload,
+				   sizeof(u32));
 	if (rc)
 		goto err_sys_init;
 
@@ -473,6 +505,24 @@ int hfi_packet_sys_init(struct msm_vidc_core *core,
 	if (rc)
 		goto err_sys_init;
 
+	/* HFI_PROP_FENCE_CLIENT_DATA */
+	if (core->capabilities[SUPPORTS_SYNX_FENCE].value) {
+		synx_client_data[0] = core->synx_fence_data.client_id;
+		synx_client_data[1] = core->synx_fence_data.client_flags;
+		d_vpr_h("%s: synx fence client id: %u client flags: %u\n",
+			__func__, synx_client_data[0], synx_client_data[1]);
+		rc = hfi_create_packet(pkt, pkt_size,
+					HFI_PROP_FENCE_CLIENT_DATA,
+					HFI_HOST_FLAGS_NONE,
+					HFI_PAYLOAD_U32_ARRAY,
+					HFI_PORT_NONE,
+					core->packet_id++,
+					synx_client_data,
+					sizeof(u32) * 2);
+		if (rc)
+			goto err_sys_init;
+	}
+
 	d_vpr_h("System init packet created\n");
 	return rc;
 
@@ -482,7 +532,7 @@ err_sys_init:
 }
 
 int hfi_packet_image_version(struct msm_vidc_core *core,
-			     u8 *pkt, u32 pkt_size)
+			      u8 *pkt, u32 pkt_size)
 {
 	int rc = 0;
 
@@ -494,14 +544,14 @@ int hfi_packet_image_version(struct msm_vidc_core *core,
 
 	/* HFI_PROP_IMAGE_VERSION */
 	rc = hfi_create_packet(pkt, pkt_size,
-			       HFI_PROP_IMAGE_VERSION,
-			       (HFI_HOST_FLAGS_RESPONSE_REQUIRED |
-			       HFI_HOST_FLAGS_INTR_REQUIRED |
-			       HFI_HOST_FLAGS_GET_PROPERTY),
-			       HFI_PAYLOAD_NONE,
-			       HFI_PORT_NONE,
-			       core->packet_id++,
-			       NULL, 0);
+				   HFI_PROP_IMAGE_VERSION,
+				   (HFI_HOST_FLAGS_RESPONSE_REQUIRED |
+				   HFI_HOST_FLAGS_INTR_REQUIRED |
+				   HFI_HOST_FLAGS_GET_PROPERTY),
+				   HFI_PAYLOAD_NONE,
+				   HFI_PORT_NONE,
+				   core->packet_id++,
+				   NULL, 0);
 	if (rc)
 		goto err_img_version;
 
@@ -514,7 +564,7 @@ err_img_version:
 }
 
 int hfi_packet_sys_pc_prep(struct msm_vidc_core *core,
-			   u8 *pkt, u32 pkt_size)
+			    u8 *pkt, u32 pkt_size)
 {
 	int rc = 0;
 
@@ -526,12 +576,12 @@ int hfi_packet_sys_pc_prep(struct msm_vidc_core *core,
 
 	/* HFI_CMD_POWER_COLLAPSE */
 	rc = hfi_create_packet(pkt, pkt_size,
-			       HFI_CMD_POWER_COLLAPSE,
-			       HFI_HOST_FLAGS_NONE,
-			       HFI_PAYLOAD_NONE,
-			       HFI_PORT_NONE,
-			       core->packet_id++,
-			       NULL, 0);
+				   HFI_CMD_POWER_COLLAPSE,
+				   HFI_HOST_FLAGS_NONE,
+				   HFI_PAYLOAD_NONE,
+				   HFI_PORT_NONE,
+				   core->packet_id++,
+				   NULL, 0);
 	if (rc)
 		goto err_sys_pc;
 
@@ -544,7 +594,7 @@ err_sys_pc:
 }
 
 int hfi_packet_sys_debug_config(struct msm_vidc_core *core,
-				u8 *pkt, u32 pkt_size, u32 debug_config)
+				 u8 *pkt, u32 pkt_size, u32 debug_config)
 {
 	int rc = 0;
 	u32 payload = 0;
@@ -588,9 +638,9 @@ err_debug:
 	return rc;
 }
 
-int hfi_packet_session_command(struct msm_vidc_inst *inst, u32 pkt_type,
-			       u32 flags, u32 port, u32 session_id,
-			       u32 payload_type, void *payload, u32 payload_size)
+int hfi_packet_session_command(struct msm_vidc_inst *inst,
+				u32 pkt_type, u32 flags, u32 port, u32 session_id,
+				u32 payload_type, void *payload, u32 payload_size)
 {
 	int rc = 0;
 	struct msm_vidc_core *core;
@@ -598,19 +648,20 @@ int hfi_packet_session_command(struct msm_vidc_inst *inst, u32 pkt_type,
 	core = inst->core;
 
 	rc = hfi_create_header(inst->packet, inst->packet_size,
-			       session_id, core->header_id++);
+				   session_id,
+				   core->header_id++);
 	if (rc)
 		goto err_cmd;
 
 	rc = hfi_create_packet(inst->packet,
-			       inst->packet_size,
-			       pkt_type,
-			       flags,
-			       payload_type,
-			       port,
-			       core->packet_id++,
-			       payload,
-			       payload_size);
+				inst->packet_size,
+				pkt_type,
+				flags,
+				payload_type,
+				port,
+				core->packet_id++,
+				payload,
+				payload_size);
 	if (rc)
 		goto err_cmd;
 
@@ -623,14 +674,14 @@ err_cmd:
 }
 
 int hfi_packet_sys_intraframe_powercollapse(struct msm_vidc_core *core,
-					    u8 *pkt, u32 pkt_size, u32 enable)
+	u8 *pkt, u32 pkt_size, u32 enable)
 {
 	int rc = 0;
 	u32 payload = 0;
 
 	rc = hfi_create_header(pkt, pkt_size,
-			       0 /*session_id*/,
-			       core->header_id++);
+		0 /*session_id*/,
+		core->header_id++);
 	if (rc)
 		goto err;
 
@@ -638,13 +689,13 @@ int hfi_packet_sys_intraframe_powercollapse(struct msm_vidc_core *core,
 	payload = 0;
 	d_vpr_h("%s: intra frame power collapse %d\n", __func__, payload);
 	rc = hfi_create_packet(pkt, pkt_size,
-			       HFI_PROP_INTRA_FRAME_POWER_COLLAPSE,
-			       HFI_HOST_FLAGS_NONE,
-			       HFI_PAYLOAD_U32,
-			       HFI_PORT_NONE,
-			       core->packet_id++,
-			       &payload,
-			       sizeof(u32));
+		HFI_PROP_INTRA_FRAME_POWER_COLLAPSE,
+		HFI_HOST_FLAGS_NONE,
+		HFI_PAYLOAD_U32,
+		HFI_PORT_NONE,
+		core->packet_id++,
+		&payload,
+		sizeof(u32));
 	if (rc)
 		goto err;
 

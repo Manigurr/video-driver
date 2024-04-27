@@ -9,7 +9,6 @@
 
 #include "hfi_packet.h"
 
-extern struct msm_vidc_core *g_core;
 int handle_response(struct msm_vidc_core *core,
 		    void *response);
 int validate_packet(u8 *response_pkt, u8 *core_resp_pkt,

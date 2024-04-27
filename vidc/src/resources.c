@@ -4,20 +4,23 @@
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/sort.h>
 #include <linux/clk.h>
-#include <linux/interconnect.h>
+#include <linux/pm_runtime.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
-#include <linux/pm_runtime.h>
 #include <linux/reset.h>
+#include <linux/interconnect.h>
 #include <linux/soc/qcom/llcc-qcom.h>
-#include <linux/sort.h>
+#ifdef CONFIG_MSM_MMRM
+#include <linux/soc/qcom/msm_mmrm.h>
+#endif
 
 #include "msm_vidc_core.h"
+#include "msm_vidc_power.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_driver.h"
 #include "msm_vidc_platform.h"
-#include "msm_vidc_power.h"
 #include "venus_hfi.h"
 
 /* Less than 50MBps is treated as trivial BW change */
@@ -26,6 +29,9 @@
 	((a) > (b) ? (a) - (b) < TRIVIAL_BW_THRESHOLD : \
 		(b) - (a) < TRIVIAL_BW_THRESHOLD)
 
+static struct clock_residency *get_residency_stats(struct clock_info *cl, u64 rate);
+static int __update_residency_stats(struct msm_vidc_core *core,
+		struct clock_info *cl, u64 rate);
 enum reset_state {
 	INIT = 1,
 	ASSERT,
@@ -47,6 +53,7 @@ static void __fatal_error(bool fatal)
 
 static void devm_llcc_release(void *res)
 {
+	d_vpr_h("%s()\n", __func__);
 	llcc_slice_putd((struct llcc_slice_desc *)res);
 }
 
@@ -70,6 +77,35 @@ static struct llcc_slice_desc *devm_llcc_get(struct device *dev, u32 id)
 
 	return llcc;
 }
+
+#ifdef CONFIG_MSM_MMRM
+static void devm_mmrm_release(void *res)
+{
+	d_vpr_h("%s()\n", __func__);
+	mmrm_client_deregister((struct mmrm_client *)res);
+}
+
+static struct mmrm_client *devm_mmrm_get(struct device *dev, struct mmrm_client_desc *desc)
+{
+	struct mmrm_client *mmrm = NULL;
+	int rc = 0;
+
+	mmrm = mmrm_client_register(desc);
+	if (!mmrm)
+		return NULL;
+
+	/**
+	 * register release callback with devm, so that when device goes
+	 * out of scope(during remove sequence), devm will take care of
+	 * de-register part by invoking release callback.
+	 */
+	rc = devm_add_action_or_reset(dev, devm_mmrm_release, (void *)mmrm);
+	if (rc)
+		return NULL;
+
+	return mmrm;
+}
+#endif
 
 static void devm_pd_release(void *res)
 {
@@ -175,7 +211,7 @@ static int __opp_set_rate(struct msm_vidc_core *core, u64 freq)
 	dev_pm_opp_put(opp);
 
 	/* print freq value */
-	d_vpr_h("%s: set rate %lu (requested %llu)\n",
+	d_vpr_h("%s: set rate %lld (requested %lld)\n",
 		__func__, opp_freq, freq);
 
 	/* scale freq to power up mxc & mmcx */
@@ -200,7 +236,7 @@ static int __init_register_base(struct msm_vidc_core *core)
 			__func__, PTR_ERR(res->register_base_addr));
 		return -EINVAL;
 	}
-	d_vpr_h("%s: reg_base %p\n", __func__, res->register_base_addr);
+	d_vpr_h("%s: reg_base %#x\n", __func__, res->register_base_addr);
 
 	return 0;
 }
@@ -208,19 +244,26 @@ static int __init_register_base(struct msm_vidc_core *core)
 static int __init_irq(struct msm_vidc_core *core)
 {
 	struct msm_vidc_resource *res;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0))
+	struct resource *kres;
+#endif
 	int rc = 0;
 
 	res = core->resource;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
 	res->irq = platform_get_irq(core->pdev, 0);
-
+#else
+	kres = platform_get_resource(core->pdev, IORESOURCE_IRQ, 0);
+	res->irq = kres ? kres->start : -1;
+#endif
 	if (res->irq < 0)
 		d_vpr_e("%s: get irq failed, %d\n", __func__, res->irq);
 
 	d_vpr_h("%s: irq %d\n", __func__, res->irq);
 
 	rc = devm_request_threaded_irq(&core->pdev->dev, res->irq, venus_hfi_isr,
-				       venus_hfi_isr_handler, IRQF_TRIGGER_HIGH, "msm-vidc", core);
+			venus_hfi_isr_handler, IRQF_TRIGGER_HIGH, "msm-vidc", core);
 	if (rc) {
 		d_vpr_e("%s: Failed to allocate venus IRQ\n", __func__);
 		return rc;
@@ -244,15 +287,14 @@ static int __init_bus(struct msm_vidc_core *core)
 	bus_count = core->platform->data.bw_tbl_size;
 
 	if (!bus_tbl || !bus_count) {
-		d_vpr_e("%s: invalid bus tbl %p or count %d\n",
+		d_vpr_e("%s: invalid bus tbl %#x or count %d\n",
 			__func__, bus_tbl, bus_count);
 		return -EINVAL;
 	}
 
 	/* allocate bus_set */
 	interconnects->bus_tbl = devm_kzalloc(&core->pdev->dev,
-					      sizeof(*interconnects->bus_tbl) * bus_count,
-					      GFP_KERNEL);
+			sizeof(*interconnects->bus_tbl) * bus_count, GFP_KERNEL);
 	if (!interconnects->bus_tbl) {
 		d_vpr_e("%s: failed to alloc memory for bus table\n", __func__);
 		return -ENOMEM;
@@ -274,11 +316,18 @@ static int __init_bus(struct msm_vidc_core *core)
 
 	/* get interconnect handle */
 	venus_hfi_for_each_bus(core, binfo) {
+		if (!strcmp(binfo->name, "venus-llcc")) {
+			if (msm_vidc_syscache_disable) {
+				d_vpr_h("%s: skipping LLC bus init: %s\n", __func__,
+					binfo->name);
+				continue;
+			}
+		}
 		binfo->icc = devm_of_icc_get(&core->pdev->dev, binfo->name);
 		if (IS_ERR_OR_NULL(binfo->icc)) {
 			d_vpr_e("%s: failed to get bus: %s\n", __func__, binfo->name);
-			rc = PTR_ERR_OR_ZERO(binfo->icc) ?
-				PTR_ERR_OR_ZERO(binfo->icc) : -EBADHANDLE;
+			rc = PTR_ERR(binfo->icc) ?
+				PTR_ERR(binfo->icc) : -EBADHANDLE;
 			binfo->icc = NULL;
 			return rc;
 		}
@@ -316,8 +365,7 @@ static int __init_power_domains(struct msm_vidc_core *core)
 
 	/* allocate power_domain_set */
 	pds->power_domain_tbl = devm_kzalloc(&core->pdev->dev,
-					     sizeof(*pds->power_domain_tbl) * pd_count,
-					     GFP_KERNEL);
+			sizeof(*pds->power_domain_tbl) * pd_count, GFP_KERNEL);
 	if (!pds->power_domain_tbl) {
 		d_vpr_e("%s: failed to alloc memory for pd table\n", __func__);
 		return -ENOMEM;
@@ -336,8 +384,8 @@ static int __init_power_domains(struct msm_vidc_core *core)
 	venus_hfi_for_each_power_domain(core, pdinfo) {
 		pdinfo->genpd_dev = devm_pd_get(&core->pdev->dev, pdinfo->name);
 		if (IS_ERR_OR_NULL(pdinfo->genpd_dev)) {
-			rc = PTR_ERR_OR_ZERO(pdinfo->genpd_dev) ?
-				PTR_ERR_OR_ZERO(pdinfo->genpd_dev) : -EBADHANDLE;
+			rc = PTR_ERR(pdinfo->genpd_dev) ?
+				PTR_ERR(pdinfo->genpd_dev) : -EBADHANDLE;
 			d_vpr_e("%s: failed to get pd: %s\n", __func__, pdinfo->name);
 			pdinfo->genpd_dev = NULL;
 			return rc;
@@ -350,7 +398,7 @@ static int __init_power_domains(struct msm_vidc_core *core)
 	/* skip init if opp not supported */
 	if (opp_count < 2) {
 		d_vpr_h("%s: opp entries not available\n", __func__);
-		return 0;
+		goto enable_runtime_pm;
 	}
 
 	/* sanitize opp table */
@@ -364,10 +412,11 @@ static int __init_power_domains(struct msm_vidc_core *core)
 
 	/* print opp table entries */
 	for (cnt = 0; cnt < opp_count; cnt++)
-		d_vpr_h("%s: opp name %s\n", __func__, opp_tbl[cnt]);
+		d_vpr_e("%s: opp name %s\n", __func__, opp_tbl[cnt]);
 
 	/* populate opp power domains(for rails) */
-	rc = devm_pm_opp_attach_genpd(&core->pdev->dev, opp_tbl, &opp_vdevs);
+	//rc = devm_pm_opp_attach_genpd(&core->pdev->dev, opp_tbl, &opp_vdevs);
+	rc = -EINVAL;
 	if (rc)
 		return rc;
 
@@ -399,6 +448,7 @@ static int __init_power_domains(struct msm_vidc_core *core)
 	 * RCG(video_cc_mvs0_clk_src)
 	 */
 	/* enable runtime pm */
+enable_runtime_pm:
 	rc = devm_pm_runtime_enable(&core->pdev->dev);
 	if (rc) {
 		d_vpr_e("%s: failed to enable runtime pm\n", __func__);
@@ -416,11 +466,13 @@ static int __init_power_domains(struct msm_vidc_core *core)
 
 static int __init_clocks(struct msm_vidc_core *core)
 {
+	struct clock_residency *residency = NULL;
 	const struct clk_table *clk_tbl;
+	struct freq_table *freq_tbl;
 	struct clock_set *clocks;
 	struct clock_info *cinfo = NULL;
-	u32 clk_count = 0, cnt = 0;
-	int rc = 0;
+	u32 clk_count = 0, freq_count = 0;
+	int fcnt = 0, cnt = 0, rc = 0;
 
 	clocks = &core->resource->clock_set;
 
@@ -428,15 +480,14 @@ static int __init_clocks(struct msm_vidc_core *core)
 	clk_count = core->platform->data.clk_tbl_size;
 
 	if (!clk_tbl || !clk_count) {
-		d_vpr_e("%s: invalid clock tbl %p or count %d\n",
+		d_vpr_e("%s: invalid clock tbl %#x or count %d\n",
 			__func__, clk_tbl, clk_count);
 		return -EINVAL;
 	}
 
 	/* allocate clock_set */
 	clocks->clock_tbl = devm_kzalloc(&core->pdev->dev,
-					 sizeof(*clocks->clock_tbl) * clk_count,
-					 GFP_KERNEL);
+			sizeof(*clocks->clock_tbl) * clk_count, GFP_KERNEL);
 	if (!clocks->clock_tbl) {
 		d_vpr_e("%s: failed to alloc memory for clock table\n", __func__);
 		return -ENOMEM;
@@ -450,6 +501,42 @@ static int __init_clocks(struct msm_vidc_core *core)
 		clocks->clock_tbl[cnt].has_scaling = clk_tbl[cnt].scaling;
 	}
 
+	freq_tbl = core->platform->data.freq_tbl;
+	freq_count = core->platform->data.freq_tbl_size;
+
+	/* populate clk residency stats table */
+	for (cnt = 0; cnt < clocks->count; cnt++) {
+		/* initialize residency_list */
+		INIT_LIST_HEAD(&clocks->clock_tbl[cnt].residency_list);
+
+		/* skip if scaling not supported */
+		if (!clocks->clock_tbl[cnt].has_scaling)
+			continue;
+
+		for (fcnt = 0; fcnt < freq_count; fcnt++) {
+			residency = devm_kzalloc(&core->pdev->dev,
+				sizeof(struct clock_residency), GFP_KERNEL);
+			if (!residency) {
+				d_vpr_e("%s: failed to alloc clk residency stat node\n", __func__);
+				return -ENOMEM;
+			}
+
+			if (!freq_tbl) {
+				d_vpr_e("%s: invalid freq tbl %#x\n", __func__, freq_tbl);
+				return -EINVAL;
+			}
+
+			/* update residency node */
+			residency->rate = freq_tbl[fcnt].freq;
+			residency->start_time_us = 0;
+			residency->total_time_us = 0;
+			INIT_LIST_HEAD(&residency->list);
+
+			/* add entry into residency_list */
+			list_add_tail(&residency->list, &clocks->clock_tbl[cnt].residency_list);
+		}
+	}
+
 	/* print clock fields */
 	venus_hfi_for_each_clock(core, cinfo) {
 		d_vpr_h("%s: clock name %s clock id %#x scaling %d\n",
@@ -461,8 +548,8 @@ static int __init_clocks(struct msm_vidc_core *core)
 		cinfo->clk = devm_clk_get(&core->pdev->dev, cinfo->name);
 		if (IS_ERR_OR_NULL(cinfo->clk)) {
 			d_vpr_e("%s: failed to get clock: %s\n", __func__, cinfo->name);
-			rc = PTR_ERR_OR_ZERO(cinfo->clk) ?
-				PTR_ERR_OR_ZERO(cinfo->clk) : -EINVAL;
+			rc = PTR_ERR(cinfo->clk) ?
+				PTR_ERR(cinfo->clk) : -EINVAL;
 			cinfo->clk = NULL;
 			return rc;
 		}
@@ -485,15 +572,14 @@ static int __init_reset_clocks(struct msm_vidc_core *core)
 	rst_count = core->platform->data.clk_rst_tbl_size;
 
 	if (!rst_tbl || !rst_count) {
-		d_vpr_e("%s: invalid reset tbl %p or count %d\n",
+		d_vpr_e("%s: invalid reset tbl %#x or count %d\n",
 			__func__, rst_tbl, rst_count);
 		return 0;
 	}
 
 	/* allocate reset_set */
 	rsts->reset_tbl = devm_kzalloc(&core->pdev->dev,
-				       sizeof(*rsts->reset_tbl) * rst_count,
-				       GFP_KERNEL);
+			sizeof(*rsts->reset_tbl) * rst_count, GFP_KERNEL);
 	if (!rsts->reset_tbl) {
 		d_vpr_e("%s: failed to alloc memory for reset table\n", __func__);
 		return -ENOMEM;
@@ -515,14 +601,14 @@ static int __init_reset_clocks(struct msm_vidc_core *core)
 	/* get reset clock handle */
 	venus_hfi_for_each_reset_clock(core, rinfo) {
 		if (rinfo->exclusive_release)
-			rinfo->rst = devm_reset_control_get_exclusive_released(&core->pdev->dev,
-									       rinfo->name);
+			rinfo->rst = devm_reset_control_get_exclusive_released(
+				&core->pdev->dev, rinfo->name);
 		else
 			rinfo->rst = devm_reset_control_get(&core->pdev->dev, rinfo->name);
 		if (IS_ERR_OR_NULL(rinfo->rst)) {
 			d_vpr_e("%s: failed to get reset clock: %s\n", __func__, rinfo->name);
-			rc = PTR_ERR_OR_ZERO(rinfo->rst) ?
-				PTR_ERR_OR_ZERO(rinfo->rst) : -EINVAL;
+			rc = PTR_ERR(rinfo->rst) ?
+				PTR_ERR(rinfo->rst) : -EINVAL;
 			rinfo->rst = NULL;
 			return rc;
 		}
@@ -549,15 +635,14 @@ static int __init_subcaches(struct msm_vidc_core *core)
 	llcc_count = core->platform->data.subcache_tbl_size;
 
 	if (!llcc_tbl || !llcc_count) {
-		d_vpr_e("%s: invalid llcc tbl %p or count %d\n",
+		d_vpr_e("%s: invalid llcc tbl %#x or count %d\n",
 			__func__, llcc_tbl, llcc_count);
 		return -EINVAL;
 	}
 
 	/* allocate clock_set */
 	caches->subcache_tbl = devm_kzalloc(&core->pdev->dev,
-					    sizeof(*caches->subcache_tbl) * llcc_count,
-					    GFP_KERNEL);
+			sizeof(*caches->subcache_tbl) * llcc_count, GFP_KERNEL);
 	if (!caches->subcache_tbl) {
 		d_vpr_e("%s: failed to alloc memory for subcache table\n", __func__);
 		return -ENOMEM;
@@ -581,8 +666,8 @@ static int __init_subcaches(struct msm_vidc_core *core)
 		sinfo->subcache = devm_llcc_get(&core->pdev->dev, sinfo->llcc_id);
 		if (IS_ERR_OR_NULL(sinfo->subcache)) {
 			d_vpr_e("%s: failed to get subcache: %d\n", __func__, sinfo->llcc_id);
-			rc = PTR_ERR_OR_ZERO(sinfo->subcache) ?
-				PTR_ERR_OR_ZERO(sinfo->subcache) : -EBADHANDLE;
+			rc = PTR_ERR(sinfo->subcache) ?
+				PTR_ERR(sinfo->subcache) : -EBADHANDLE;
 			sinfo->subcache = NULL;
 			return rc;
 		}
@@ -604,15 +689,14 @@ static int __init_freq_table(struct msm_vidc_core *core)
 	freq_count = core->platform->data.freq_tbl_size;
 
 	if (!freq_tbl || !freq_count) {
-		d_vpr_e("%s: invalid freq tbl %p or count %d\n",
+		d_vpr_e("%s: invalid freq tbl %#x or count %d\n",
 			__func__, freq_tbl, freq_count);
 		return -EINVAL;
 	}
 
 	/* allocate freq_set */
 	clks->freq_tbl = devm_kzalloc(&core->pdev->dev,
-				      sizeof(*clks->freq_tbl) * freq_count,
-				      GFP_KERNEL);
+			sizeof(*clks->freq_tbl) * freq_count, GFP_KERNEL);
 	if (!clks->freq_tbl) {
 		d_vpr_e("%s: failed to alloc memory for freq table\n", __func__);
 		return -ENOMEM;
@@ -648,15 +732,14 @@ static int __init_context_banks(struct msm_vidc_core *core)
 	cb_count = core->platform->data.context_bank_tbl_size;
 
 	if (!cb_tbl || !cb_count) {
-		d_vpr_e("%s: invalid context bank tbl %p or count %d\n",
+		d_vpr_e("%s: invalid context bank tbl %#x or count %d\n",
 			__func__, cb_tbl, cb_count);
 		return -EINVAL;
 	}
 
 	/* allocate context_bank table */
 	cbs->context_bank_tbl = devm_kzalloc(&core->pdev->dev,
-					     sizeof(*cbs->context_bank_tbl) * cb_count,
-					     GFP_KERNEL);
+			sizeof(*cbs->context_bank_tbl) * cb_count, GFP_KERNEL);
 	if (!cbs->context_bank_tbl) {
 		d_vpr_e("%s: failed to alloc memory for context_bank table\n", __func__);
 		return -ENOMEM;
@@ -680,17 +763,134 @@ static int __init_context_banks(struct msm_vidc_core *core)
 
 	/* print context_bank fiels */
 	venus_hfi_for_each_context_bank(core, cbinfo) {
-		d_vpr_h("%s: name %s addr start %#x size %#x secure %d\n",
+		d_vpr_h("%s: name %s addr start %#x size %#x secure %d "
+			"coherant %d region %d dma_mask %llu\n",
 			__func__, cbinfo->name, cbinfo->addr_range.start,
-			cbinfo->addr_range.size, cbinfo->secure);
-
-		d_vpr_h("%s: coherant %d region %d dma_mask %llu\n",
-			__func__, cbinfo->dma_coherant, cbinfo->region,
-			cbinfo->dma_mask);
+			cbinfo->addr_range.size, cbinfo->secure,
+			cbinfo->dma_coherant, cbinfo->region, cbinfo->dma_mask);
 	}
 
 	return rc;
 }
+
+static int __init_device_region(struct msm_vidc_core *core)
+{
+	const struct device_region_table *dev_reg_tbl;
+	struct device_region_set *dev_set;
+	struct device_region_info *dev_reg_info;
+	u32 dev_reg_count = 0, cnt = 0;
+	int rc = 0;
+
+	dev_set = &core->resource->device_region_set;
+
+	dev_reg_tbl = core->platform->data.dev_reg_tbl;
+	dev_reg_count = core->platform->data.dev_reg_tbl_size;
+
+	if (!dev_reg_tbl || !dev_reg_count) {
+		d_vpr_h("%s: device regions not available\n", __func__);
+		return 0;
+	}
+
+	/* allocate device region table */
+	dev_set->device_region_tbl = devm_kzalloc(&core->pdev->dev,
+			sizeof(*dev_set->device_region_tbl) * dev_reg_count, GFP_KERNEL);
+	if (!dev_set->device_region_tbl) {
+		d_vpr_e("%s: failed to alloc memory for device region table\n", __func__);
+		return -ENOMEM;
+	}
+	dev_set->count = dev_reg_count;
+
+	/* populate device region fields from platform data */
+	for (cnt = 0; cnt < dev_set->count; cnt++) {
+		dev_set->device_region_tbl[cnt].name = dev_reg_tbl[cnt].name;
+		dev_set->device_region_tbl[cnt].phy_addr = dev_reg_tbl[cnt].phy_addr;
+		dev_set->device_region_tbl[cnt].size = dev_reg_tbl[cnt].size;
+		dev_set->device_region_tbl[cnt].dev_addr = dev_reg_tbl[cnt].dev_addr;
+		dev_set->device_region_tbl[cnt].region = dev_reg_tbl[cnt].region;
+	}
+
+	/* print device region fields */
+	venus_hfi_for_each_device_region(core, dev_reg_info) {
+		d_vpr_h("%s: name %s phy_addr %#x size %#x dev_addr %#x dev_region %d\n",
+			__func__, dev_reg_info->name, dev_reg_info->phy_addr, dev_reg_info->size,
+			dev_reg_info->dev_addr, dev_reg_info->region);
+	}
+
+	return rc;
+}
+
+#ifdef CONFIG_MSM_MMRM
+static int __register_mmrm(struct msm_vidc_core *core)
+{
+	int rc = 0;
+	struct clock_info *cl;
+
+	/* skip if platform does not support mmrm */
+	if (!is_mmrm_supported(core)) {
+		d_vpr_h("%s: MMRM not supported\n", __func__);
+		return 0;
+	}
+
+	/* get mmrm handle for each clock sources */
+	venus_hfi_for_each_clock(core, cl) {
+		struct mmrm_client_desc desc;
+		char *name = (char *)desc.client_info.desc.name;
+
+		// TODO: set notifier data vals
+		struct mmrm_client_notifier_data notifier_data = {
+			MMRM_CLIENT_RESOURCE_VALUE_CHANGE,
+			{{0, 0}},
+			NULL};
+
+		// TODO: add callback fn
+		desc.notifier_callback_fn = NULL;
+
+		if (!cl->has_scaling)
+			continue;
+
+		if (IS_ERR_OR_NULL(cl->clk)) {
+			d_vpr_e("%s: Invalid clock: %s\n", __func__, cl->name);
+			return PTR_ERR(cl->clk) ? PTR_ERR(cl->clk) : -EINVAL;
+		}
+
+		desc.client_type = MMRM_CLIENT_CLOCK;
+		desc.client_info.desc.client_domain = MMRM_CLIENT_DOMAIN_VIDEO;
+		desc.client_info.desc.client_id = cl->clk_id;
+		strscpy(name, cl->name, sizeof(desc.client_info.desc.name));
+		desc.client_info.desc.clk = cl->clk;
+		desc.priority = MMRM_CLIENT_PRIOR_LOW;
+		desc.pvt_data = notifier_data.pvt_data;
+
+		d_vpr_h("%s: domain(%d) cid(%d) name(%s) clk(%pK)\n",
+			__func__,
+			desc.client_info.desc.client_domain,
+			desc.client_info.desc.client_id,
+			desc.client_info.desc.name,
+			desc.client_info.desc.clk);
+
+		d_vpr_h("%s: type(%d) pri(%d) pvt(%pK) notifier(%pK)\n",
+			__func__,
+			desc.client_type,
+			desc.priority,
+			desc.pvt_data,
+			desc.notifier_callback_fn);
+
+		cl->mmrm_client = devm_mmrm_get(&core->pdev->dev, &desc);
+		if (!cl->mmrm_client) {
+			d_vpr_e("%s: Failed to register clk(%s): %d\n",
+				__func__, cl->name, rc);
+			return -EINVAL;
+		}
+	}
+
+	return rc;
+}
+#else
+static int __register_mmrm(struct msm_vidc_core *core)
+{
+	return 0;
+}
+#endif
 
 static int __enable_power_domains(struct msm_vidc_core *core, const char *name)
 {
@@ -698,10 +898,12 @@ static int __enable_power_domains(struct msm_vidc_core *core, const char *name)
 	int rc = 0;
 
 	/* power up rails(mxc & mmcx) to enable RCG(video_cc_mvs0_clk_src) */
-	rc = __opp_set_rate(core, ULONG_MAX);
-	if (rc) {
-		d_vpr_e("%s: opp setrate failed\n", __func__);
-		return rc;
+	if (core->platform->data.opp_tbl) { 
+		rc = __opp_set_rate(core, ULONG_MAX);
+		if (rc) {
+			d_vpr_e("%s: opp setrate failed\n", __func__);
+			return rc;
+		}
 	}
 
 	/* power up (gdsc0/gdsc0c) to enable (mvs0/mvs0c) branch clock */
@@ -739,10 +941,12 @@ static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
 	}
 
 	/* power down rails(mxc & mmcx) to disable RCG(video_cc_mvs0_clk_src) */
-	rc = __opp_set_rate(core, 0);
-	if (rc) {
-		d_vpr_e("%s: opp setrate failed\n", __func__);
-		return rc;
+	if (core->platform->data.opp_tbl) {
+		rc = __opp_set_rate(core, 0);
+		if (rc) {
+			d_vpr_e("%s: opp setrate failed\n", __func__);
+			return rc;
+		}
 	}
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
 
@@ -768,7 +972,7 @@ static int __disable_subcaches(struct msm_vidc_core *core)
 	struct subcache_info *sinfo;
 	int rc = 0;
 
-	if (!is_sys_cache_present(core))
+	if (msm_vidc_syscache_disable || !is_sys_cache_present(core))
 		return 0;
 
 	/* De-activate subcaches */
@@ -794,7 +998,7 @@ static int __enable_subcaches(struct msm_vidc_core *core)
 	u32 c = 0;
 	struct subcache_info *sinfo;
 
-	if (!is_sys_cache_present(core))
+	if (msm_vidc_syscache_disable || !is_sys_cache_present(core))
 		return 0;
 
 	/* Activate subcaches */
@@ -894,7 +1098,7 @@ static int __vote_buses(struct msm_vidc_core *core,
 
 			/* ensure freq is within limits */
 			bw_kbps = clamp_t(typeof(bw_kbps), bw_kbps,
-					  bus->min_kbps, bus->max_kbps);
+						 bus->min_kbps, bus->max_kbps);
 
 			if (TRIVIAL_BW_CHANGE(bw_kbps, bw_prev) && bw_prev) {
 				d_vpr_l("Skip voting bus %s to %lu kBps\n",
@@ -925,10 +1129,137 @@ static int set_bw(struct msm_vidc_core *core, unsigned long bw_ddr,
 	return __vote_buses(core, bw_ddr, bw_llcc);
 }
 
+static int print_residency_stats(struct msm_vidc_core *core, struct clock_info *cl)
+{
+	struct clock_residency *residency = NULL;
+	u64 total_time_us = 0;
+	int rc = 0;
+
+	/* skip if scaling not supported */
+	if (!cl->has_scaling)
+		return 0;
+
+	/* grand total residency time */
+	list_for_each_entry(residency, &cl->residency_list, list)
+		total_time_us += residency->total_time_us;
+
+	/* sanity check to avoid divide by 0 */
+	total_time_us = (total_time_us > 0) ? total_time_us : 1;
+
+	/* print residency percent for each clock */
+	list_for_each_entry(residency, &cl->residency_list, list) {
+		d_vpr_hs("%s: %s clock rate [%d] total %lluus residency %u%%\n",
+			__func__, cl->name, residency->rate, residency->total_time_us,
+			(residency->total_time_us * 100 + total_time_us / 2) / total_time_us);
+	}
+
+	return rc;
+}
+
+static int reset_residency_stats(struct msm_vidc_core *core, struct clock_info *cl)
+{
+	struct clock_residency *residency = NULL;
+	int rc = 0;
+
+	/* skip if scaling not supported */
+	if (!cl->has_scaling)
+		return 0;
+
+	d_vpr_h("%s: reset %s residency stats\n", __func__, cl->name);
+
+	/* reset clock residency stats */
+	list_for_each_entry(residency, &cl->residency_list, list) {
+		residency->start_time_us = 0;
+		residency->total_time_us = 0;
+	}
+	/*
+	 * During the reset make sure to update start time of the clk prev freq,
+	 * because the prev clk freq might not be 0 so when the next seesion start
+	 * voting from that freq, then those resideny print will not come in stats
+	 */
+	residency = get_residency_stats(cl, cl->prev);
+	if (residency)
+		residency->start_time_us = ktime_get_ns() / 1000;
+	return rc;
+}
+
+static struct clock_residency *get_residency_stats(struct clock_info *cl, u64 rate)
+{
+	struct clock_residency *residency = NULL;
+	bool found = false;
+
+	if (!cl) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return NULL;
+	}
+
+	list_for_each_entry(residency, &cl->residency_list, list) {
+		if (residency->rate == rate) {
+			found = true;
+			break;
+		}
+	}
+
+	return found ? residency : NULL;
+}
+
+static int __update_residency_stats(struct msm_vidc_core *core,
+		struct clock_info *cl, u64 rate)
+{
+	struct clock_residency *cur_residency = NULL, *prev_residency = NULL;
+	u64 cur_time_us = 0;
+	int rc = 0;
+
+	/* skip update if high or stats logs not enabled */
+	if (!(msm_vidc_debug & (VIDC_HIGH | VIDC_STAT)))
+		return 0;
+
+	/* skip update if scaling not supported */
+	if (!cl->has_scaling)
+		return 0;
+
+	/* skip update if rate not changed */
+	if (rate == cl->prev)
+		return 0;
+
+	/* get current time in ns */
+	cur_time_us = ktime_get_ns() / 1000;
+
+	/* update previous rate residency end or total time */
+	prev_residency = get_residency_stats(cl, cl->prev);
+	if (prev_residency) {
+		if (prev_residency->start_time_us)
+			prev_residency->total_time_us += cur_time_us -
+			    prev_residency->start_time_us;
+
+		/* reset start time us */
+		prev_residency->start_time_us = 0;
+	}
+
+	/* clk disable case - no need to update new entry */
+	if (rate == 0)
+		return 0;
+
+	/* check if rate entry is present */
+	cur_residency = get_residency_stats(cl, rate);
+	if (!cur_residency) {
+		d_vpr_e("%s: entry not found. rate %llu\n", __func__, rate);
+		return -EINVAL;
+	}
+
+	/* update residency start time for current rate/freq */
+	cur_residency->start_time_us = cur_time_us;
+
+	return rc;
+}
+
 static int __set_clk_rate(struct msm_vidc_core *core, struct clock_info *cl,
 			  u64 rate)
 {
 	int rc = 0;
+
+	/* update clock residency stats */
+	__update_residency_stats(core, cl, rate);
 
 	/* bail early if requested clk rate is not changed */
 	if (rate == cl->prev)
@@ -955,10 +1286,12 @@ static int __set_clocks(struct msm_vidc_core *core, u64 freq)
 	int rc = 0;
 
 	/* scale mxc & mmcx rails */
-	rc = __opp_set_rate(core, freq);
-	if (rc) {
-		d_vpr_e("%s: opp setrate failed %lld\n", __func__, freq);
-		return rc;
+	if (core->platform->data.opp_tbl) { 
+		rc = __opp_set_rate(core, freq);
+		if (rc) {
+			d_vpr_e("%s: opp setrate failed %lld\n", __func__, freq);
+			return rc;
+		}
 	}
 
 	venus_hfi_for_each_clock(core, cl) {
@@ -1026,6 +1359,9 @@ static int __prepare_enable_clock(struct msm_vidc_core *core,
 		 * it to the lowest frequency possible
 		 */
 		if (cl->has_scaling) {
+			/* reset clk residency stats */
+			reset_residency_stats(core, cl);
+
 			rate = clk_round_rate(cl->clk, 0);
 			/**
 			 * source clock is already multipled with scaling ratio and __set_clk_rate
@@ -1098,15 +1434,25 @@ static int __init_resources(struct msm_vidc_core *core)
 		return rc;
 
 	rc = __init_context_banks(core);
+	if (rc)
+		return rc;
+
+	rc = __init_device_region(core);
+	if (rc)
+		return rc;
+
+	rc = __register_mmrm(core);
+	if (rc)
+		return rc;
 
 	return rc;
 }
 
 static int __reset_control_acquire_name(struct msm_vidc_core *core,
-					const char *name)
+		const char *name)
 {
 	struct reset_info *rcinfo = NULL;
-	int rc = 0;
+	int rc = 0, count = 0;
 	bool found = false;
 
 	venus_hfi_for_each_reset_clock(core, rcinfo) {
@@ -1121,8 +1467,27 @@ static int __reset_control_acquire_name(struct msm_vidc_core *core,
 		}
 
 		found = true;
+		/* reset_control_acquire is exposed in kernel version 6 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
+		do {
+			rc = reset_control_acquire(rcinfo->rst);
+			if (!rc)
+				break;
 
-		rc = reset_control_acquire(rcinfo->rst);
+			d_vpr_e("%s: failed to acquire video_xo_reset control, count %d\n",
+				__func__, count);
+			count++;
+			usleep_range(1000, 1500);
+		} while (count < 1000);
+
+		if (count >= 1000) {
+			d_vpr_e("%s: timeout acquiring video_xo_reset\n", __func__);
+			rc = -EINVAL;
+			MSM_VIDC_FATAL(true);
+		}
+#else
+		rc = -EINVAL;
+#endif
 		if (rc)
 			d_vpr_e("%s: failed to acquire reset control (%s), rc = %d\n",
 				__func__, rcinfo->name, rc);
@@ -1131,16 +1496,20 @@ static int __reset_control_acquire_name(struct msm_vidc_core *core,
 				__func__, rcinfo->name);
 		break;
 	}
+	/* Faced this issue for volcano which doesn't support xo_reset
+	 * skip this check and return success
+	 */
 	if (!found) {
-		d_vpr_e("%s: reset control (%s) not found\n", __func__, name);
-		rc = -EINVAL;
+		d_vpr_e("%s: reset control (%s) not found but returning success\n",
+			__func__, name);
+		rc = 0;
 	}
 
 	return rc;
 }
 
 static int __reset_control_release_name(struct msm_vidc_core *core,
-					const char *name)
+		const char *name)
 {
 	struct reset_info *rcinfo = NULL;
 	int rc = 0;
@@ -1158,8 +1527,12 @@ static int __reset_control_release_name(struct msm_vidc_core *core,
 		}
 
 		found = true;
-
+		/* reset_control_release exposed in kernel version 6 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
 		reset_control_release(rcinfo->rst);
+#else
+		rc = -EINVAL;
+#endif
 		if (rc)
 			d_vpr_e("%s: release reset control (%s) failed\n",
 				__func__, rcinfo->name);
@@ -1168,16 +1541,20 @@ static int __reset_control_release_name(struct msm_vidc_core *core,
 				__func__, rcinfo->name);
 		break;
 	}
+	/* Faced this issue for volcano which doesn't support xo_reset
+	 * skip this check and return success
+	 */
 	if (!found) {
-		d_vpr_e("%s: reset control (%s) not found\n", __func__, name);
-		rc = -EINVAL;
+		d_vpr_e("%s: reset control (%s) not found but returning success\n",
+			__func__, name);
+		rc = 0;
 	}
 
 	return rc;
 }
 
 static int __reset_control_assert_name(struct msm_vidc_core *core,
-				       const char *name)
+		const char *name)
 {
 	struct reset_info *rcinfo = NULL;
 	int rc = 0;
@@ -1206,7 +1583,7 @@ static int __reset_control_assert_name(struct msm_vidc_core *core,
 }
 
 static int __reset_control_deassert_name(struct msm_vidc_core *core,
-					 const char *name)
+		const char *name)
 {
 	struct reset_info *rcinfo = NULL;
 	int rc = 0;
@@ -1219,10 +1596,10 @@ static int __reset_control_deassert_name(struct msm_vidc_core *core,
 		rc = reset_control_deassert(rcinfo->rst);
 		if (rc)
 			d_vpr_e("%s: deassert reset control for (%s) failed, rc %d\n",
-				__func__, rcinfo->name, rc);
+					__func__, rcinfo->name, rc);
 		else
 			d_vpr_h("%s: deassert reset control (%s)\n",
-				__func__, rcinfo->name);
+					__func__, rcinfo->name);
 		break;
 	}
 	if (!found) {
@@ -1292,6 +1669,48 @@ static int __reset_ahb2axi_bridge(struct msm_vidc_core *core)
 		return rc;
 
 	rc = __reset_control_deassert(core);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int __print_clock_residency_stats(struct msm_vidc_core *core)
+{
+	struct clock_info *cl;
+	int rc = 0;
+
+	venus_hfi_for_each_clock(core, cl) {
+		/* skip if scaling not supported */
+		if (!cl->has_scaling)
+			continue;
+
+		/*
+		 * residency for the last clk corner entry will be updated in stats
+		 * only if we call update residency with rate 0
+		 */
+		__update_residency_stats(core, cl, 0);
+
+		/* print clock residency stats */
+		print_residency_stats(core, cl);
+	}
+
+	return rc;
+}
+
+static int __reset_clock_residency_stats(struct msm_vidc_core *core)
+{
+	struct clock_info *cl;
+	int rc = 0;
+
+	venus_hfi_for_each_clock(core, cl) {
+		/* skip if scaling not supported */
+		if (!cl->has_scaling)
+			continue;
+
+		/* reset clock residency stats */
+		reset_residency_stats(core, cl);
+	}
 
 	return rc;
 }
@@ -1313,6 +1732,9 @@ static const struct msm_vidc_resources_ops res_ops = {
 	.set_clks = __set_clocks,
 	.clk_enable = __prepare_enable_clock,
 	.clk_disable = __disable_unprepare_clock,
+	.clk_print_residency_stats = __print_clock_residency_stats,
+	.clk_reset_residency_stats = __reset_clock_residency_stats,
+	.clk_update_residency_stats = __update_residency_stats,
 };
 
 const struct msm_vidc_resources_ops *get_resources_ops(void)

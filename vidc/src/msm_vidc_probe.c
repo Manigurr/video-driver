@@ -4,38 +4,55 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <linux/interrupt.h>
-#include <linux/io.h>
-#include <linux/iommu.h>
+#include <linux/workqueue.h>
 #include <linux/module.h>
+#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/stringify.h>
+#include <linux/component.h>
+#include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/version.h>
-#include <linux/workqueue.h>
+#include <linux/stringify.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0))
+#include <linux/dma-iommu.h>
+#endif
+#ifdef CONFIG_MSM_MMRM
+#include <linux/soc/qcom/msm_mmrm.h>
+#endif
 
-#include "msm_vidc_core.h"
-#include "msm_vidc_debug.h"
-#include "msm_vidc_driver.h"
 #include "msm_vidc_internal.h"
-#include "msm_vidc_memory.h"
-#include "msm_vidc_platform.h"
+#include "msm_vidc_driver.h"
+#include "msm_vidc_debug.h"
 #include "msm_vidc_state.h"
+#include "msm_vidc_fence.h"
+#include "msm_vidc_platform.h"
+#include "msm_vidc_core.h"
+#include "msm_vidc_memory.h"
 #include "venus_hfi.h"
 
 #define BASE_DEVICE_NUMBER 32
 
 struct msm_vidc_core *g_core;
 
+const char video_banner[] = "Video-Banner: (" __stringify(VIDEO_COMPILE_BY) "@"
+	__stringify(VIDEO_COMPILE_HOST) ") (" __stringify(VIDEO_COMPILE_TIME) ")";
+
 static inline bool is_video_device(struct device *dev)
 {
-	return !!(of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc")) ||
-		  !!(of_device_is_compatible(dev->of_node, "qcom,qcm6490-iris-vpu"));
+	return !!(of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc") ||
+		of_device_is_compatible(dev->of_node, "qcom,qcm6490-iris-vpu"));
+}
+
+static inline bool is_video_context_bank_device_node(struct device_node *of_node)
+{
+	return !!(of_device_is_compatible(of_node, "qcom,vidc,cb-ns") || 
+			!!(of_device_is_compatible(of_node, "qcom,vidc,cb-sec-non-pxl")));
 }
 
 static inline bool is_video_context_bank_device(struct device *dev)
 {
-	return !!(of_device_is_compatible(dev->of_node, "qcom,vidc,cb-ns"));
+	return is_video_context_bank_device_node(dev->of_node);
 }
 
 static int msm_vidc_init_resources(struct msm_vidc_core *core)
@@ -59,41 +76,56 @@ static int msm_vidc_init_resources(struct msm_vidc_core *core)
 	return 0;
 }
 
+static ssize_t sku_version_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct msm_vidc_core *core;
+
+	/*
+	 * Default sku version: 0
+	 * driver possibly not probed yet or not the main device.
+	 */
+	if (!dev || !dev->driver)
+		return 0;
+
+	core = dev_get_drvdata(dev);
+	if (!core || !core->platform) {
+		d_vpr_e("%s: invalid core\n", __func__);
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%d",
+			core->platform->data.sku_version);
+}
+
+static DEVICE_ATTR_RO(sku_version);
+
+static struct attribute *msm_vidc_core_attrs[] = {
+	&dev_attr_sku_version.attr,
+	NULL
+};
+
+static struct attribute_group msm_vidc_core_attr_group = {
+	.attrs = msm_vidc_core_attrs,
+};
+
 static const struct of_device_id msm_vidc_dt_match[] = {
-	{.compatible = "qcom,sm8550-vidc"},
 	{.compatible = "qcom,qcm6490-iris-vpu"},
+	{.compatible = "qcom,sm8550-vidc"},
 	{.compatible = "qcom,vidc,cb-ns"},
+	{.compatible = "qcom,vidc,cb-sec-non-pxl"},
 	MSM_VIDC_EMPTY_BRACE
 };
 MODULE_DEVICE_TABLE(of, msm_vidc_dt_match);
 
 static void msm_vidc_release_video_device(struct video_device *vdev)
 {
-	d_vpr_e("%s: video device released\n", __func__);
+	d_vpr_e("%s:\n", __func__);
 }
 
 static void msm_vidc_unregister_video_device(struct msm_vidc_core *core,
-					     enum msm_vidc_domain_type type)
+		enum msm_vidc_domain_type type)
 {
-	int index;
-
-	if (type == MSM_VIDC_DECODER)
-		index = 0;
-	else if (type == MSM_VIDC_ENCODER)
-		index = 1;
-	else
-		return;
-
-	v4l2_m2m_release(core->vdev[index].m2m_dev);
-
-	video_set_drvdata(&core->vdev[index].vdev, NULL);
-	video_unregister_device(&core->vdev[index].vdev);
-}
-
-static int msm_vidc_register_video_device(struct msm_vidc_core *core,
-					  enum msm_vidc_domain_type type, int nr)
-{
-	int rc = 0;
 	int index;
 
 	d_vpr_h("%s: domain %d\n", __func__, type);
@@ -103,7 +135,36 @@ static int msm_vidc_register_video_device(struct msm_vidc_core *core,
 	else if (type == MSM_VIDC_ENCODER)
 		index = 1;
 	else
+		return;
+
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	v4l2_m2m_unregister_media_controller(core->vdev[index].m2m_dev);
+	v4l2_m2m_release(core->vdev[index].m2m_dev);
+#endif
+	//rc = device_create_file(&core->vdev[index].vdev.dev, &dev_attr_link_name);
+	video_set_drvdata(&core->vdev[index].vdev, NULL);
+	video_unregister_device(&core->vdev[index].vdev);
+	//memset vdev to 0
+}
+
+static int msm_vidc_register_video_device(struct msm_vidc_core *core,
+		enum msm_vidc_domain_type type, int nr)
+{
+	int rc = 0;
+	int index, media_index;
+
+	d_vpr_h("%s: domain %d\n", __func__, type);
+
+	if (type == MSM_VIDC_DECODER) {
+		index = 0;
+		media_index = MEDIA_ENT_F_PROC_VIDEO_DECODER;
+	} else if (type == MSM_VIDC_ENCODER) {
+		index = 1;
+		media_index = MEDIA_ENT_F_PROC_VIDEO_ENCODER;
+	} else {
 		return -EINVAL;
+	}
 
 	core->vdev[index].vdev.release =
 		msm_vidc_release_video_device;
@@ -117,26 +178,142 @@ static int msm_vidc_register_video_device(struct msm_vidc_core *core,
 	core->vdev[index].vdev.v4l2_dev = &core->v4l2_dev;
 	core->vdev[index].vdev.device_caps = core->capabilities[DEVICE_CAPS].value;
 	rc = video_register_device(&core->vdev[index].vdev,
-				   VFL_TYPE_VIDEO, nr);
+					VFL_TYPE_VIDEO, nr);
 	if (rc) {
 		d_vpr_e("Failed to register the video device\n");
 		return rc;
 	}
 	video_set_drvdata(&core->vdev[index].vdev, core);
-
+	//rc = device_create_file(&core->vdev[index].vdev.dev, &dev_attr_link_name);
+	if (rc) {
+		d_vpr_e("Failed to create video device file\n");
+		goto video_reg_failed;
+	}
+#ifdef CONFIG_MEDIA_CONTROLLER
 	core->vdev[index].m2m_dev = v4l2_m2m_init(core->v4l2_m2m_ops);
 	if (IS_ERR(core->vdev[index].m2m_dev)) {
 		d_vpr_e("Failed to initialize V4L2 M2M device\n");
 		rc = PTR_ERR(core->vdev[index].m2m_dev);
 		goto m2m_init_failed;
 	}
+	rc = v4l2_m2m_register_media_controller(core->vdev[index].m2m_dev,
+			&core->vdev[index].vdev, media_index);
+	if (rc) {
+		d_vpr_e("%s: m2m_dev controller register failed for session type %d\n",
+			__func__, index);
+		goto m2m_mc_failed;
+	}
+#endif
 
 	return 0;
-
+#ifdef CONFIG_MEDIA_CONTROLLER
+m2m_mc_failed:
+	v4l2_m2m_release(core->vdev[index].m2m_dev);
 m2m_init_failed:
+#endif
+video_reg_failed:
 	video_unregister_device(&core->vdev[index].vdev);
+
 	return rc;
 }
+
+static int msm_vidc_initialize_media(struct msm_vidc_core *core)
+{
+	int rc = 0, nr = BASE_DEVICE_NUMBER;
+
+	rc = v4l2_device_register(&core->pdev->dev, &core->v4l2_dev);
+	if (rc) {
+		d_vpr_e("Failed to register v4l2 device\n");
+		return -EINVAL;
+	}
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	core->media_dev.dev = &core->pdev->dev;
+	strscpy(core->media_dev.model, "msm_vidc_media", sizeof(core->media_dev.model));
+	media_device_init(&core->media_dev);
+	core->media_dev.ops = core->media_device_ops;
+	core->v4l2_dev.mdev = &core->media_dev;
+#endif
+
+	/* setup the decoder device */
+	rc = msm_vidc_register_video_device(core, MSM_VIDC_DECODER, nr);
+	if (rc) {
+		d_vpr_e("Failed to register video decoder\n");
+		goto dec_reg_failed;
+	}
+
+	/* setup the encoder device */
+	rc = msm_vidc_register_video_device(core, MSM_VIDC_ENCODER, nr + 1);
+	if (rc) {
+		d_vpr_e("Failed to register video encoder\n");
+		goto enc_reg_failed;
+	}
+#ifdef CONFIG_MEDIA_CONTROLLER
+	rc = media_device_register(&core->media_dev);
+	if (rc) {
+		d_vpr_e("%s: media_device_register failed with %d\n", __func__, rc);
+		goto media_reg_failed;
+	}
+#endif
+
+	return rc;
+#ifdef CONFIG_MEDIA_CONTROLLER
+media_reg_failed:
+#endif
+	msm_vidc_unregister_video_device(core, MSM_VIDC_ENCODER);
+enc_reg_failed:
+	msm_vidc_unregister_video_device(core, MSM_VIDC_DECODER);
+dec_reg_failed:
+#ifdef CONFIG_MEDIA_CONTROLLER
+	media_device_cleanup(&core->media_dev);
+#endif
+	v4l2_device_unregister(&core->v4l2_dev);
+
+	return rc;
+}
+
+static int msm_vidc_deinitialize_media(struct msm_vidc_core *core)
+{
+	int rc = 0;
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	media_device_unregister(&core->media_dev);
+#endif
+	msm_vidc_unregister_video_device(core, MSM_VIDC_ENCODER);
+	msm_vidc_unregister_video_device(core, MSM_VIDC_DECODER);
+#ifdef CONFIG_MEDIA_CONTROLLER
+	media_device_cleanup(&core->media_dev);
+#endif
+	v4l2_device_unregister(&core->v4l2_dev);
+
+	return rc;
+}
+
+#ifdef CONFIG_MSM_MMRM
+static int msm_vidc_check_mmrm_support(struct msm_vidc_core *core)
+{
+	int rc = 0;
+
+	if (!is_mmrm_supported(core))
+		goto exit;
+
+	if (!mmrm_client_check_scaling_supported(MMRM_CLIENT_CLOCK, 0)) {
+		d_vpr_e("%s: MMRM not supported\n", __func__);
+		core->platform->data.supports_mmrm = 0;
+	}
+
+exit:
+	d_vpr_h("%s: %d\n", __func__, is_mmrm_supported(core));
+	return rc;
+}
+#else
+static int msm_vidc_check_mmrm_support(struct msm_vidc_core *core)
+{
+	core->platform->data.supports_mmrm = 0;
+
+	return 0;
+}
+#endif
 
 static int msm_vidc_deinitialize_core(struct msm_vidc_core *core)
 {
@@ -146,6 +323,7 @@ static int msm_vidc_deinitialize_core(struct msm_vidc_core *core)
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
+	d_vpr_h("%s()\n", __func__);
 
 	mutex_destroy(&core->lock);
 	msm_vidc_update_core_state(core, MSM_VIDC_CORE_DEINIT, __func__);
@@ -165,6 +343,8 @@ static int msm_vidc_deinitialize_core(struct msm_vidc_core *core)
 static int msm_vidc_initialize_core(struct msm_vidc_core *core)
 {
 	int rc = 0;
+
+	d_vpr_h("%s()\n", __func__);
 
 	msm_vidc_update_core_state(core, MSM_VIDC_CORE_DEINIT, __func__);
 
@@ -203,6 +383,7 @@ static int msm_vidc_initialize_core(struct msm_vidc_core *core)
 
 	INIT_DELAYED_WORK(&core->pm_work, venus_hfi_pm_work_handler);
 	INIT_DELAYED_WORK(&core->fw_unload_work, msm_vidc_fw_unload_handler);
+	INIT_WORK(&core->ssr_work, msm_vidc_ssr_handler);
 
 	return 0;
 exit:
@@ -220,6 +401,7 @@ static void msm_vidc_devm_deinit_core(void *res)
 {
 	struct msm_vidc_core *core = res;
 
+	d_vpr_h("%s()\n", __func__);
 	msm_vidc_deinitialize_core(core);
 }
 
@@ -249,6 +431,7 @@ static void msm_vidc_devm_debugfs_put(void *res)
 {
 	struct dentry *parent = res;
 
+	d_vpr_h("%s()\n", __func__);
 	debugfs_remove_recursive(parent);
 }
 
@@ -274,7 +457,7 @@ static struct dentry *msm_vidc_devm_debugfs_get(struct device *dev)
 }
 
 static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
-				       struct device *dev)
+	struct device *dev)
 {
 	struct context_bank_info *cb = NULL;
 	int rc = 0;
@@ -282,7 +465,7 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 	cb = msm_vidc_get_context_bank_for_device(core, dev);
 	if (!cb) {
 		d_vpr_e("%s: Failed to get context bank device for %s\n",
-			__func__, dev_name(dev));
+			 __func__, dev_name(dev));
 		return -EIO;
 	}
 
@@ -303,6 +486,16 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 	}
 
 	/*
+	 * When memory is fragmented, below configuration increases the
+	 * possibility to get a mapping for buffer in the configured CB.
+	 */
+
+	/* remove kernel version condition once below api is whitelisted in pineapple */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0))
+	iommu_dma_enable_best_fit_algo(cb->dev);
+#endif
+
+	/*
 	 * configure device segment size and segment boundary to ensure
 	 * iommu mapping returns one mapping (which is required for partial
 	 * cache operations)
@@ -313,17 +506,156 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 	dma_set_max_seg_size(dev, (unsigned int)DMA_BIT_MASK(32));
 	dma_set_seg_boundary(dev, (unsigned long)DMA_BIT_MASK(64));
 
-	iommu_set_fault_handler(cb->domain, msm_vidc_smmu_fault_handler, (void *)core);
+	iommu_set_fault_handler(cb->domain,
+		msm_vidc_smmu_fault_handler, (void *)core);
 
-	d_vpr_h("%s: name %s addr start %x size %x secure %d\n",
+	d_vpr_h(
+		"%s: name %s addr start %x size %x secure %d dma_coherant %d "
+		"region %d dev_name %s domain %pK dma_mask %llu\n",
 		__func__, cb->name, cb->addr_range.start,
-		cb->addr_range.size, cb->secure);
-	d_vpr_h("%s: dma_coherant %d region %d dev_name %s domain %pK dma_mask %llu\n",
-		__func__, cb->dma_coherant, cb->region, dev_name(cb->dev),
-		cb->domain, cb->dma_mask);
+		cb->addr_range.size, cb->secure, cb->dma_coherant,
+		cb->region, dev_name(cb->dev), cb->domain, cb->dma_mask);
 
 	return rc;
 }
+
+static int msm_vidc_component_compare_of(struct device *dev, void *data)
+{
+	return dev->of_node == data;
+}
+
+static void msm_vidc_component_release_of(struct device *dev, void *data)
+{
+	d_vpr_h("%s(): %s\n", __func__, of_node_full_name(data));
+	of_node_put(data);
+}
+
+static int msm_vidc_component_bind(struct device *dev,
+	struct device *parent, void *data)
+{
+	struct msm_vidc_core *core;
+	int rc = 0;
+
+	if (!dev || !parent || !data) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+	core = (struct msm_vidc_core *)data;
+
+	if (!dev->parent || dev->parent != parent) {
+		d_vpr_e("%s: failed to find a parent for %s\n",
+			__func__, dev_name(dev));
+		return -ENODEV;
+	}
+
+	rc = msm_vidc_setup_context_bank(core, dev);
+	if (rc) {
+		d_vpr_e("%s: Failed to probe context bank - %s\n",
+			__func__, dev_name(dev));
+		return rc;
+	}
+
+	d_vpr_h("%s: Successfully probed context bank - %s\n",
+		__func__, dev_name(dev));
+
+	return rc;
+}
+
+static void msm_vidc_component_unbind(struct device *dev,
+	struct device *parent, void *data)
+{
+	d_vpr_h("%s(): %s\n", __func__, dev_name(dev));
+}
+
+static int msm_vidc_component_master_bind(struct device *dev)
+{
+	struct msm_vidc_core *core = dev_get_drvdata(dev);
+	int rc = 0;
+
+	d_vpr_h("%s(): %s\n", __func__, dev_name(dev));
+
+	rc = component_bind_all(dev, core);
+	if (rc) {
+		d_vpr_e("%s: sub-device bind failed. rc %d\n", __func__, rc);
+		return rc;
+	}
+
+	if (core->capabilities[SUPPORTS_SYNX_FENCE].value) {
+		if (msm_vidc_synx_fence_enable) {
+			/* register for synx fence */
+			rc = call_fence_op(core, fence_register, core);
+			if (rc) {
+				d_vpr_e("%s: failed to register synx fence\n",
+					__func__);
+				core->capabilities[SUPPORTS_SYNX_FENCE].value = 0;
+				return rc;
+			}
+		} else {
+			/* override synx fence ops with dma fence ops */
+			core->fence_ops = get_dma_fence_ops();
+			if (!core->fence_ops) {
+				d_vpr_e("%s: invalid dma fence ops\n", __func__);
+				return -EINVAL;
+			}
+			core->capabilities[SUPPORTS_SYNX_FENCE].value = 0;
+		}
+	}
+
+	rc = msm_vidc_initialize_media(core);
+	if (rc) {
+		d_vpr_e("%s: media initialization failed\n", __func__);
+		return rc;
+	}
+
+	rc = venus_hfi_queue_init(core);
+	if (rc) {
+		d_vpr_e("%s: interface queues init failed\n", __func__);
+		goto queues_deinit;
+	}
+
+	rc = msm_vidc_core_init(core);
+	if (rc) {
+		d_vpr_e("%s: sys init failed\n", __func__);
+		goto queues_deinit;
+	}
+
+	d_vpr_h("%s(): succssful\n", __func__);
+
+	return 0;
+
+queues_deinit:
+	venus_hfi_queue_deinit(core);
+	/**
+	 * queues and core can be inited again during session_open.
+	 * So don't declare as probe failure.
+	 */
+	return 0;
+}
+
+static void msm_vidc_component_master_unbind(struct device *dev)
+{
+	struct msm_vidc_core *core = dev_get_drvdata(dev);
+
+	d_vpr_h("%s(): %s\n", __func__, dev_name(dev));
+
+	msm_vidc_core_deinit(core, true);
+	venus_hfi_queue_deinit(core);
+	msm_vidc_deinitialize_media(core);
+	call_fence_op(core, fence_deregister, core);
+	component_unbind_all(dev, core);
+
+	d_vpr_h("%s(): succssful\n", __func__);
+}
+
+static const struct component_ops msm_vidc_component_ops = {
+	.bind           = msm_vidc_component_bind,
+	.unbind         = msm_vidc_component_unbind,
+};
+
+static const struct component_master_ops msm_vidc_component_master_ops = {
+	.bind           = msm_vidc_component_master_bind,
+	.unbind         = msm_vidc_component_master_unbind,
+};
 
 static int msm_vidc_remove_video_device(struct platform_device *pdev)
 {
@@ -340,13 +672,10 @@ static int msm_vidc_remove_video_device(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	msm_vidc_core_deinit(core, true);
-	venus_hfi_queue_deinit(core);
+	d_vpr_h("%s()\n", __func__);
 
-	msm_vidc_unregister_video_device(core, MSM_VIDC_ENCODER);
-	msm_vidc_unregister_video_device(core, MSM_VIDC_DECODER);
-
-	v4l2_device_unregister(&core->v4l2_dev);
+	/* destroy component master and deallocate match data */
+	component_master_del(&pdev->dev, &msm_vidc_component_master_ops);
 
 	d_vpr_h("depopulating sub devices\n");
 	/*
@@ -355,6 +684,8 @@ static int msm_vidc_remove_video_device(struct platform_device *pdev)
 	 * context-bank mappings.
 	 */
 	of_platform_depopulate(&pdev->dev);
+
+	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 
 	dev_set_drvdata(&pdev->dev, NULL);
 	g_core = NULL;
@@ -366,6 +697,8 @@ static int msm_vidc_remove_video_device(struct platform_device *pdev)
 static int msm_vidc_remove_context_bank(struct platform_device *pdev)
 {
 	d_vpr_h("%s(): %s\n", __func__, dev_name(&pdev->dev));
+
+	component_del(&pdev->dev, &msm_vidc_component_ops);
 
 	return 0;
 }
@@ -390,8 +723,10 @@ static int msm_vidc_remove(struct platform_device *pdev)
 static int msm_vidc_probe_video_device(struct platform_device *pdev)
 {
 	int rc = 0;
+	struct component_match *match = NULL;
 	struct msm_vidc_core *core = NULL;
-	int nr = BASE_DEVICE_NUMBER;
+	struct device_node *child = NULL;
+	int cb_count = 0;
 
 	d_vpr_h("%s: %s\n", __func__, dev_name(&pdev->dev));
 
@@ -440,70 +775,78 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 		goto init_inst_caps_fail;
 	}
 
+	rc = sysfs_create_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
+	if (rc) {
+		d_vpr_e("Failed to create attributes\n");
+		goto init_group_failed;
+	}
+
+	rc = msm_vidc_check_mmrm_support(core);
+	if (rc) {
+		d_vpr_e("Failed to check MMRM scaling support\n");
+		rc = 0; /* Ignore error */
+	}
+
 	core->debugfs_root = msm_vidc_debugfs_init_core(core);
 	if (!core->debugfs_root)
 		d_vpr_h("Failed to init debugfs core\n");
 
-	d_vpr_h("populating sub devices\n");
+	/* registering sub-device with component model framework */
+	for_each_available_child_of_node(pdev->dev.of_node, child) {
+		/* consider only context bank devices */
+		if (!is_video_context_bank_device_node(child))
+			continue;
+
+		/* take refcount on device node */
+		of_node_get(child);
+
+		/* add entry into component_match array */
+		component_match_add_release(&pdev->dev, &match, msm_vidc_component_release_of,
+			msm_vidc_component_compare_of, child);
+		if (IS_ERR(match)) {
+			of_node_put(child);
+			rc = PTR_ERR(match) ? PTR_ERR(match) : -ENOMEM;
+			d_vpr_e("%s: component match add release failed\n", __func__);
+			goto sub_dev_failed;
+		}
+
+		/* count context bank devices */
+		cb_count++;
+	}
+
+	d_vpr_h("populating sub devices. count %d\n", cb_count);
 	/*
 	 * Trigger probe for each sub-device i.e. qcom,msm-vidc,context-bank.
 	 * When msm_vidc_probe is called for each sub-device, parse the
 	 * context-bank details.
 	 */
 	rc = of_platform_populate(pdev->dev.of_node, msm_vidc_dt_match, NULL,
-				  &pdev->dev);
+			&pdev->dev);
 	if (rc) {
 		d_vpr_e("Failed to trigger probe for sub-devices\n");
 		goto sub_dev_failed;
 	}
 
-	rc = v4l2_device_register(&pdev->dev, &core->v4l2_dev);
+	/**
+	 * create and try to bring up aggregate device for master.
+	 * match is a component_match_array and acts as a placeholder for
+	 * components added via component_add().
+	 */
+	rc = component_master_add_with_match(&pdev->dev, &msm_vidc_component_master_ops, match);
 	if (rc) {
-		d_vpr_e("Failed to register v4l2 device\n");
-		goto v4l2_reg_failed;
-	}
-
-	/* setup the decoder device */
-	rc = msm_vidc_register_video_device(core, MSM_VIDC_DECODER, nr);
-	if (rc) {
-		d_vpr_e("Failed to register video decoder\n");
-		goto dec_reg_failed;
-	}
-
-	/* setup the encoder device */
-	rc = msm_vidc_register_video_device(core, MSM_VIDC_ENCODER, nr + 1);
-	if (rc) {
-		d_vpr_e("Failed to register video encoder\n");
-		goto enc_reg_failed;
-	}
-
-	rc = venus_hfi_queue_init(core);
-	if (rc) {
-		d_vpr_e("%s: interface queues init failed\n", __func__);
-		goto queues_init_failed;
-	}
-
-	rc = msm_vidc_core_init(core);
-	if (rc) {
-		d_vpr_e("%s: sys init failed\n", __func__);
-		goto core_init_failed;
+		d_vpr_e("%s: component master add with match failed\n", __func__);
+		goto master_add_failed;
 	}
 
 	d_vpr_h("%s(): succssful\n", __func__);
 
 	return rc;
 
-core_init_failed:
-	venus_hfi_queue_deinit(core);
-queues_init_failed:
+master_add_failed:
 	of_platform_depopulate(&pdev->dev);
 sub_dev_failed:
-	msm_vidc_unregister_video_device(core, MSM_VIDC_ENCODER);
-enc_reg_failed:
-	msm_vidc_unregister_video_device(core, MSM_VIDC_DECODER);
-dec_reg_failed:
-	v4l2_device_unregister(&core->v4l2_dev);
-v4l2_reg_failed:
+	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
+init_group_failed:
 init_inst_caps_fail:
 init_res_failed:
 init_plat_failed:
@@ -516,39 +859,15 @@ init_core_failed:
 
 static int msm_vidc_probe_context_bank(struct platform_device *pdev)
 {
-	struct msm_vidc_core *core = NULL;
-	int rc = 0;
-
-	if (!pdev) {
-		d_vpr_e("%s: Invalid platform device %pK", __func__, pdev);
-		return -EINVAL;
-	} else if (!pdev->dev.parent) {
-		d_vpr_e("%s: Failed to find a parent for %s\n",
-			__func__, dev_name(&pdev->dev));
-		return -ENODEV;
-	}
-
 	d_vpr_h("%s(): %s\n", __func__, dev_name(&pdev->dev));
 
-	core = dev_get_drvdata(pdev->dev.parent);
-	if (!core) {
-		d_vpr_e("%s: core not found in device %s",
-			__func__, dev_name(pdev->dev.parent));
-		return -EINVAL;
-	}
-
-	rc = msm_vidc_setup_context_bank(core, &pdev->dev);
-	if (rc) {
-		d_vpr_e("%s: Failed to probe context bank %s\n",
-			__func__, dev_name(&pdev->dev));
-		return rc;
-	}
-
-	return rc;
+	return component_add(&pdev->dev, &msm_vidc_component_ops);
 }
 
 static int msm_vidc_probe(struct platform_device *pdev)
 {
+	d_vpr_h("%s()\n", __func__);
+
 	if (!pdev) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
@@ -604,8 +923,9 @@ static int msm_vidc_pm_suspend(struct device *dev)
 		goto unlock;
 	}
 
+	d_vpr_h("%s\n", __func__);
 	rc = msm_vidc_suspend(core);
-	if (rc == -EOPNOTSUPP)
+	if (rc == -ENOTSUPP)
 		rc = 0;
 	else if (rc)
 		d_vpr_e("Failed to suspend: %d\n", rc);
@@ -636,6 +956,8 @@ static int msm_vidc_pm_resume(struct device *dev)
 		return -EINVAL;
 	}
 
+	d_vpr_h("%s\n", __func__);
+
 	/* remove PM suspend from core sub_state */
 	core_lock(core, __func__);
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_PM_SUSPEND, 0, __func__);
@@ -655,8 +977,36 @@ struct platform_driver msm_vidc_driver = {
 		.name = "msm_vidc_v4l2",
 		.of_match_table = msm_vidc_dt_match,
 		.pm = &msm_vidc_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
-module_platform_driver(msm_vidc_driver);
-MODULE_LICENSE("GPL");
+static int __init msm_vidc_init(void)
+{
+	int rc = 0;
+
+	d_vpr_h("%s: %s\n", __func__, video_banner);
+
+	rc = platform_driver_register(&msm_vidc_driver);
+	if (rc) {
+		d_vpr_e("Failed to register platform driver\n");
+		return rc;
+	}
+	d_vpr_h("%s(): succssful\n", __func__);
+
+	return 0;
+}
+
+static void __exit msm_vidc_exit(void)
+{
+	d_vpr_h("%s()\n", __func__);
+
+	platform_driver_unregister(&msm_vidc_driver);
+	d_vpr_h("%s(): succssful\n", __func__);
+}
+
+module_init(msm_vidc_init);
+module_exit(msm_vidc_exit);
+
+MODULE_SOFTDEP("pre: subsys-pil-tz msm-mmrm");
+MODULE_LICENSE("GPL v2");

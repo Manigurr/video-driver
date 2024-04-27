@@ -8,15 +8,18 @@
 #include <linux/dma-heap.h>
 #include <linux/dma-mapping.h>
 
-#include "msm_vidc_core.h"
+#include "msm_vidc_memory.h"
+#include "msm_vidc_internal.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_driver.h"
-#include "msm_vidc_internal.h"
-#include "msm_vidc_memory.h"
+#include "msm_vidc_core.h"
+#include "msm_vidc_events.h"
 #include "msm_vidc_platform.h"
 #include "venus_hfi.h"
 
-MODULE_IMPORT_NS(DMA_BUF);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
+	MODULE_IMPORT_NS(DMA_BUF);
+#endif
 
 struct msm_vidc_type_size_name {
 	enum msm_memory_pool_type type;
@@ -29,6 +32,8 @@ static const struct msm_vidc_type_size_name buftype_size_name_arr[] = {
 	{MSM_MEM_POOL_ALLOC_MAP,  sizeof(struct msm_vidc_mem),        "MSM_MEM_POOL_ALLOC_MAP"  },
 	{MSM_MEM_POOL_TIMESTAMP,  sizeof(struct msm_vidc_timestamp),  "MSM_MEM_POOL_TIMESTAMP"  },
 	{MSM_MEM_POOL_DMABUF,     sizeof(struct msm_memory_dmabuf),   "MSM_MEM_POOL_DMABUF"     },
+	{MSM_MEM_POOL_PACKET,     sizeof(struct hfi_pending_packet) + MSM_MEM_POOL_PACKET_SIZE,
+		"MSM_MEM_POOL_PACKET"},
 	{MSM_MEM_POOL_BUF_TIMER,  sizeof(struct msm_vidc_input_timer), "MSM_MEM_POOL_BUF_TIMER" },
 	{MSM_MEM_POOL_BUF_STATS,  sizeof(struct msm_vidc_buffer_stats), "MSM_MEM_POOL_BUF_STATS"},
 };
@@ -46,7 +51,8 @@ void *msm_vidc_pool_alloc(struct msm_vidc_inst *inst, enum msm_memory_pool_type 
 
 	if (!list_empty(&pool->free_pool)) {
 		/* get 1st node from free pool */
-		hdr = list_first_entry(&pool->free_pool, struct msm_memory_alloc_header, list);
+		hdr = list_first_entry(&pool->free_pool,
+			struct msm_memory_alloc_header, list);
 
 		/* move node from free pool to busy pool */
 		list_move_tail(&hdr->list, &pool->busy_pool);
@@ -61,6 +67,10 @@ void *msm_vidc_pool_alloc(struct msm_vidc_inst *inst, enum msm_memory_pool_type 
 	}
 
 	hdr = vzalloc(pool->size + sizeof(struct msm_memory_alloc_header));
+	if (!hdr) {
+		i_vpr_e(inst, "%s: allocation failed\n", __func__);
+		return NULL;
+	}
 
 	INIT_LIST_HEAD(&hdr->list);
 	hdr->type = type;
@@ -108,7 +118,7 @@ void msm_vidc_pool_free(struct msm_vidc_inst *inst, void *vidc_buf)
 }
 
 static void msm_vidc_destroy_pool_buffers(struct msm_vidc_inst *inst,
-					  enum msm_memory_pool_type type)
+	enum msm_memory_pool_type type)
 {
 	struct msm_memory_alloc_header *hdr, *dummy;
 	struct msm_memory_pool *pool;
@@ -186,8 +196,8 @@ static struct dma_buf *msm_vidc_dma_buf_get(struct msm_vidc_inst *inst, int fd)
 	/* get local dmabuf ref for tracking */
 	dmabuf = dma_buf_get(fd);
 	if (IS_ERR_OR_NULL(dmabuf)) {
-		d_vpr_e("Failed to get dmabuf for %d, error %d\n",
-			fd, PTR_ERR_OR_ZERO(dmabuf));
+		d_vpr_e("Failed to get dmabuf for %d, error %ld\n",
+				fd, PTR_ERR(dmabuf));
 		return NULL;
 	}
 
@@ -261,7 +271,7 @@ static void msm_vidc_dma_buf_put(struct msm_vidc_inst *inst, struct dma_buf *dma
 }
 
 static void msm_vidc_dma_buf_put_completely(struct msm_vidc_inst *inst,
-					    struct msm_memory_dmabuf *buf)
+	struct msm_memory_dmabuf *buf)
 {
 	if (!buf) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -285,8 +295,7 @@ static void msm_vidc_dma_buf_put_completely(struct msm_vidc_inst *inst,
 }
 
 static struct dma_buf_attachment *msm_vidc_dma_buf_attach(struct msm_vidc_core *core,
-							  struct dma_buf *dbuf,
-							  struct device *dev)
+	struct dma_buf *dbuf, struct device *dev)
 {
 	int rc = 0;
 	struct dma_buf_attachment *attach = NULL;
@@ -298,7 +307,7 @@ static struct dma_buf_attachment *msm_vidc_dma_buf_attach(struct msm_vidc_core *
 
 	attach = dma_buf_attach(dbuf, dev);
 	if (IS_ERR_OR_NULL(attach)) {
-		rc = PTR_ERR_OR_ZERO(attach) ? PTR_ERR_OR_ZERO(attach) : -1;
+		rc = PTR_ERR(attach) ? PTR_ERR(attach) : -1;
 		d_vpr_e("Failed to attach dmabuf, error %d\n", rc);
 		return NULL;
 	}
@@ -306,8 +315,8 @@ static struct dma_buf_attachment *msm_vidc_dma_buf_attach(struct msm_vidc_core *
 	return attach;
 }
 
-static int msm_vidc_dma_buf_detach(struct msm_vidc_core *core, struct dma_buf *dbuf,
-				   struct dma_buf_attachment *attach)
+static int msm_vidc_dma_buf_detach(struct msm_vidc_core *core,
+	struct dma_buf *dbuf, struct dma_buf_attachment *attach)
 {
 	int rc = 0;
 
@@ -322,8 +331,7 @@ static int msm_vidc_dma_buf_detach(struct msm_vidc_core *core, struct dma_buf *d
 }
 
 static int msm_vidc_dma_buf_unmap_attachment(struct msm_vidc_core *core,
-					     struct dma_buf_attachment *attach,
-					     struct sg_table *table)
+	struct dma_buf_attachment *attach, struct sg_table *table)
 {
 	int rc = 0;
 
@@ -337,8 +345,8 @@ static int msm_vidc_dma_buf_unmap_attachment(struct msm_vidc_core *core,
 	return rc;
 }
 
-static struct sg_table *msm_vidc_dma_buf_map_attachment(struct msm_vidc_core *core,
-							struct dma_buf_attachment *attach)
+static struct sg_table *msm_vidc_dma_buf_map_attachment(
+	struct msm_vidc_core *core, struct dma_buf_attachment *attach)
 {
 	int rc = 0;
 	struct sg_table *table = NULL;
@@ -350,7 +358,7 @@ static struct sg_table *msm_vidc_dma_buf_map_attachment(struct msm_vidc_core *co
 
 	table = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(table)) {
-		rc = PTR_ERR_OR_ZERO(table) ? PTR_ERR_OR_ZERO(table) : -1;
+		rc = PTR_ERR(table) ? PTR_ERR(table) : -1;
 		d_vpr_e("Failed to map table, error %d\n", rc);
 		return NULL;
 	}
@@ -383,13 +391,14 @@ static int msm_vidc_memory_alloc_map(struct msm_vidc_core *core, struct msm_vidc
 	}
 
 	mem->kvaddr = dma_alloc_attrs(cb->dev, size, &mem->device_addr, GFP_KERNEL,
-				      mem->attrs);
+		mem->attrs);
 	if (!mem->kvaddr) {
 		d_vpr_e("%s: dma_alloc_attrs returned NULL\n", __func__);
 		return -ENOMEM;
 	}
 
-	d_vpr_h("%s: dmabuf %pK, size %d, buffer_type %s, secure %d, region %d\n",
+	d_vpr_h(
+		"%s: dmabuf %pK, size %d, buffer_type %s, secure %d, region %d\n",
 		__func__, mem->kvaddr, mem->size, buf_name(mem->type),
 		mem->secure, mem->region);
 
@@ -406,8 +415,9 @@ static int msm_vidc_memory_unmap_free(struct msm_vidc_core *core, struct msm_vid
 		return -EINVAL;
 	}
 
-	d_vpr_h("%s: dmabuf %pK, size %d, kvaddr %pK, buffer_type %s, secure %d, region %d\n",
-		__func__, (void *)mem->device_addr, mem->size, mem->kvaddr,
+	d_vpr_h(
+		"%s: dmabuf %pK, size %d, kvaddr %pK, buffer_type %s, secure %d, region %d\n",
+		__func__, mem->device_addr, mem->size, mem->kvaddr,
 		buf_name(mem->type), mem->secure, mem->region);
 
 	cb = msm_vidc_get_context_bank_for_region(core, mem->region);
@@ -416,7 +426,8 @@ static int msm_vidc_memory_unmap_free(struct msm_vidc_core *core, struct msm_vid
 		return -EIO;
 	}
 
-	dma_free_attrs(cb->dev, mem->size, mem->kvaddr, mem->device_addr, mem->attrs);
+	dma_free_attrs(cb->dev, mem->size, mem->kvaddr, mem->device_addr,
+		mem->attrs);
 
 	mem->kvaddr = NULL;
 	mem->device_addr = 0;
@@ -424,9 +435,162 @@ static int msm_vidc_memory_unmap_free(struct msm_vidc_core *core, struct msm_vid
 	return rc;
 }
 
-static u32 msm_vidc_buffer_region(struct msm_vidc_inst *inst, enum msm_vidc_buffer_type buffer_type)
+static int msm_vidc_dma_map_page(struct msm_vidc_core *core,
+	struct msm_vidc_mem *mem)
+{
+	int rc = 0;
+	struct context_bank_info *cb = NULL;
+	dma_addr_t dma_addr;
+
+	if (!mem) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (mem->refcount) {
+		mem->refcount++;
+		goto exit;
+	}
+
+	cb = msm_vidc_get_context_bank_for_region(core, mem->region);
+	if (!cb) {
+		d_vpr_e("%s: Failed to get context bank device\n",
+			__func__);
+		rc = -EIO;
+		goto error;
+	}
+
+	/* map and obtain dma address for physically contiguous memory */
+	dma_addr = dma_map_page(cb->dev, phys_to_page(mem->phys_addr),
+		0, (size_t)mem->size, mem->direction);
+
+	rc = dma_mapping_error(cb->dev, dma_addr);
+	if (rc) {
+		d_vpr_e("%s: Failed to map memory\n", __func__);
+		goto error;
+	}
+
+	mem->device_addr = dma_addr;
+	mem->refcount++;
+
+exit:
+	d_vpr_l(
+		"%s: type %11s, device_addr %#llx, size %u region %d, refcount %d\n",
+		__func__, buf_name(mem->type), mem->device_addr,
+		mem->size, mem->region, mem->refcount);
+
+	return 0;
+
+error:
+	return rc;
+}
+
+static int msm_vidc_dma_unmap_page(struct msm_vidc_core *core,
+	struct msm_vidc_mem *mem)
+{
+	int rc = 0;
+	struct context_bank_info *cb = NULL;
+
+	if (!mem) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	if (mem->refcount) {
+		mem->refcount--;
+	} else {
+		d_vpr_e("unmap called while refcount is zero already\n");
+		return -EINVAL;
+	}
+
+	cb = msm_vidc_get_context_bank_for_region(core, mem->region);
+	if (!cb) {
+		d_vpr_e("%s: Failed to get context bank device\n",
+			__func__);
+		rc = -EIO;
+		goto exit;
+	}
+
+	d_vpr_l(
+		"%s: type %11s, device_addr %#x, refcount %d, region %d\n",
+		__func__, buf_name(mem->type), mem->device_addr,
+		mem->refcount, mem->region);
+
+	if (mem->refcount)
+		goto exit;
+
+	dma_unmap_page(cb->dev, (dma_addr_t)(mem->device_addr),
+		mem->size, mem->direction);
+
+	mem->device_addr = 0x0;
+
+exit:
+	return rc;
+}
+
+static u32 msm_vidc_buffer_region(struct msm_vidc_inst *inst,
+	enum msm_vidc_buffer_type buffer_type)
 {
 	return MSM_VIDC_NON_SECURE;
+}
+
+static int msm_vidc_iommu_map(struct msm_vidc_core *core, struct msm_vidc_mem *mem)
+{
+	int rc = 0;
+	struct context_bank_info *cb = NULL;
+
+	if (!mem) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	cb = msm_vidc_get_context_bank_for_region(core, mem->region);
+	if (!cb) {
+		d_vpr_e("%s: failed to get context bank device for region: %d\n",
+			__func__, mem->region);
+		return -EIO;
+	}
+
+	rc = iommu_map(cb->domain, mem->device_addr, mem->phys_addr,
+		mem->size, IOMMU_READ | IOMMU_WRITE | IOMMU_MMIO, GFP_KERNEL);
+	if (rc) {
+		d_vpr_e("iommu_map failed for device_addr 0x%x, size %d, rc:%d\n",
+			mem->device_addr, mem->size, rc);
+		return rc;
+	}
+
+	d_vpr_h("%s: phys_addr %#x size %#x device_addr %#x, mem_region %d\n",
+		__func__, mem->phys_addr, mem->size, mem->device_addr, mem->region);
+
+	return rc;
+}
+
+static int msm_vidc_iommu_unmap(struct msm_vidc_core *core, struct msm_vidc_mem *mem)
+{
+	int rc = 0;
+	struct context_bank_info *cb = NULL;
+
+	if (!mem) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	cb = msm_vidc_get_context_bank_for_region(core, mem->region);
+	if (!cb) {
+		d_vpr_e("%s: failed to get context bank device for region: %d\n",
+			__func__, mem->region);
+		return -EIO;
+	}
+
+	d_vpr_h("%s: phys_addr %#x size %#x device_addr %#x, mem_region %d\n",
+		__func__, mem->phys_addr, mem->size, mem->device_addr, mem->region);
+
+	iommu_unmap(cb->domain, mem->device_addr, mem->size);
+	mem->device_addr = 0x0;
+	mem->phys_addr = 0x0;
+	mem->size = 0;
+
+	return rc;
 }
 
 static const struct msm_vidc_memory_ops msm_mem_ops = {
@@ -439,44 +603,14 @@ static const struct msm_vidc_memory_ops msm_mem_ops = {
 	.dma_buf_unmap_attachment       = msm_vidc_dma_buf_unmap_attachment,
 	.memory_alloc_map               = msm_vidc_memory_alloc_map,
 	.memory_unmap_free              = msm_vidc_memory_unmap_free,
+	.mem_dma_map_page               = msm_vidc_dma_map_page,
+	.mem_dma_unmap_page             = msm_vidc_dma_unmap_page,
 	.buffer_region                  = msm_vidc_buffer_region,
+	.iommu_map                      = msm_vidc_iommu_map,
+	.iommu_unmap                    = msm_vidc_iommu_unmap,
 };
 
 const struct msm_vidc_memory_ops *get_mem_ops(void)
 {
 	return &msm_mem_ops;
-}
-
-int msm_memory_cache_operations(struct msm_vidc_inst *inst,
-	struct dma_buf *dbuf, enum msm_memory_cache_type cache_type)
-{
-	int rc = 0;
-
-	if (!inst || !dbuf) {
-		d_vpr_e("%s: Invalid params\n", __func__);
-		return -EINVAL;
-	}
-
-	switch (cache_type) {
-	case MSM_MEM_CACHE_CLEAN:
-	case MSM_MEM_CACHE_CLEAN_INVALIDATE:
-		rc = dma_buf_begin_cpu_access(dbuf, DMA_TO_DEVICE);
-		if (rc)
-			break;
-		rc = dma_buf_end_cpu_access(dbuf, DMA_FROM_DEVICE);
-		break;
-	case MSM_MEM_CACHE_INVALIDATE:
-		rc = dma_buf_begin_cpu_access(dbuf, DMA_FROM_DEVICE);
-		if (rc)
-			break;
-		rc = dma_buf_end_cpu_access(dbuf, DMA_FROM_DEVICE);
-		break;
-	default:
-		i_vpr_e(inst, "%s: cache (%d) operation not supported\n",
-			__func__, cache_type);
-		rc = -EINVAL;
-		break;
-	}
-
-	return rc;
 }
