@@ -20,8 +20,16 @@
 #define VIDEO_ARCH_LX 1
 
 #define VCODEC_BASE_OFFS_IRIS33_AU              0x00000000
-#define VCODEC_CPU_CS_IRIS33_AU                 0x000A0000
 #define AON_BASE_OFFS                           0x000E0000
+/* for HW Virtualization, each GVM has access to only the corresponding CS block.
+ * Only the memory block accesed by each vm is remapped on driver init.
+ * For GVMs, register base starts at CS block, so offset from register base is 0.
+ */
+#ifndef MSM_VIDC_HW_VIRT
+#define VCODEC_CPU_CS_IRIS33_AU                 0x000A0000
+#else
+#define VCODEC_CPU_CS_IRIS33_AU                 0
+#endif
 
 #define VCODEC_VPU_CPU_CS_VCICMDARG0_IRIS33_AU              (VCODEC_CPU_CS_IRIS33_AU + 0x24)
 #define VCODEC_VPU_CPU_CS_VCICMDARG1_IRIS33_AU              (VCODEC_CPU_CS_IRIS33_AU + 0x28)
@@ -747,21 +755,23 @@ static int __clear_interrupt_iris33_au(struct msm_vidc_core *core)
 		return 0;
 	}
 
-	rc = __read_register(core, WRAPPER_INTR_STATUS_IRIS33_AU, &intr_status);
-	if (rc)
-		return rc;
+	if (!core->is_hw_virt) {
+		rc = __read_register(core, WRAPPER_INTR_STATUS_IRIS33_AU, &intr_status);
+		if (rc)
+			return rc;
 
-	mask = (WRAPPER_INTR_STATUS_A2H_BMSK_IRIS33_AU|
-		WRAPPER_INTR_STATUS_A2HWD_BMSK_IRIS33_AU|
-		HFI_CTRL_VCODEC_IDLE);
+		mask = (WRAPPER_INTR_STATUS_A2H_BMSK_IRIS33_AU|
+			WRAPPER_INTR_STATUS_A2HWD_BMSK_IRIS33_AU|
+			HFI_CTRL_VCODEC_IDLE);
 
-	if (intr_status & mask) {
-		core->intr_status |= intr_status;
-		core->reg_count++;
-		d_vpr_l("INTERRUPT: times: %d interrupt_status: %d\n",
-			core->reg_count, intr_status);
-	} else {
-		core->spur_count++;
+		if (intr_status & mask) {
+			core->intr_status |= intr_status;
+			core->reg_count++;
+			d_vpr_l("INTERRUPT: times: %d interrupt_status: %d\n",
+				core->reg_count, intr_status);
+		} else {
+			core->spur_count++;
+		}
 	}
 
 	rc = __write_register(core, CPU_CS_A2HSOFTINTCLR_IRIS33_AU, 1);
