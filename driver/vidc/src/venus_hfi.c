@@ -27,6 +27,9 @@
 #include "venus_hfi_queue.h"
 #include "msm_vidc_events.h"
 #include "firmware.h"
+#ifdef MSM_VIDC_HW_VIRT
+#include "vidc_hw_virt.h"
+#endif
 
 #define update_offset(offset, val)		((offset) += (val))
 #define update_timestamp(ts, val) \
@@ -323,6 +326,10 @@ static int __power_collapse(struct msm_vidc_core *core, bool force)
 		rc = __suspend(core);
 		if (rc)
 			d_vpr_e("Failed __suspend\n");
+	} else {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_cmd_pause_gvm_session(core->capabilities[NUM_VPU].value, 0);
+#endif
 	}
 
 exit:
@@ -678,6 +685,10 @@ static int __resume(struct msm_vidc_core *core)
 			call_res_op(core, gdsc_sw_ctrl, core);
 			rc = 0;
 		}
+	} else {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_cmd_resume_gvm_session(core->capabilities[NUM_VPU].value, 0);
+#endif
 	}
 
 	d_vpr_h("Resumed from power collapse\n");
