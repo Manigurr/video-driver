@@ -173,14 +173,20 @@ enum v4l2_mpeg_vidc_metadata_bits {
 #define V4L2_CID_MPEG_VIDC_METADATA_MAX_NUM_REORDER_FRAMES                   \
 	(V4L2_CID_MPEG_VIDC_BASE + 0x30)
 /* Control IDs for AV1 */
-#define V4L2_CID_MPEG_VIDEO_AV1_PROFILE        (V4L2_CID_MPEG_VIDC_BASE + 0x31)
+#ifdef V4L2_CID_MPEG_VIDEO_AV1_PROFILE
+#undef V4L2_CID_MPEG_VIDEO_AV1_PROFILE
+#else
 enum v4l2_mpeg_video_av1_profile {
 	V4L2_MPEG_VIDEO_AV1_PROFILE_MAIN            = 0,
 	V4L2_MPEG_VIDEO_AV1_PROFILE_HIGH            = 1,
 	V4L2_MPEG_VIDEO_AV1_PROFILE_PROFESSIONAL    = 2,
 };
+#endif
+#define V4L2_CID_MPEG_VIDEO_AV1_PROFILE        (V4L2_CID_MPEG_VIDC_BASE + 0x31)
 
-#define V4L2_CID_MPEG_VIDEO_AV1_LEVEL           (V4L2_CID_MPEG_VIDC_BASE + 0x32)
+#ifdef V4L2_CID_MPEG_VIDEO_AV1_LEVEL
+#undef V4L2_CID_MPEG_VIDEO_AV1_LEVEL
+#else
 enum v4l2_mpeg_video_av1_level {
 	V4L2_MPEG_VIDEO_AV1_LEVEL_2_0  = 0,
 	V4L2_MPEG_VIDEO_AV1_LEVEL_2_1  = 1,
@@ -207,6 +213,8 @@ enum v4l2_mpeg_video_av1_level {
 	V4L2_MPEG_VIDEO_AV1_LEVEL_7_2  = 22,
 	V4L2_MPEG_VIDEO_AV1_LEVEL_7_3  = 23,
 };
+#endif
+#define V4L2_CID_MPEG_VIDEO_AV1_LEVEL           (V4L2_CID_MPEG_VIDC_BASE + 0x32)
 
 #define V4L2_CID_MPEG_VIDEO_AV1_TIER        (V4L2_CID_MPEG_VIDC_BASE + 0x33)
 enum v4l2_mpeg_video_av1_tier {
