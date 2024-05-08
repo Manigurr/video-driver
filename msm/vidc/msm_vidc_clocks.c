@@ -675,10 +675,13 @@ static unsigned long msm_vidc_calc_freq_ar50_lt(struct msm_vidc_inst *inst,
 
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 		codec = get_v4l2_codec(inst);
-		if (codec == V4L2_PIX_FMT_VP9 &&
-		    inst->clk_data.work_mode == HFI_WORKMODE_2 &&
-		    !is_realtime_session(inst))
-			vsp_cycles = msm_vidc_max_freq(inst->core, inst->sid);
+		if (!is_realtime_session(inst)) {
+			if ((codec == V4L2_PIX_FMT_VP9 &&
+			    inst->clk_data.work_mode == HFI_WORKMODE_2) ||
+			    (codec == V4L2_PIX_FMT_H264 &&
+			    inst->clk_data.work_mode == HFI_WORKMODE_1))
+			    vsp_cycles = msm_vidc_max_freq(inst->core, inst->sid);
+		}
 #endif
 	} else {
 		s_vpr_e(inst->sid, "%s: Unknown session type\n", __func__);
