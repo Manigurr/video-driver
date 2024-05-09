@@ -31,6 +31,12 @@ enum msm_memory_pool_type {
 	MSM_MEM_POOL_MAX,
 };
 
+enum msm_memory_cache_type {
+	MSM_MEM_CACHE_CLEAN = 0,
+	MSM_MEM_CACHE_INVALIDATE,
+	MSM_MEM_CACHE_CLEAN_INVALIDATE,
+};
+
 struct msm_memory_alloc_header {
 	struct list_head       list;
 	u32                    type;
@@ -89,5 +95,7 @@ struct msm_vidc_memory_ops {
 };
 
 const struct msm_vidc_memory_ops *get_mem_ops(void);
+int msm_memory_cache_operations(struct msm_vidc_inst *inst,
+	struct dma_buf *dbuf, enum msm_memory_cache_type cache_type);
 
 #endif // _MSM_VIDC_MEMORY_H_

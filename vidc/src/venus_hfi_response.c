@@ -1213,6 +1213,11 @@ static int handle_dequeue_buffers(struct msm_vidc_inst *inst)
 						"vb2 done already", inst, buf);
 				} else {
 					buf->attr |= MSM_VIDC_ATTR_BUFFER_DONE;
+
+					rc = msm_vidc_dqbuf_cache_operation(inst, buf);
+					if (rc)
+						return rc;
+
 					rc = msm_vidc_vb2_buffer_done(inst, buf);
 					if (rc) {
 						print_vidc_buffer(VIDC_HIGH, "err ",
