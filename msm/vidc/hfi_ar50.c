@@ -113,6 +113,8 @@ void __interrupt_init_ar50(struct venus_hfi_device *device, u32 sid)
 int __enable_regulators_ar50(struct venus_hfi_device *device)
 {
 	int rc = 0;
+	u32 reg_count = 0;
+	reg_count = device->res->regulator_set.count;
 
 	d_vpr_h("Enabling regulators\n");
 
@@ -126,6 +128,13 @@ int __enable_regulators_ar50(struct venus_hfi_device *device)
 		d_vpr_e("Failed to enable regualtor venus-core0, rc = %d\n", rc);
 		goto fail_regulator_core;
 	}
+	if(reg_count >= 3){
+		rc = __enable_regulator_by_name(device, "venus-core1");
+		if (rc) {
+			d_vpr_e("Failed to enable regualtor venus-core1, rc = %d\n", rc);
+			goto fail_regulator_core;
+		}
+	}
 
 	return 0;
 
@@ -138,6 +147,8 @@ fail_regulator:
 int __disable_regulators_ar50(struct venus_hfi_device *device)
 {
 	int rc = 0;
+	u32 reg_count = 0;
+	reg_count = device->res->regulator_set.count;
 
 	d_vpr_h("Disabling regulators\n");
 
@@ -145,6 +156,13 @@ int __disable_regulators_ar50(struct venus_hfi_device *device)
 	if (rc) {
 		d_vpr_e("%s: disable regulator venus-core0 failed, rc = %d\n", __func__, rc);
 		rc = 0;
+	}
+	if(reg_count >= 3){
+		rc = __disable_regulator_by_name(device, "venus-core1");
+		if (rc) {
+			d_vpr_e("%s: disable regulator venus-core1 failed, rc = %d\n", __func__, rc);
+			rc = 0;
+		}
 	}
 	rc = __disable_regulator_by_name(device, "venus");
 	if (rc)

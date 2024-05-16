@@ -1470,18 +1470,21 @@ static struct msm_vidc_vpss_capability vpss_capabilities[] = {
 
 static struct msm_vidc_codec_capability qcs605_capabilities[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value,} */
-	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 96, 5376, 1, 5376},
+	{CAP_FRAME_WIDTH, DEC, CODECS_ALL, 96, 5376, 1, 5376},
 	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 96, 5376, 1, 5376},
+	{CAP_FRAME_WIDTH, ENC, CODECS_ALL, 96, 8192, 1, 5376},
 	/* ((4096*2176)/256) decode + ((4096*2176)/256) encode  */
-	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 36, 69632, 1, 69632},
-	/* (4096 × 2176) /256 *60 fps + (4096 × 2176) /256 * 30 fps*/
-	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 36, 3133440, 1, 3133440},
+	{CAP_MBS_PER_FRAME, DEC, CODECS_ALL, 36, 69632, 1, 69632},
+	/* ((8192 * 4320) / 256) */
+	{CAP_MBS_PER_FRAME, ENC, CODECS_ALL, 36, 138240, 1, 138240},
+	/* ((8192 * 4320) / 256) @30 */
+	{CAP_MBS_PER_SECOND, DOMAINS_ALL, CODECS_ALL, 36, 4147200, 1, 4147200},
 	{CAP_FRAMERATE, DOMAINS_ALL, CODECS_ALL, 1, 480, 1, 30},
 	//{CAP_OPERATINGRATE, DOMAINS_ALL, CODECS_ALL, 1, INT_MAX, 1, 30},
 	{CAP_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 120000000, 1, 12000000},
 	{CAP_CABAC_BITRATE, ENC, H264, 1, 120000000, 1, 12000000},
-	{CAP_SCALE_X, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
-	{CAP_SCALE_Y, ENC, CODECS_ALL, 4096, 65536, 1, 4096},
+	{CAP_SCALE_X, ENC, CODECS_ALL, 8192, 65536, 1, 4096},
+	{CAP_SCALE_Y, ENC, CODECS_ALL, 8192, 65536, 1, 4096},
 	{CAP_SCALE_X, DEC, CODECS_ALL, 65536, 65536, 1, 65536},
 	{CAP_SCALE_Y, DEC, CODECS_ALL, 65536, 65536, 1, 65536},
 	{CAP_BFRAME, ENC, H264|HEVC, 0, 1, 1, 0},
@@ -2905,8 +2908,12 @@ static struct msm_vidc_common_data qcs605_common_data_v0[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 3133440,
-		/* (4096 × 2176) /256 *60 fps decode + (4096 × 2176) /256 * 30 fps encode */
+		.value = 4147200,
+		/* ((8192 * 4320) / 256) @30 */
+	},
+	{
+		.key = "qcom,max-mbpf",
+		.value = 195840, /* 24x(1920x1088)/256 */
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
@@ -2986,6 +2993,10 @@ static struct msm_vidc_common_data qcs605_common_data_v1[] = {
 	{
 		.key = "qcom,max-hw-load",
 		.value = 1224000,/* 3840 x 2176 @ 30 fps + 1920x1088 @30 fps*/
+	},
+	{
+		.key = "qcom,max-mbpf",
+		.value = 195840, /* 24x(1920x1088)/256 */
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
