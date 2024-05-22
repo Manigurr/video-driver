@@ -627,9 +627,11 @@ static int msm_buffer_dpb_count(struct msm_vidc_inst *inst)
 	if (is_decode_session(inst)) {
 		color_fmt = inst->capabilities[PIX_FMTS].value;
 		if (is_linear_colorformat(color_fmt) ||
-			(inst->codec == MSM_VIDC_AV1 &&
-			(inst->capabilities[FILM_GRAIN].value)))
-			count = inst->buffers.output.min_count;
+                (inst->codec == MSM_VIDC_AV1 &&
+                (inst->capabilities[FILM_GRAIN].value))) {
+			count = inst->fw_min_count ?
+						inst->fw_min_count : inst->buffers.output.min_count;
+        }
 
 		return count;
 	}
