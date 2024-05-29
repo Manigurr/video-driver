@@ -267,7 +267,8 @@ enum v4l2_mpeg_vidc_video_bitrate_savings_type {
 		(V4L2_CID_MPEG_MSM_VIDC_BASE + 136)
 #define V4L2_CID_MPEG_VIDC_VENC_COMPLEXITY \
 		(V4L2_CID_MPEG_MSM_VIDC_BASE + 137)
-
+#define V4L2_CID_MPEG_VIDC_VENC_PFRAMESIZE \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 138)
 #define V4L2_CID_MPEG_VIDC_VIDEO_UNKNOWN \
 		(V4L2_CID_MPEG_MSM_VIDC_BASE + 0xFFF)
 /* vendor controls end */
