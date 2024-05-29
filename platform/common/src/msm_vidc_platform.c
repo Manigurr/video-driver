@@ -22,6 +22,7 @@
 #include "hfi_property.h"
 #include "venus_hfi.h"
 
+#include "msm_vidc_sa8775p.h"
 #include "msm_vidc_qcm6490.h"
 #include "msm_vidc_iris3.h"
 #include "msm_vidc_iris2.h"
@@ -197,6 +198,11 @@ static struct v4l2_m2m_ops msm_v4l2_m2m_ops = {
 };
 
 static const struct msm_vidc_compat_handle compat_handle[] = {
+	{
+		.compat                     = "qcom,sa8775p-iris",
+		.init_platform              = msm_vidc_init_platform_sa8775p,
+		.init_iris                  = msm_vidc_init_iris3,
+	},
 	{
 		.compat                     = "qcom,qcm6490-iris-vpu",
 		.init_platform              = msm_vidc_init_platform_qcm6490,

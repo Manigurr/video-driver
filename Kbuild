@@ -22,6 +22,7 @@ LINUXINCLUDE +=                                 \
     -I$(VIDEO_KERNEL_ROOT)/platform/common/inc \
     -I$(VIDEO_KERNEL_ROOT)/platform/qcm6490/inc \
     -I$(VIDEO_KERNEL_ROOT)/platform/sm8550/inc \
+    -I$(VIDEO_KERNEL_ROOT)/platform/sa8775p/inc \
     -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/media \
     -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/ \
     -I$(VIDEO_KERNEL_ROOT)/
@@ -30,8 +31,6 @@ LINUXINCLUDE +=                                 \
 ccflags-y += ${ccflags-m}
 
 iris_vpu-y := \
-                  vidc/src/msm_vidc_debug.o \
-                  platform/common/src/msm_vidc_platform_ext.o \
                   vidc/src/msm_vidc_debug.o \
                   vidc/src/msm_vidc_v4l2.o \
                   vidc/src/msm_vidc_vb2.o \
@@ -46,6 +45,7 @@ iris_vpu-y := \
                   vidc/src/resources.o \
                   vidc/src/firmware.o \
                   vidc/src/msm_vidc_memory.o \
+                  vidc/src/msm_vidc_memory_ext.o \
                   vidc/src/venus_hfi.o \
                   vidc/src/venus_hfi_queue.o \
                   vidc/src/hfi_packet.o \
@@ -53,7 +53,9 @@ iris_vpu-y := \
                   vidc/src/msm_vidc_fence.o \
                   vidc/src/msm_vidc_state.o \
                   platform/common/src/msm_vidc_platform.o \
+                  platform/common/src/msm_vidc_platform_ext.o \
                   platform/qcm6490/src/msm_vidc_qcm6490.o \
+                  platform/sa8775p/src/msm_vidc_sa8775p.o \
                   variant/common/src/msm_vidc_variant.o \
                   variant/iris3/src/msm_vidc_buffer_iris3.o \
                   variant/iris3/src/msm_vidc_iris3.o \
