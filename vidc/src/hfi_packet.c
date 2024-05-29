@@ -686,7 +686,7 @@ int hfi_packet_sys_intraframe_powercollapse(struct msm_vidc_core *core,
 		goto err;
 
 	/* HFI_PROP_INTRA_FRAME_POWER_COLLAPSE */
-	payload = 0;
+	payload = enable;
 	d_vpr_h("%s: intra frame power collapse %d\n", __func__, payload);
 	rc = hfi_create_packet(pkt, pkt_size,
 		HFI_PROP_INTRA_FRAME_POWER_COLLAPSE,

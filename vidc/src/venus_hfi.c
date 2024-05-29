@@ -13,6 +13,7 @@
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <linux/iopoll.h>
+#include <linux/of_platform.h>
 
 #include "venus_hfi.h"
 #include "msm_vidc_core.h"
@@ -214,6 +215,7 @@ exit:
 static int __sys_set_power_control(struct msm_vidc_core *core, bool enable)
 {
 	int rc = 0;
+	struct device_node *node = NULL;
 
 	if (!is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
 		d_vpr_e("%s: skipping as power control hanfoff was not done\n",
@@ -225,6 +227,12 @@ static int __sys_set_power_control(struct msm_vidc_core *core, bool enable)
 		d_vpr_e("%s: invalid core state %s\n",
 			__func__, core_state_name(core->state));
 		return rc;
+	}
+
+	for_each_available_child_of_node(core->pdev->dev.of_node, node) {
+		if (of_device_is_compatible(node, "qcom,sa8775p-iris")) {
+			enable = false;
+		}
 	}
 
 	rc = hfi_packet_sys_intraframe_powercollapse(core,
