@@ -215,7 +215,6 @@ exit:
 static int __sys_set_power_control(struct msm_vidc_core *core, bool enable)
 {
 	int rc = 0;
-	struct device_node *node = NULL;
 
 	if (!is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
 		d_vpr_e("%s: skipping as power control hanfoff was not done\n",
@@ -229,11 +228,10 @@ static int __sys_set_power_control(struct msm_vidc_core *core, bool enable)
 		return rc;
 	}
 
-	for_each_available_child_of_node(core->pdev->dev.of_node, node) {
-		if (of_device_is_compatible(node, "qcom,sa8775p-iris")) {
-			enable = false;
-		}
+	if (of_device_is_compatible(core->pdev->dev.of_node, "qcom,sa8775p-iris")) {
+		enable = false;
 	}
+	d_vpr_h("%s hw control enable[%d]\n", __func__, enable);
 
 	rc = hfi_packet_sys_intraframe_powercollapse(core,
 		core->packet, core->packet_size, enable);
