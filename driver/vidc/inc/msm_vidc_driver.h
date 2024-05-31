@@ -437,6 +437,9 @@ int msm_vidc_add_session(struct msm_vidc_inst *inst);
 int msm_vidc_session_open(struct msm_vidc_inst *inst);
 int msm_vidc_session_set_codec(struct msm_vidc_inst *inst);
 int msm_vidc_session_set_secure_mode(struct msm_vidc_inst *inst);
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int msm_vidc_session_set_core_id(struct msm_vidc_inst *inst);
+#endif
 int msm_vidc_session_set_default_header(struct msm_vidc_inst *inst);
 int msm_vidc_session_streamoff(struct msm_vidc_inst *inst,
 		enum msm_vidc_port_type port);

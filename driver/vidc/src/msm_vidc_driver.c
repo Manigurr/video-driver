@@ -4282,6 +4282,24 @@ int msm_vidc_session_set_codec(struct msm_vidc_inst *inst)
 	return 0;
 }
 
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int msm_vidc_session_set_core_id(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+
+	if (!inst) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = venus_hfi_session_set_core_id(inst);
+	if (rc)
+		d_vpr_e("%s: set_core_id failed\n", __func__);
+
+	return rc;
+}
+#endif
+
 int msm_vidc_session_set_secure_mode(struct msm_vidc_inst *inst)
 {
 	int rc = 0;

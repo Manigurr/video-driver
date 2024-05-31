@@ -16,6 +16,8 @@
 #include "msm_vidc_core.h"
 
 #define VIDC_MAX_PC_SKIP_COUNT 		10
+#define HFI_CORE_0                 0x00000001
+#define HFI_CORE_1                 0x00000002
 
 struct vidc_buffer_addr_info {
 	enum msm_vidc_buffer_type buffer_type;
@@ -54,6 +56,9 @@ int venus_hfi_session_resume(struct msm_vidc_inst *inst,
 int venus_hfi_session_drain(struct msm_vidc_inst *inst, enum msm_vidc_port_type port);
 int venus_hfi_session_set_codec(struct msm_vidc_inst *inst);
 int venus_hfi_session_set_secure_mode(struct msm_vidc_inst *inst);
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int venus_hfi_session_set_core_id(struct msm_vidc_inst *inst);
+#endif
 int venus_hfi_core_init(struct msm_vidc_core *core);
 int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force);
 int venus_hfi_noc_error_info(struct msm_vidc_core *core);
