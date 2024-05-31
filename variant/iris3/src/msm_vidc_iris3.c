@@ -4,6 +4,8 @@
  * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/iopoll.h>
+
 #include "msm_vidc_iris3.h"
 #include "msm_vidc_buffer_iris3.h"
 #include "msm_vidc_power_iris3.h"
@@ -112,6 +114,7 @@
 #define WRAPPER_IRIS_CPU_NOC_LPI_CONTROL	(WRAPPER_BASE_OFFS_IRIS3 + 0x5C)
 #define WRAPPER_IRIS_CPU_NOC_LPI_STATUS		(WRAPPER_BASE_OFFS_IRIS3 + 0x60)
 #define WRAPPER_CORE_POWER_STATUS		(WRAPPER_BASE_OFFS_IRIS3 + 0x80)
+#define WRAPPER_CORE_POWER_CONTROL		(WRAPPER_BASE_OFFS_IRIS3 + 0x84)
 #define WRAPPER_CORE_CLOCK_CONFIG_IRIS3		(WRAPPER_BASE_OFFS_IRIS3 + 0x88)
 
 /*
@@ -237,6 +240,35 @@ static int __setup_ucregion_memory_map_iris3(struct msm_vidc_core *core)
 		rc = __write_register(core, SFR_ADDR_IRIS3, value);
 		if (rc)
 			return rc;
+	}
+
+	return 0;
+}
+
+static int switch_vcodec_gdsc_mode(struct msm_vidc_core *core, bool sw_mode)
+{
+	void __iomem *base_addr;
+	u32 val = 0;
+	int rc;
+
+	base_addr = core->resource->register_base_addr;
+
+	if (sw_mode) {
+		writel_relaxed(0, base_addr + WRAPPER_CORE_POWER_CONTROL);
+		rc = readl_relaxed_poll_timeout(base_addr + WRAPPER_CORE_POWER_STATUS, val,
+						val & BIT(1), 1, 2000);
+		if (rc) {
+			d_vpr_e("%s: set sw ctrl failing rc[%d]\n", __func__, rc);
+			return rc;
+		}
+	} else {
+		writel_relaxed(1, base_addr + WRAPPER_CORE_POWER_CONTROL);
+		rc = readl_relaxed_poll_timeout(base_addr + WRAPPER_CORE_POWER_STATUS, val,
+					!(val & BIT(1)), 1, 2000);
+		if (rc) {
+			d_vpr_e("%s: set hw ctrl failing rc[%d]\n", __func__, rc);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -519,13 +551,25 @@ static int __power_on_iris3_hardware(struct msm_vidc_core *core)
 	if (rc)
 		goto fail_regulator;
 
+	rc = switch_vcodec_gdsc_mode(core, true);
+	if (rc)
+		goto fail_gdsc_mode_enable;
+
 	rc = call_res_op(core, clk_enable, core, "vcodec_clk");
 	if (rc)
 		goto fail_clk_controller;
 
+	rc = switch_vcodec_gdsc_mode(core, false);
+	if (rc)
+		goto fail_gdsc_mode_disable;
+
 	return 0;
 
+fail_gdsc_mode_disable:
+	call_res_op(core, clk_disable, core, "vcodec_clk");
 fail_clk_controller:
+	switch_vcodec_gdsc_mode(core, false);
+fail_gdsc_mode_enable:
 	call_res_op(core, gdsc_off, core, "vcodec");
 fail_regulator:
 	return rc;

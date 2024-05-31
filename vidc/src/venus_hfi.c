@@ -13,7 +13,6 @@
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <linux/iopoll.h>
-#include <linux/of_platform.h>
 
 #include "venus_hfi.h"
 #include "msm_vidc_core.h"
@@ -227,11 +226,6 @@ static int __sys_set_power_control(struct msm_vidc_core *core, bool enable)
 			__func__, core_state_name(core->state));
 		return rc;
 	}
-
-	if (of_device_is_compatible(core->pdev->dev.of_node, "qcom,sa8775p-iris")) {
-		enable = false;
-	}
-	d_vpr_h("%s hw control enable[%d]\n", __func__, enable);
 
 	rc = hfi_packet_sys_intraframe_powercollapse(core,
 		core->packet, core->packet_size, enable);
