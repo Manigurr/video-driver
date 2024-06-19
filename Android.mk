@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-only
-ifneq ($(ENABLE_HYP), true)
 TARGET_VIDC_ENABLE := false
 ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
 	ifeq ($(TARGET_KERNEL_DLKM_VIDEO_OVERRIDE), true)
@@ -7,6 +6,12 @@ ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
 	endif
 else
 TARGET_VIDC_ENABLE := true
+endif
+
+ifeq ($(ENABLE_HYP), true)
+ifneq ($(CONFIG_ARCH_NORDAU), y)
+TARGET_VIDC_ENABLE := false
+endif
 endif
 
 ifeq ($(TARGET_VIDC_ENABLE),true)
@@ -28,8 +33,20 @@ DLKM_DIR   := device/qcom/common/dlkm
 
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(CONFIG_ARCH_NORDAU), y)
+ifeq ($(ENABLE_HYP), true)
+KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(PWD)/$(call intermediates-dir-for,DLKM,virtio-video-symvers)/Module.symvers
+endif
+endif
+
 include $(CLEAR_VARS)
 # For incremental compilation
+ifeq ($(CONFIG_ARCH_NORDAU), y)
+ifeq ($(ENABLE_HYP), true)
+LOCAL_REQUIRED_MODULES := virtio-video-symvers
+LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,virtio-video-symvers)/Module.symvers
+endif
+endif
 LOCAL_SRC_FILES           := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
 LOCAL_MODULE              := msm_video.ko
 LOCAL_MODULE_KBUILD_NAME  := msm_video.ko
@@ -40,5 +57,4 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 
 # Include kp_module.ko in the /vendor/lib/modules (vendor.img)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
-endif
 endif
