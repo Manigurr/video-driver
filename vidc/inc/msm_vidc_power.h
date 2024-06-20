@@ -201,9 +201,9 @@ static struct lut {
 
 static inline u32 get_type_frm_name(const char *name)
 {
-	if (!strcmp(name, "venus-llcc"))
+	if (!strcmp(name, "iris-llcc"))
 		return LLCC;
-	else if (!strcmp(name, "venus-ddr"))
+	else if (!strcmp(name, "iris-ddr"))
 		return DDR;
 	else
 		return PERF;
