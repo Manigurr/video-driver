@@ -3,10 +3,10 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "kalama_technology.h"
 #include "msm_vidc_debug.h"
+#include "kalama_technology.h"
 
-u32 calculate_number_lcus_kalama(u32 width, u32 height, u32 lcu_size)
+static u32 calculate_number_lcus_kalama(u32 width, u32 height, u32 lcu_size)
 {
 	u32 mbs_width = (width % lcu_size) ?
 		(width / lcu_size + 1) : (width / lcu_size);
@@ -16,7 +16,7 @@ u32 calculate_number_lcus_kalama(u32 width, u32 height, u32 lcu_size)
 	return mbs_width * mbs_height;
 }
 
-u32 calculate_number_ubwctiles_kalama(
+static u32 calculate_number_ubwctiles_kalama(
 		u32 width, u32 height, u32 tile_w, u32 tile_h)
 {
 	u32 tiles_width = (width % tile_w) ?
@@ -36,7 +36,7 @@ struct compression_factors {
 	u32 ipb_cr;
 } compression_factor;
 
-u32 get_compression_factors(struct compression_factors *compression_factor,
+static u32 get_compression_factors(struct compression_factors *compression_factor,
 		struct api_calculation_input codec_input)
 {
 	u8 cr_index_entry, cr_index_y, cr_index_c, cr_index_uni;
@@ -919,7 +919,7 @@ int msm_vidc_calculate_bandwidth(struct api_calculation_input codec_input,
 	} else if (codec_input.decoder_or_encoder == CODEC_ENCODER) {
 		rc = calculate_bandwidth_encoder_iris3(codec_input, codec_output);
 	} else {
-		d_vpr_e("%s: invalid codec\n", codec_input.decoder_or_encoder);
+		d_vpr_e("%s: invalid codec %u\n", __func__, codec_input.decoder_or_encoder);
 		return -EINVAL;
 	}
 

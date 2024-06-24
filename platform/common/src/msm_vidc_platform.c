@@ -3410,23 +3410,6 @@ int msm_vidc_set_u32_enum(void *instance,
 	return rc;
 }
 
-int msm_vidc_set_s32(void *instance,
-		     enum msm_vidc_inst_capability_type cap_id)
-{
-	int rc = 0;
-	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
-	s32 hfi_value = 0;
-
-	hfi_value = inst->capabilities[cap_id].value;
-
-	rc = msm_vidc_packetize_control(inst, cap_id, HFI_PAYLOAD_S32,
-					&hfi_value, sizeof(s32), __func__);
-	if (rc)
-		return rc;
-
-	return rc;
-}
-
 int msm_vidc_set_stage(void *instance,
 		       enum msm_vidc_inst_capability_type cap_id)
 {

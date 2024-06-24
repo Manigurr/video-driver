@@ -5,12 +5,13 @@
  */
 
 #include "kalama_technology.h"
-#include "msm_vidc_power_iris3.h"
+
 #include "msm_vidc_driver.h"
 #include "msm_vidc_inst.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_power.h"
+#include "msm_vidc_power_iris3.h"
 
 static u64 __calculate_decoder(struct vidc_bus_vote_data *d);
 static u64 __calculate_encoder(struct vidc_bus_vote_data *d);
@@ -347,7 +348,7 @@ static int msm_vidc_calc_bw_iris3_new(struct msm_vidc_inst *inst,
 	vidc_data->calc_bw_ddr = kbps(codec_output.ddr_bw_rd + codec_output.ddr_bw_wr);
 	vidc_data->calc_bw_llcc = kbps(codec_output.noc_bw_rd + codec_output.noc_bw_wr);
 
-	i_vpr_l(inst, "%s: calc_bw_ddr %lu calc_bw_llcc %lu",
+	i_vpr_l(inst, "%s: calc_bw_ddr %llu calc_bw_llcc %llu",
 		__func__, vidc_data->calc_bw_ddr, vidc_data->calc_bw_llcc);
 
 	return ret;

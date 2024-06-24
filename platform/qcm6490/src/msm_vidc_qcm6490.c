@@ -2318,7 +2318,7 @@ static struct freq_table qcm6490_freq_table_sku0[] = {
     {460000048}, {424000000}, {335000000}, {240000000}, {133333000},
 };
 
-static struct freq_table qcm6490_freq_table_sku1[] = {
+static struct freq_table qcm6490_freq_table_sku1[] __attribute__((unused)) = {
     {240000000}
 };
 
