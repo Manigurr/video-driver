@@ -4863,7 +4863,7 @@ unlock:
 static int msm_vidc_pvm_event_handler(void *p)
 {
 	struct msm_vidc_core *core = p;
-	struct virtio_video_event evt;
+	struct virtio_video_event evt = {0};
 
 	while (core->is_gvm_open) {
 		if (!virtio_video_queue_event_wait(&evt)) {
