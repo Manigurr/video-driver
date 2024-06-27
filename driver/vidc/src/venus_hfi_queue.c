@@ -498,6 +498,13 @@ int venus_hfi_queue_init(struct msm_vidc_core *core)
 
 	d_vpr_h("%s()\n", __func__);
 
+	if (!(core && core->mem_ops &&
+		core->mem_ops->memory_alloc &&
+		core->mem_ops->memory_map)) {
+		d_vpr_e("%s: mem_ops not populated\n", __func__);
+		return -EINVAL;
+	}
+
 	if (core->iface_q_table.align_virtual_addr) {
 		d_vpr_h("%s: queues already allocated\n", __func__);
 		venus_hfi_reset_queue_header(core);
