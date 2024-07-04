@@ -25,7 +25,7 @@
 #include "hfi_packet.h"
 #include "msm_vidc_events.h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc_hw_virt.h"
+#include "vidc/vidc_hw_virt.h"
 #endif
 
 extern struct msm_vidc_core *g_core;

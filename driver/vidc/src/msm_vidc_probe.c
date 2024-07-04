@@ -28,7 +28,7 @@
 #include "venus_hfi.h"
 #include "video_generated_h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc_hw_virt.h"
+#include "vidc/vidc_hw_virt.h"
 #include <linux/reboot.h>
 #endif
 
