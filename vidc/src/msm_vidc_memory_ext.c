@@ -60,7 +60,7 @@ static u32 msm_vidc_buffer_region_ext(struct msm_vidc_inst *inst,
 	return region;
 }
 
-const struct msm_vidc_memory_ops *get_mem_ops_ext(void)
+inline const struct msm_vidc_memory_ops *get_mem_ops_ext(void)
 {
 	const struct msm_vidc_memory_ops *mem_ops = get_mem_ops();
 	static struct msm_vidc_memory_ops mem_ops_ext;

@@ -11,7 +11,7 @@
  * Chipset Generation Technology: SW/FW overhead profiling
  * need update with new numbers
  */
-static u32 frequency_table_kalama[2][6] = {
+static u32 frequency_table_kalama[2][6] __attribute__((unused)) = {
 	/* //make lowsvs_D1 as invalid; */
 	{533, 444, 366, 338, 240, 0},
 	{800, 666, 549, 507, 360, 0},
@@ -42,14 +42,14 @@ static u32 frequency_table_kalama[2][6] = {
 #define ENCODER_SW_OVERHEAD_KALAMA                                                      489583
 
 /* Video IP Core Technology: pipefloor and pipe penlaty */
-static u32 encoder_vpp_target_clk_per_mb_kalama[2] = {320, 675};
-static u32 decoder_vpp_target_clk_per_mb_kalama = 200;
+static u32 encoder_vpp_target_clk_per_mb_kalama[2] __attribute__((unused)) = {320, 675};
+static u32 decoder_vpp_target_clk_per_mb_kalama __attribute__((unused)) = 200;
 
 /*
  * These pipe penalty numbers only applies to 4 pipe
  * For 2pipe and 1pipe, these numbers need recalibrate
  */
-static u32 pipe_penalty_kalama[3][3] = {
+static u32 pipe_penalty_kalama[3][3] __attribute__((unused)) = {
 	/* NON AV1 */
 	{1059, 1059, 1059},
 	/* AV1 RECOMMENDED TILE 1080P_V2XH1, UHD_V2X2, 8KUHD_V8X2 */
@@ -63,7 +63,7 @@ static u32 pipe_penalty_kalama[3][3] = {
  * HW limit bitrate table (these values are measured end to end fw/sw impacts are also considered)
  * TODO Can we convert to Cycles/MB? This will remove DIVISION.
  */
-static u32 bitrate_table_kalama_2stage_fp[5][10] = {
+static u32 bitrate_table_kalama_2stage_fp[5][10] __attribute__((unused)) = {
 	/* h264 cavlc */
 	{0, 220, 220, 220, 220, 220, 220, 220, 220, 220},
 	/* h264 cabac */
@@ -80,7 +80,8 @@ static u32 bitrate_table_kalama_2stage_fp[5][10] = {
  * HW limit bitrate table (these values are measured
  * end to end fw/sw impacts are also considered)
  */
-static u32 bitrate_table_kalama_1stage_fp[5][10] = { /* 1-stage assume IPPP */
+static u32 bitrate_table_kalama_1stage_fp[5][10] __attribute__((unused)) = {
+    /* 1-stage assume IPPP */
 	/* h264 cavlc */
 	{0, 220, 220, 220, 220, 220, 220, 220, 220, 220},
 	/* h264 cabac */
@@ -94,7 +95,7 @@ static u32 bitrate_table_kalama_1stage_fp[5][10] = { /* 1-stage assume IPPP */
 };
 
 /* rec pwc and power bitrate table */
-static u32 bitrate_table_kalama_rec_fp[5][10] = {
+static u32 bitrate_table_kalama_rec_fp[5][10] __attribute__((unused)) = {
 	/* rec. worst bitrate based on bitrate table */
 #if ENABLE_FINEBITRATE_SUBUHD60
 	/* h264 cavlc */
@@ -121,33 +122,33 @@ static u32 bitrate_table_kalama_rec_fp[5][10] = {
 #endif
 };
 
-static u32 input_bitrate_fp;
+static u32 input_bitrate_fp __attribute__((unused));
 
 /* 8KUHD60; UHD240; 1080p960  with B */
-static u32 fp_pixel_count_bar0 = 3840 * 2160 * 240;
+static u32 fp_pixel_count_bar0 __attribute__((unused)) = 3840 * 2160 * 240;
 /* 8KUHD60; UHD240; 1080p960  without B */
-static u32 fp_pixel_count_bar1 = 3840 * 2160 * 240;
+static u32 fp_pixel_count_bar1 __attribute__((unused)) = 3840 * 2160 * 240;
 /* 1080p720 */
-static u32 fp_pixel_count_bar2 = 3840 * 2160 * 180;
+static u32 fp_pixel_count_bar2 __attribute__((unused)) = 3840 * 2160 * 180;
 /* UHD120 */
-static u32 fp_pixel_count_bar3 = 3840 * 2160 * 120;
+static u32 fp_pixel_count_bar3 __attribute__((unused)) = 3840 * 2160 * 120;
 /* UHD90 */
-static u32 fp_pixel_count_bar4 = 3840 * 2160 * 90;
+static u32 fp_pixel_count_bar4 __attribute__((unused)) = 3840 * 2160 * 90;
 /* UHD60 */
-static u32 fp_pixel_count_bar5 = 3840 * 2160 * 60;
+static u32 fp_pixel_count_bar5 __attribute__((unused)) = 3840 * 2160 * 60;
 /* UHD30; FHD120; HD240 */
-static u32 fp_pixel_count_bar6 = 3840 * 2160 * 30;
+static u32 fp_pixel_count_bar6 __attribute__((unused)) = 3840 * 2160 * 30;
 /* FHD60 */
-static u32 fp_pixel_count_bar7 = 1920 * 1080 * 60;
+static u32 fp_pixel_count_bar7 __attribute__((unused)) = 1920 * 1080 * 60;
 /* FHD30 */
-static u32 fp_pixel_count_bar8 = 1920 * 1080 * 30;
+static u32 fp_pixel_count_bar8 __attribute__((unused)) = 1920 * 1080 * 30;
 /* HD30 */
-static u32 fp_pixel_count_bar9 = 1280 * 720 * 30;
+static u32 fp_pixel_count_bar9 __attribute__((unused)) = 1280 * 720 * 30;
 
-static u32 codec_encoder_gop_complexity_table_fp[8][3];
-static u32 codec_mbspersession_kalama;
+static u32 codec_encoder_gop_complexity_table_fp[8][3] __attribute__((unused));
+static u32 codec_mbspersession_kalama __attribute__((unused));
 
-static u32 cr_table_basic_kalama[7][4] = {
+static u32 cr_table_basic_kalama[7][4] __attribute__((unused)) = {
 	{1920, 1080, 20, 40},
 	{3840, 2160, 42, 84},
 	{4096, 2160, 44, 88},
@@ -158,7 +159,7 @@ static u32 cr_table_basic_kalama[7][4] = {
 };
 
 /* 100x */
-static u32 dpbopb_ubwc30_cr_table_cratio_kalama[7][12] = {
+static u32 dpbopb_ubwc30_cr_table_cratio_kalama[7][12] __attribute__((unused)) = {
 	{237, 399, 272, 137, 225, 158, 185, 259, 203, 138, 167, 152},
 	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
 	{269, 404, 302, 202, 367, 238, 210, 299, 232, 134, 181, 149},
@@ -169,7 +170,7 @@ static u32 dpbopb_ubwc30_cr_table_cratio_kalama[7][12] = {
 };
 
 /* 100x */
-static u32 rpb_ubwc30_cr_table_cratio_kalama[7][12] = {
+static u32 rpb_ubwc30_cr_table_cratio_kalama[7][12] __attribute__((unused)) = {
 	{193, 294, 218, 135, 214, 155, 175, 241, 191, 139, 162, 149},
 	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
 	{285, 406, 316, 207, 373, 243, 201, 280, 221, 139, 177, 152},
@@ -180,7 +181,7 @@ static u32 rpb_ubwc30_cr_table_cratio_kalama[7][12] = {
 };
 
 /* 100x */
-static u32 ipblossy_ubwc30_cr_table_cratio_kalama[7][12] = {
+static u32 ipblossy_ubwc30_cr_table_cratio_kalama[7][12] __attribute__((unused)) = {
 	{215, 215, 215, 174, 174, 174, 266, 266, 266, 231, 231, 231},
 	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
 	{254, 254, 254, 219, 219, 219, 292, 292, 292, 249, 249, 249},
@@ -191,7 +192,7 @@ static u32 ipblossy_ubwc30_cr_table_cratio_kalama[7][12] = {
 };
 
 /* 100x */
-static u32 ipblossless_ubwc30_cr_table_cratio_kalama[7][12] = {
+static u32 ipblossless_ubwc30_cr_table_cratio_kalama[7][12] __attribute__((unused)) = {
 	{185, 215, 194, 147, 178, 159, 162, 181, 169, 138, 161, 146},
 	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
 	{186, 217, 195, 151, 183, 161, 164, 182, 170, 140, 168, 148},
@@ -202,11 +203,11 @@ static u32 ipblossless_ubwc30_cr_table_cratio_kalama[7][12] = {
 };
 
 /* 100x */
-static u32 en_original_compression_factor_rgba_pwd_kalama = 243;
+static u32 en_original_compression_factor_rgba_pwd_kalama __attribute__((unused)) = 243;
 /* 100x */
-static u32 en_original_compression_factor_rgba_avg_kalama = 454;
+static u32 en_original_compression_factor_rgba_avg_kalama __attribute__((unused)) = 454;
 
-static u32 av1_num_tiles_kalama[7][3] = {
+static u32 av1_num_tiles_kalama[7][3] __attribute__((unused)) = {
 	{2, 1, 1},
 	{4, 2, 2},
 	{4, 2, 2},
@@ -232,7 +233,7 @@ static u32 av1_num_tiles_kalama[7][3] = {
  */
 
 /* 1000x */
-static u32 kalama_en_readfactor[7] = {1000, 1500, 1750, 1875, 1000, 2000, 2000};
+static u32 kalama_en_readfactor[7] __attribute__((unused)) = {1000, 1500, 1750, 1875, 1000, 2000, 2000};
 /* 1000x */
-static u32 kalama_en_writefactor[7] = {1000, 500, 500, 500, 1000, 0, 1000};
-static u32 kalama_en_frame_num_parallel = 1;
+static u32 kalama_en_writefactor[7] __attribute__((unused)) = {1000, 500, 500, 500, 1000, 0, 1000};
+static u32 kalama_en_frame_num_parallel __attribute__((unused)) = 1;

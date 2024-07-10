@@ -150,8 +150,8 @@ int msm_vidc_set_ir_period(void *instance,
 		   V4L2_CID_MPEG_VIDEO_INTRA_REFRESH_PERIOD_TYPE_CYCLIC) {
 		ir_type = HFI_PROP_IR_CYCLIC_PERIOD;
 	} else {
-		i_vpr_e(inst, "%s: invalid ir_type %d\n",
-			__func__, inst->capabilities[IR_TYPE]);
+		i_vpr_e(inst, "%s: invalid ir_type %u\n",
+			__func__, inst->capabilities[IR_TYPE].cap_id);
 		return -EINVAL;
 	}
 

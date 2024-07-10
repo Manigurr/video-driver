@@ -30,5 +30,7 @@ struct msm_vidc_fence_ops {
 };
 
 const struct msm_vidc_fence_ops *get_dma_fence_ops(void);
+struct msm_vidc_fence *msm_vidc_fence_create(struct msm_vidc_inst *inst);
+int msm_vidc_get_fence_fd(struct msm_vidc_inst *inst, int *fence_fd);
 
 #endif // __H_MSM_VIDC_FENCE_H__

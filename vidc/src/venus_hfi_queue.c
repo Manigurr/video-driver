@@ -4,12 +4,13 @@
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include "venus_hfi.h"
 #include "venus_hfi_queue.h"
+
 #include "msm_vidc_core.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_memory.h"
 #include "msm_vidc_platform.h"
-#include "venus_hfi.h"
 
 static void __set_queue_hdr_defaults(struct hfi_queue_header *q_hdr)
 {
@@ -481,46 +482,6 @@ int venus_hfi_reset_queue_header(struct msm_vidc_core *core)
 	return rc;
 }
 
-static int venus_hfi_iommu_map_registers(struct msm_vidc_core *core,
-	enum msm_vidc_device_region reg_region,
-	enum msm_vidc_buffer_region buf_region,
-	struct msm_vidc_mem_addr *core_mem)
-{
-	int rc = 0;
-	struct device_region_info *dev_reg;
-	struct msm_vidc_mem mem;
-
-	if (!core_mem) {
-		d_vpr_h("%s: invalid params\n", __func__);
-		return -EINVAL;
-	}
-
-	memset(&mem, 0, sizeof(mem));
-	dev_reg = venus_hfi_get_device_region_info(core, reg_region);
-	if (!dev_reg) {
-		d_vpr_h("%s: %u device region not available\n",
-			__func__, reg_region);
-		goto skip_mmap_buffer;
-	}
-
-	mem.region = buf_region;
-	mem.phys_addr = dev_reg->phy_addr;
-	mem.size = dev_reg->size;
-	mem.device_addr = dev_reg->dev_addr;
-	rc = call_mem_op(core, iommu_map, core, &mem);
-	if (rc) {
-		d_vpr_e("%s: %u map failed\n", __func__, reg_region);
-		goto fail_alloc_queue;
-	}
-	core_mem->align_device_addr = mem.device_addr;
-	core_mem->mem = mem;
-
-skip_mmap_buffer:
-	return 0;
-fail_alloc_queue:
-	return -ENOMEM;
-}
-
 int venus_hfi_queue_init(struct msm_vidc_core *core)
 {
 	int rc = 0;
@@ -633,27 +594,7 @@ int venus_hfi_queue_init(struct msm_vidc_core *core)
 			goto fail_alloc_queue;
 		}
 	}
-#if 0
-	/* map aon_reg registers */
-	rc = venus_hfi_iommu_map_registers(core, MSM_VIDC_AON,
-		MSM_VIDC_NON_SECURE, &core->aon_reg);
-	if (rc)
-		return rc;
 
-	/* map fence registers */
-	rc = venus_hfi_iommu_map_registers(core,
-		MSM_VIDC_PROTOCOL_FENCE_CLIENT_VPU,
-		MSM_VIDC_NON_SECURE, &core->fence_reg);
-	if (rc)
-		return rc;
-
-	/* map qtimer low registers */
-	rc = venus_hfi_iommu_map_registers(core,
-		MSM_VIDC_QTIMER,
-		MSM_VIDC_NON_SECURE, &core->qtimer_reg);
-	if (rc)
-		return rc;
-#endif
 	/* allocate 4k buffer for HFI_MMAP_ADDR */
 	memset(&mem, 0, sizeof(mem));
 	mem.type = MSM_VIDC_BUF_INTERFACE_QUEUE;

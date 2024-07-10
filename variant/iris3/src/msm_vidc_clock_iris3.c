@@ -3,8 +3,8 @@
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "kalama_technology.h"
 #include "msm_vidc_debug.h"
+#include "kalama_technology.h"
 
 static u32 calculate_number_mbs_kalama(u32 width, u32 height, u32 lcu_size)
 {
@@ -147,7 +147,7 @@ static int initialize_encoder_complexity_table(void)
 	return 0;
 }
 
-u32 get_bitrate_entry(u32 pixle_count)
+static u32 get_bitrate_entry(u32 pixle_count)
 {
 	u32 bitrate_entry = 0;
 

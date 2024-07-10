@@ -845,7 +845,7 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 	return rc;
 }
 
-int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst *inst)
 {
 	u32 work_mode;
 	struct v4l2_format *inp_f;
@@ -908,7 +908,7 @@ exit:
 	return 0;
 }
 
-int msm_vidc_decide_work_route_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_work_route_iris3(struct msm_vidc_inst *inst)
 {
 	u32 work_route;
 	struct msm_vidc_core *core;
@@ -944,7 +944,7 @@ exit:
 	return 0;
 }
 
-int msm_vidc_decide_quality_mode_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_quality_mode_iris3(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_core *core;
 	u32 mbpf, mbps, max_hq_mbpf, max_hq_mbps;
