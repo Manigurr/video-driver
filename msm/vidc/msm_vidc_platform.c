@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1310,19 +1311,19 @@ static struct msm_vidc_codec_capability sm6150_capabilities[] = {
 	   unknown as well, which creates a problem of allowing client
 	   to set higher level than supported */
 	{CAP_H264_LEVEL, ENC, H264, V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
-	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_2, 1,
-	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_2},
+				V4L2_MPEG_VIDEO_H264_LEVEL_5_1, 1,
+				V4L2_MPEG_VIDEO_H264_LEVEL_5_1},
 	{CAP_HEVC_LEVEL, ENC, HEVC, V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
-	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_6, 1,
-	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_6},
+				V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1, 1,
+				V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1},
 
 	/* Level for AVC and HEVC decoder specific */
 	{CAP_H264_LEVEL, DEC, H264, V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
-	                            V4L2_MPEG_VIDEO_H264_LEVEL_6_0, 1,
-	                            V4L2_MPEG_VIDEO_H264_LEVEL_5_0},
+				V4L2_MPEG_VIDEO_H264_LEVEL_5_1, 1,
+				V4L2_MPEG_VIDEO_H264_LEVEL_5_0},
 	{CAP_HEVC_LEVEL, DEC, HEVC, V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
-	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_6, 1,
-	                            V4L2_MPEG_VIDEO_HEVC_LEVEL_5},
+				V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1, 1,
+				V4L2_MPEG_VIDEO_HEVC_LEVEL_5},
 };
 
 static struct msm_vidc_codec_capability direwolf_capabilities[] = {
