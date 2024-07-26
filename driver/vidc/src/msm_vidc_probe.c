@@ -12,7 +12,6 @@
 #include <linux/component.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
-#include <linux/dma-iommu.h>
 #ifdef CONFIG_MSM_MMRM
 #include <linux/soc/qcom/msm_mmrm.h>
 #endif
@@ -28,7 +27,7 @@
 #include "venus_hfi.h"
 #include "video_generated_h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc/vidc_hw_virt.h"
+#include "vidc_hw_virt.h"
 #include <linux/reboot.h>
 #endif
 
@@ -651,7 +650,7 @@ static int vidc_reboot_notify(
 		msm_vidc_core_deinit(core, true);
 		if (core && core->is_hw_virt && core->is_gvm_open) {
 			/* close gvm */
-			virtio_video_cmd_close_gvm();
+			virtio_video_msm_cmd_close_gvm();
 			core->is_gvm_open = false;
 		}
 		break;
@@ -1012,7 +1011,7 @@ static void __exit msm_vidc_exit(void)
 	if (core && core->is_hw_virt && core->is_gvm_open) {
 #ifdef MSM_VIDC_HW_VIRT
 		/* close gvm */
-		virtio_video_cmd_close_gvm();
+		virtio_video_msm_cmd_close_gvm();
 #endif
 		core->is_gvm_open = false;
 	}

@@ -25,7 +25,7 @@
 #include "hfi_packet.h"
 #include "msm_vidc_events.h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc/vidc_hw_virt.h"
+#include "vidc_hw_virt.h"
 #endif
 
 extern struct msm_vidc_core *g_core;
@@ -4250,7 +4250,7 @@ int msm_vidc_session_open(struct msm_vidc_inst *inst)
 
 	if (core->is_hw_virt) {
 #ifdef MSM_VIDC_HW_VIRT
-		rc = virtio_video_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
+		rc = virtio_video_msm_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
 #endif
 	} else {
 		rc = venus_hfi_session_open(inst);
@@ -4863,12 +4863,12 @@ unlock:
 static int msm_vidc_pvm_event_handler(void *p)
 {
 	struct msm_vidc_core *core = p;
-	struct virtio_video_event evt = {0};
+	struct virtio_video_msm_hw_event evt = {0};
 
 	while (core->is_gvm_open) {
 		if (!virtio_video_queue_event_wait(&evt)) {
 			switch (evt.event_type) {
-			case VIRTIO_VIDEO_EVENT_GVM_SSR:
+			case GVM_SSR:
 				core->ssr_dev = *(uint32_t *)evt.payload;
 				schedule_work(&core->hw_virt_ssr_work);
 				break;
@@ -4902,7 +4902,7 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 	/* open gvm */
 	if (core->is_hw_virt && !core->is_gvm_open) {
 #ifdef MSM_VIDC_HW_VIRT
-		rc = virtio_video_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
+		rc = virtio_video_msm_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
 			&core->device_core_mask);
 #endif
 		if (rc) {
@@ -5173,7 +5173,7 @@ void msm_vidc_hw_virt_ssr_handler(struct work_struct *work)
 	msm_vidc_core_deinit(core, true);
 
 	if (core->ssr_dev == GVM_SSR_DEVICE_DRIVER) {
-		virtio_video_cmd_close_gvm();
+		virtio_video_msm_cmd_close_gvm();
 		core->is_gvm_open = false;
 	}
 }
