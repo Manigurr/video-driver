@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "msm_venc.h"
 #include "msm_vidc_internal.h"
@@ -1650,7 +1650,7 @@ static int msm_venc_update_bitrate(struct msm_vidc_inst *inst)
 int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 {
 	int rc = 0;
-#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 	int hevc_tier_value = 0;
 #endif
 	struct msm_vidc_mastering_display_colour_sei_payload *mdisp_sei = NULL;
@@ -1883,7 +1883,7 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_H264_LEVEL:
 	case V4L2_CID_MPEG_VIDEO_HEVC_LEVEL:
 	case V4L2_CID_MPEG_VIDC_VIDEO_VP8_PROFILE_LEVEL:
-#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE)
 		if ((inst->level & 0xf0000000) && get_v4l2_codec(inst) == V4L2_PIX_FMT_HEVC)
 			hevc_tier_value = (inst->level & 0xf0000000);
 		inst->level = msm_comm_v4l2_to_hfi(ctrl->id, ctrl->val, sid) | hevc_tier_value;
