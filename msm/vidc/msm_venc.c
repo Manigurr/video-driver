@@ -43,6 +43,7 @@
 #define CBR_PLUS_BUF_SIZE 1000
 #define MAX_GOP 0xFFFFFFF
 #define MAX_QPRANGE_BOOST 0x3333
+#define MAX_PFRAME_SIZE 0xFFFFFFF
 
 #define MIN_NUM_ENC_OUTPUT_BUFFERS 4
 #define MIN_NUM_ENC_CAPTURE_BUFFERS 5
@@ -1019,6 +1020,15 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
 		.maximum = MAX_QPRANGE_BOOST,
+		.default_value = 0,
+		.step = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VENC_PFRAMESIZE,
+		.name = "Pframe Size",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = MAX_PFRAME_SIZE,
 		.default_value = 0,
 		.step = 1,
 	},
@@ -2047,6 +2057,9 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
 			ctrl->val, inst->sid);
 		break;
+	case V4L2_CID_MPEG_VIDC_VENC_PFRAMESIZE:
+		inst->pframe_size = ctrl->val;
+		break;
 	case V4L2_CID_MPEG_VIDC_CAPTURE_FRAME_RATE:
 	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_MAX_HIER_CODING_LAYER:
 	case V4L2_CID_MPEG_VIDEO_HEVC_HIER_CODING_TYPE:
@@ -2736,11 +2749,44 @@ int msm_venc_set_rate_control(struct msm_vidc_inst *inst)
 		sizeof(u32));
 	if (rc)
 		s_vpr_e(inst->sid, "%s: set property failed\n", __func__);
-
 	return rc;
 }
 
+int msm_venc_set_pframe_size(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+	struct v4l2_ctrl *ctrl;
+	struct hfi_device *hdev;
 
+	if (!inst || !inst->core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, inst);
+		return -EINVAL;
+	}
+	if (!inst->pframe_size) {
+		s_vpr_h(inst->sid, "%s:Ignore setting pframe size as size is 0\n", __func__);
+		return rc;
+        }
+
+	hdev = inst->core->device;
+
+	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_BITRATE_MODE);
+	if (ctrl->val != V4L2_MPEG_VIDEO_BITRATE_MODE_CBR)
+	{
+		s_vpr_e(inst->sid,"%s: RC mode should be CBR, RC mode=%d \n", __func__, ctrl->val);
+		return rc;
+	}
+
+	s_vpr_h(inst->sid, "%s: pframe size = %d\n", __func__, inst->pframe_size);
+
+	rc = call_hfi_op(hdev, session_set_property, inst->session,
+		HFI_PROPERTY_PARAM_VENC_PFRAMESIZE, &inst->pframe_size,
+		sizeof(u32));
+	if (rc)
+	s_vpr_e(inst->sid,
+		"%s: failed to set pframe size property, size=%d\n", __func__, inst->pframe_size);
+
+	return rc;
+}
 
 int msm_venc_set_vbv_delay(struct msm_vidc_inst *inst)
 {
@@ -2775,6 +2821,15 @@ int msm_venc_set_vbv_delay(struct msm_vidc_inst *inst)
 	/* Default behavior */
 	is_legacy_cbr = false;
 	buf_size = CBR_PLUS_BUF_SIZE;
+
+	/* pframe size is supported only for CBR_CFR RC type
+	 * When pframe size is set from client and RC type is CBR_CFR
+	 * vbv delay is set to LEGACY_CBR_BUF_SIZE which is CBR
+	 */
+	if(inst->rc_type == V4L2_MPEG_VIDEO_BITRATE_MODE_CBR && inst->pframe_size > 0) {
+		buf_size = LEGACY_CBR_BUF_SIZE;
+		goto set_vbv_delay;
+	}
 
 	/*
 	 * Client can set vbv delay only when
@@ -5044,6 +5099,9 @@ int msm_venc_set_properties(struct msm_vidc_inst *inst)
 	if (rc)
 		goto exit;
 	rc = msm_venc_set_rate_control(inst);
+	if (rc)
+		goto exit;
+	rc = msm_venc_set_pframe_size(inst);
 	if (rc)
 		goto exit;
 	rc = msm_venc_set_vbv_delay(inst);

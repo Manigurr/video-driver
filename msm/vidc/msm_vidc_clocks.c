@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_vidc_common.h"
@@ -1819,6 +1819,8 @@ int msm_vidc_decide_core_and_power_mode_ar50(struct msm_vidc_inst *inst)
 		msm_vidc_move_core_to_power_save_mode(core, min_lp_core_id);
 	} else {
 		s_vpr_e(inst->sid, "Core cannot support this load\n");
+		msm_print_core_status(core, VIDC_CORE_ID_1, inst->sid);
+		msm_print_core_status(core, VIDC_CORE_ID_2, inst->sid);
 		return -EINVAL;
 	}
 decision_done:

@@ -3347,7 +3347,7 @@ static struct msm_vidc_platform_data qcs605_data = {
 	.codecs_count = ARRAY_SIZE(default_codecs),
 	.codec_caps = qcs605_capabilities,
 	.codec_caps_count = ARRAY_SIZE(qcs605_capabilities),
-	.max_inst_count = MAX_SUPPORTED_INSTANCES,
+	.max_inst_count = MAX_SUPPORTED_INSTANCES_24,
 };
 
 static const struct of_device_id msm_vidc_dt_device[] = {
@@ -3572,6 +3572,7 @@ void *vidc_get_drv_data(struct device *dev)
 	} else if (!strcmp(match->compatible, "qcom,qcs3165-vidc")) {
 		msm_vidc_ddr_ubwc_config(driver_data, 0xe);
 	} else if (!strcmp(match->compatible, "qcom,qcs605-vidc")) {
+		driver_data->max_inst_count = MAX_SUPPORTED_INSTANCES_24;
 		rc = msm_vidc_read_efuse(driver_data, dev);
 		if (rc) {
 			d_vpr_e("msm_vidc_read_efuse failed\n");
