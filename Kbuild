@@ -23,6 +23,7 @@ LINUXINCLUDE +=                                 \
     -I$(VIDEO_KERNEL_ROOT)/platform/qcm6490/inc \
     -I$(VIDEO_KERNEL_ROOT)/platform/sm8550/inc \
     -I$(VIDEO_KERNEL_ROOT)/platform/sa8775p/inc \
+    -I$(VIDEO_KERNEL_ROOT)/platform/qcs8300/inc \
     -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/media \
     -I$(VIDEO_KERNEL_ROOT)/include/uapi/vidc/ \
     -I$(VIDEO_KERNEL_ROOT)/
@@ -58,6 +59,7 @@ iris_vpu-y := \
                   platform/common/src/msm_vidc_platform_ext.o \
                   platform/qcm6490/src/msm_vidc_qcm6490.o \
                   platform/sa8775p/src/msm_vidc_sa8775p.o \
+                  platform/qcs8300/src/msm_vidc_qcs8300.o \
                   variant/common/src/msm_vidc_variant.o \
                   variant/iris3/src/msm_vidc_buffer_iris3.o \
                   variant/iris3/src/msm_vidc_iris3.o \

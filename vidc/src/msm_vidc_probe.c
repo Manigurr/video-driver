@@ -42,7 +42,8 @@ static inline bool is_video_device(struct device *dev)
 {
 	return !!(of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc") ||
 		of_device_is_compatible(dev->of_node, "qcom,qcm6490-iris-vpu") ||
-		of_device_is_compatible(dev->of_node, "qcom,sa8775p-iris"));
+		of_device_is_compatible(dev->of_node, "qcom,sa8775p-iris") ||
+		of_device_is_compatible(dev->of_node, "qcom,qcs8300-iris"));
 }
 
 static inline bool is_video_context_bank_device_node(struct device_node *of_node)
@@ -115,6 +116,7 @@ static const struct of_device_id msm_vidc_dt_match[] = {
 	{.compatible = "qcom,qcm6490-iris-vpu"},
 	{.compatible = "qcom,sm8550-vidc"},
 	{.compatible = "qcom,sa8775p-iris"},
+	{.compatible = "qcom,qcs8300-iris"},
 	{.compatible = "qcom,vidc,cb-ns"},
 	{.compatible = "qcom,vidc,cb-ns-pxl"},
 	{.compatible = "qcom,vidc,cb-sec-non-pxl"},
