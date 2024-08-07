@@ -28,7 +28,7 @@
 #include "msm_vidc_events.h"
 #include "firmware.h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc_hw_virt.h"
+#include "vidc/vidc_hw_virt.h"
 #endif
 
 #define update_offset(offset, val)		((offset) += (val))

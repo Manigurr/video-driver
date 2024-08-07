@@ -25,7 +25,7 @@
 #include "hfi_packet.h"
 #include "msm_vidc_events.h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc_hw_virt.h"
+#include "vidc/vidc_hw_virt.h"
 #endif
 
 extern struct msm_vidc_core *g_core;
@@ -4863,7 +4863,7 @@ unlock:
 static int msm_vidc_pvm_event_handler(void *p)
 {
 	struct msm_vidc_core *core = p;
-	struct virtio_video_event evt;
+	struct virtio_video_event evt = {0};
 
 	while (core->is_gvm_open) {
 		if (!virtio_video_queue_event_wait(&evt)) {
