@@ -919,7 +919,10 @@ static int __enable_power_domains(struct msm_vidc_core *core, const char *name)
 		d_vpr_h("%s: enabled power doamin %s\n", __func__, pdinfo->name);
 	}
 
-	return rc;
+	/* power domains are moved to HW ctrl by default after calling get_sync() */
+	msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_GDSC_HANDOFF, __func__);
+
+	return 0;
 }
 
 static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
@@ -933,11 +936,11 @@ static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
 			continue;
 
 		rc = pm_runtime_put_sync(pdinfo->genpd_dev);
-		if (rc) {
+		if (rc < 0) {
 			d_vpr_e("%s: failed to put sync: %s\n", __func__, pdinfo->name);
 			return rc;
 		}
-		d_vpr_h("%s: disabled power doamin %s\n", __func__, pdinfo->name);
+		d_vpr_h("%s: disabled power domain %s\n", __func__, pdinfo->name);
 	}
 
 	/* power down rails(mxc & mmcx) to disable RCG(video_cc_mvs0_clk_src) */
@@ -950,11 +953,26 @@ static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
 	}
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
 
-	return rc;
+	return 0;
 }
 
 static int __hand_off_power_domains(struct msm_vidc_core *core)
 {
+	int rc = 0;
+
+	if (is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
+		d_vpr_h("%s: power domains are already in HW ctrl mode\n",
+			__func__);
+		return 0;
+	}
+
+	rc = call_venus_op(core, switch_gdsc_mode, core, false);
+	if (rc) {
+		d_vpr_e("Failed to switch GDSC into HW control, err: %d\n", rc);
+		return rc;
+	}
+
+	d_vpr_h("%s: moved power doamin into HW control\n", __func__);
 	msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_GDSC_HANDOFF, __func__);
 
 	return 0;
@@ -962,6 +980,21 @@ static int __hand_off_power_domains(struct msm_vidc_core *core)
 
 static int __acquire_power_domains(struct msm_vidc_core *core)
 {
+	int rc = 0;
+
+	if (!is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
+		d_vpr_h("%s: power domains are already in SW ctrl mode\n",
+			__func__);
+		return 0;
+	}
+
+	rc = call_venus_op(core, switch_gdsc_mode, core, true);
+	if (rc) {
+		d_vpr_e("Failed to switch GDSC into SW control, err: %d\n", rc);
+		return rc;
+	}
+
+	d_vpr_h("%s: moved power doamin into SW control\n", __func__);
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
 
 	return 0;

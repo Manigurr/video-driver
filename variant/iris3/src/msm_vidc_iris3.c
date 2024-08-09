@@ -245,28 +245,30 @@ static int __setup_ucregion_memory_map_iris3(struct msm_vidc_core *core)
 	return 0;
 }
 
-static int switch_vcodec_gdsc_mode(struct msm_vidc_core *core, bool sw_mode)
+static int __switch_gdsc_mode_iris3(struct msm_vidc_core *core, bool sw_mode)
 {
-	void __iomem *base_addr;
-	u32 val = 0;
 	int rc;
 
-	base_addr = core->resource->register_base_addr;
-
 	if (sw_mode) {
-		writel_relaxed(0, base_addr + WRAPPER_CORE_POWER_CONTROL);
-		rc = readl_relaxed_poll_timeout(base_addr + WRAPPER_CORE_POWER_STATUS, val,
-						val & BIT(1), 1, 2000);
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x0);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x2, 200, 2000);
 		if (rc) {
-			d_vpr_e("%s: set sw ctrl failing rc[%d]\n", __func__, rc);
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x1\n",
+				__func__);
 			return rc;
 		}
 	} else {
-		writel_relaxed(1, base_addr + WRAPPER_CORE_POWER_CONTROL);
-		rc = readl_relaxed_poll_timeout(base_addr + WRAPPER_CORE_POWER_STATUS, val,
-					!(val & BIT(1)), 1, 2000);
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x1);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x0, 200, 2000);
 		if (rc) {
-			d_vpr_e("%s: set hw ctrl failing rc[%d]\n", __func__, rc);
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x0\n",
+				__func__);
 			return rc;
 		}
 	}
@@ -551,25 +553,25 @@ static int __power_on_iris3_hardware(struct msm_vidc_core *core)
 	if (rc)
 		goto fail_regulator;
 
-	rc = switch_vcodec_gdsc_mode(core, true);
+	/* video controller and hardware powered on successfully */
+	rc = msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_POWER_ENABLE, __func__);
 	if (rc)
-		goto fail_gdsc_mode_enable;
+		goto fail_power_on_substate;
+
+	rc = call_res_op(core, gdsc_sw_ctrl, core);
+	if (rc)
+		goto fail_sw_ctrl;
 
 	rc = call_res_op(core, clk_enable, core, "vcodec_clk");
 	if (rc)
 		goto fail_clk_controller;
 
-	rc = switch_vcodec_gdsc_mode(core, false);
-	if (rc)
-		goto fail_gdsc_mode_disable;
-
 	return 0;
 
-fail_gdsc_mode_disable:
-	call_res_op(core, clk_disable, core, "vcodec_clk");
 fail_clk_controller:
-	switch_vcodec_gdsc_mode(core, false);
-fail_gdsc_mode_enable:
+	call_res_op(core, gdsc_hw_ctrl, core);
+fail_sw_ctrl:
+fail_power_on_substate:
 	call_res_op(core, gdsc_off, core, "vcodec");
 fail_regulator:
 	return rc;
@@ -608,10 +610,6 @@ static int __power_on_iris3(struct msm_vidc_core *core)
 		d_vpr_e("%s: failed to power on iris3 hardware\n", __func__);
 		goto fail_power_on_hardware;
 	}
-	/* video controller and hardware powered on successfully */
-	rc = msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_POWER_ENABLE, __func__);
-	if (rc)
-		goto fail_power_on_substate;
 
 	freq_tbl = core->resource->freq_set.freq_tbl;
 	freq = core->power.clk_freq ? core->power.clk_freq :
@@ -633,9 +631,6 @@ static int __power_on_iris3(struct msm_vidc_core *core)
 	enable_irq(core->resource->irq);
 
 	return rc;
-
-fail_power_on_substate:
-	__power_off_iris3_hardware(core);
 fail_power_on_hardware:
 	__power_off_iris3_controller(core);
 fail_power_on_controller:
@@ -1065,6 +1060,7 @@ static struct msm_vidc_venus_ops iris3_ops = {
 	.prepare_pc = __prepare_pc_iris3,
 	.watchdog = __watchdog_iris3,
 	.noc_error_info = __noc_error_info_iris3,
+	.switch_gdsc_mode = __switch_gdsc_mode_iris3,
 };
 
 static struct msm_vidc_session_ops msm_session_ops = {
