@@ -2578,7 +2578,8 @@ int msm_vdec_inst_init(struct msm_vidc_inst *inst)
 		inst->decode_batch.enable = true;
 		inst->decode_batch.size = MAX_DEC_BATCH_SIZE;
 	}
-	if (core->capabilities[DCVS].value)
+
+	if (core->capabilities[DCVS].value && inst->codec != MSM_VIDC_AV1)
 		inst->power.dcvs_mode = true;
 
 	f = &inst->fmts[INPUT_PORT];
