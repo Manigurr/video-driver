@@ -2250,6 +2250,12 @@ void msm_vidc_allow_dcvs(struct msm_vidc_inst *inst)
 		goto exit;
 	}
 
+	allow = (inst->codec != MSM_VIDC_AV1);
+	if (!allow) {
+		i_vpr_h(inst, "%s: unsupported codec\n", __func__);
+		goto exit;
+	}
+
 	allow = !inst->decode_batch.enable;
 	if (!allow) {
 		i_vpr_h(inst, "%s: decode_batching enabled\n", __func__);
