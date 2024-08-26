@@ -814,6 +814,10 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 		if (rc)
 			return rc;
 
+		rc = __read_register(core, CTRL_INIT_IRIS3, &ctrl_init_val);
+		if (rc)
+			return rc;
+
 		if ((ctrl_status & CTRL_ERROR_STATUS__M_IRIS3) == 0x4) {
 			d_vpr_e("invalid setting for UC_REGION\n");
 			break;
@@ -825,6 +829,7 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 
 	if (count >= max_tries) {
 		d_vpr_e("Error booting up vidc firmware\n");
+		d_vpr_e("ctrl status %#x, ctrl init %#x\n", ctrl_status, ctrl_init_val);
 		return -ETIME;
 	}
 
