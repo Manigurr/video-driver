@@ -92,6 +92,7 @@ typedef enum {
 #define WRAPPER_IRIS_CPU_NOC_LPI_CONTROL	(WRAPPER_BASE_OFFS_IRIS33 + 0x5C)
 #define WRAPPER_IRIS_CPU_NOC_LPI_STATUS		(WRAPPER_BASE_OFFS_IRIS33 + 0x60)
 #define WRAPPER_CORE_POWER_STATUS		(WRAPPER_BASE_OFFS_IRIS33 + 0x80)
+#define WRAPPER_CORE_POWER_CONTROL		(WRAPPER_BASE_OFFS_IRIS33 + 0x84)
 #define WRAPPER_CORE_CLOCK_CONFIG_IRIS33		(WRAPPER_BASE_OFFS_IRIS33 + 0x88)
 
 /*
@@ -277,6 +278,37 @@ static bool is_iris33_hw_power_collapsed(struct msm_vidc_core *core)
 	/* if BIT(1) is 1 then video hw power is on else off */
 	pwr_status = value & BIT(1);
 	return pwr_status ? false : true;
+}
+
+static int __switch_gdsc_mode_iris33(struct msm_vidc_core *core, bool sw_mode)
+{
+	int rc;
+
+	if (sw_mode) {
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x0);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x2, 200, 2000);
+		if (rc) {
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x1\n",
+				__func__);
+			return rc;
+		}
+	} else {
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x1);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x0, 200, 2000);
+		if (rc) {
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x0\n",
+				__func__);
+			return rc;
+		}
+	}
+
+	return 0;
 }
 
 static int __power_off_iris33_hardware(struct msm_vidc_core *core)
@@ -1377,6 +1409,7 @@ static struct msm_vidc_venus_ops iris33_ops = {
 	.prepare_pc = __prepare_pc_iris33,
 	.watchdog = __watchdog_iris33,
 	.noc_error_info = __noc_error_info_iris33,
+	.switch_gdsc_mode = __switch_gdsc_mode_iris33,
 };
 
 static struct msm_vidc_session_ops msm_session_ops = {

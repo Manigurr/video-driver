@@ -16,7 +16,7 @@
 #include "msm_vidc_fence.h"
 #include "msm_vidc_platform.h"
 
-#define in_range(range, val) (((range.begin) < (val)) && ((range.end) > (val)))
+#define check_in_range(range, val) (((range.begin) < (val)) && ((range.end) > (val)))
 
 extern struct msm_vidc_core *g_core;
 struct msm_vidc_core_hfi_range {
@@ -41,7 +41,7 @@ struct msm_vidc_hfi_packet_handle {
 	int (*handle)(struct msm_vidc_inst *inst, struct hfi_packet *pkt);
 };
 
-void print_psc_properties(const char *str, struct msm_vidc_inst *inst,
+static void print_psc_properties(const char *str, struct msm_vidc_inst *inst,
 	struct msm_vidc_subscription_params subsc_params)
 {
 	i_vpr_h(inst,
@@ -81,7 +81,7 @@ static void print_sfr_message(struct msm_vidc_core *core)
 	}
 }
 
-u32 vidc_port_from_hfi(struct msm_vidc_inst *inst,
+static u32 vidc_port_from_hfi(struct msm_vidc_inst *inst,
 	enum hfi_packet_port_type hfi_port)
 {
 	enum msm_vidc_port_type port = MAX_PORT;
@@ -126,7 +126,7 @@ u32 vidc_port_from_hfi(struct msm_vidc_inst *inst,
 	return port;
 }
 
-bool is_valid_hfi_port(struct msm_vidc_inst *inst, u32 port,
+static bool is_valid_hfi_port(struct msm_vidc_inst *inst, u32 port,
 	u32 buffer_type, const char *func)
 {
 	if (port == HFI_PORT_NONE &&
@@ -1901,7 +1901,7 @@ static int handle_system_response(struct msm_vidc_core *core,
 					goto exit;
 				goto exit;
 			}
-			if (in_range(be[i], packet->type)) {
+			if (check_in_range(be[i], packet->type)) {
 				rc = be[i].handle(core, packet);
 				if (rc)
 					goto exit;
@@ -1947,7 +1947,7 @@ static int __handle_session_response(struct msm_vidc_inst *inst,
 					__func__, packet->type);
 				handle_session_error(inst, packet);
 			}
-			if (in_range(be[i], packet->type)) {
+			if (check_in_range(be[i], packet->type)) {
 				dequeue |= (packet->type == HFI_CMD_BUFFER);
 				rc = be[i].handle(inst, packet);
 				if (rc)

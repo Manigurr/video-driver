@@ -28,7 +28,7 @@
 extern struct msm_vidc_core *g_core;
 
 #define is_odd(val) ((val) % 2 == 1)
-#define in_range(val, min, max) (((min) <= (val)) && ((val) <= (max)))
+#define check_in_range(val, min, max) (((min) <= (val)) && ((val) <= (max)))
 #define COUNT_BITS(a, out) {       \
 	while ((a) >= 1) {          \
 		(out) += (a) & (1); \
@@ -1635,7 +1635,7 @@ int vb2_buffer_to_driver(struct vb2_buffer *vb2,
 	return rc;
 }
 
-int msm_vidc_process_readonly_buffers(struct msm_vidc_inst *inst,
+static int msm_vidc_process_readonly_buffers(struct msm_vidc_inst *inst,
 	struct msm_vidc_buffer *buf)
 {
 	int rc = 0;
@@ -1795,7 +1795,7 @@ int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, u64 time_us)
 	return 0;
 }
 
-int msm_vidc_flush_input_timer(struct msm_vidc_inst *inst)
+static int msm_vidc_flush_input_timer(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_input_timer *input_timer, *dummy_timer;
 	struct msm_vidc_core *core;
@@ -2247,6 +2247,12 @@ void msm_vidc_allow_dcvs(struct msm_vidc_inst *inst)
 	allow = core->capabilities[DCVS].value;
 	if (!allow) {
 		i_vpr_h(inst, "%s: core doesn't support dcvs\n", __func__);
+		goto exit;
+	}
+
+	allow = (inst->codec != MSM_VIDC_AV1);
+	if (!allow) {
+		i_vpr_h(inst, "%s: unsupported codec\n", __func__);
 		goto exit;
 	}
 
@@ -5001,7 +5007,7 @@ int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst)
 	core_unlock(core, __func__);
 
 	if (critical_mbps > core->capabilities[MAX_MBPS].value) {
-		i_vpr_e(inst, "%s: Hardware overloaded with critical sessions. needed %u, max %u",
+		i_vpr_e(inst, "%s: Hardware overloaded with critical sessions. needed %llu, max %u",
 			__func__, critical_mbps, core->capabilities[MAX_MBPS].value);
 		return -ENOMEM;
 	}
@@ -5023,7 +5029,7 @@ int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst)
 	if (is_encode_session(inst)) {
 		/* reject encoder if all encoders mbps is greater than MAX_MBPS */
 		if (enc_mbps > core->capabilities[MAX_MBPS].value) {
-			i_vpr_e(inst, "%s: Hardware overloaded. needed %u, max %u", __func__,
+			i_vpr_e(inst, "%s: Hardware overloaded. needed %llu, max %u", __func__,
 				mbps, core->capabilities[MAX_MBPS].value);
 			return -ENOMEM;
 		}
@@ -5055,7 +5061,7 @@ int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst)
 		}
 	}
 
-	i_vpr_h(inst, "%s: HW load needed %u is within max %u", __func__,
+	i_vpr_h(inst, "%s: HW load needed %llu is within max %u", __func__,
 			total_mbps, core->capabilities[MAX_MBPS].value);
 
 	return 0;
@@ -5205,8 +5211,8 @@ static bool msm_vidc_allow_image_encode_session(struct msm_vidc_inst *inst)
 	min_height = cap[FRAME_HEIGHT].min;
 	max_height = cap[FRAME_HEIGHT].max;
 	fmt = &inst->fmts[INPUT_PORT];
-	if (!in_range(fmt->fmt.pix_mp.width, min_width, max_width) ||
-		!in_range(fmt->fmt.pix_mp.height, min_height, max_height)) {
+	if (!check_in_range(fmt->fmt.pix_mp.width, min_width, max_width) ||
+		!check_in_range(fmt->fmt.pix_mp.height, min_height, max_height)) {
 		i_vpr_e(inst, "unsupported wxh [%u x %u], allowed [%u x %u] to [%u x %u]\n",
 			fmt->fmt.pix_mp.width, fmt->fmt.pix_mp.height,
 			min_width, min_height, max_width, max_height);
@@ -5307,8 +5313,8 @@ static int msm_vidc_check_resolution_supported(struct msm_vidc_inst *inst)
 
 	/* check if input width and height is in supported range */
 	if (is_decode_session(inst) || is_encode_session(inst)) {
-		if (!in_range(width, min_width, max_width) ||
-			!in_range(height, min_height, max_height)) {
+		if (!check_in_range(width, min_width, max_width) ||
+			!check_in_range(height, min_height, max_height)) {
 			i_vpr_e(inst,
 				"%s: unsupported input wxh [%u x %u], allowed range: [%u x %u] to [%u x %u]\n",
 				__func__, width, height, min_width,

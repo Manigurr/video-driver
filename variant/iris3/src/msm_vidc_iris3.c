@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
+
+#include <linux/iopoll.h>
 
 #include "msm_vidc_iris3.h"
 #include "msm_vidc_buffer_iris3.h"
@@ -112,6 +114,7 @@
 #define WRAPPER_IRIS_CPU_NOC_LPI_CONTROL	(WRAPPER_BASE_OFFS_IRIS3 + 0x5C)
 #define WRAPPER_IRIS_CPU_NOC_LPI_STATUS		(WRAPPER_BASE_OFFS_IRIS3 + 0x60)
 #define WRAPPER_CORE_POWER_STATUS		(WRAPPER_BASE_OFFS_IRIS3 + 0x80)
+#define WRAPPER_CORE_POWER_CONTROL		(WRAPPER_BASE_OFFS_IRIS3 + 0x84)
 #define WRAPPER_CORE_CLOCK_CONFIG_IRIS3		(WRAPPER_BASE_OFFS_IRIS3 + 0x88)
 
 /*
@@ -237,6 +240,37 @@ static int __setup_ucregion_memory_map_iris3(struct msm_vidc_core *core)
 		rc = __write_register(core, SFR_ADDR_IRIS3, value);
 		if (rc)
 			return rc;
+	}
+
+	return 0;
+}
+
+static int __switch_gdsc_mode_iris3(struct msm_vidc_core *core, bool sw_mode)
+{
+	int rc;
+
+	if (sw_mode) {
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x0);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x2, 200, 2000);
+		if (rc) {
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x1\n",
+				__func__);
+			return rc;
+		}
+	} else {
+		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x1);
+		if (rc)
+			return rc;
+		rc = __read_register_with_poll_timeout(core, WRAPPER_CORE_POWER_STATUS,
+						       BIT(1), 0x0, 200, 2000);
+		if (rc) {
+			d_vpr_e("%s: Failed to read WRAPPER_CORE_POWER_STATUS register to 0x0\n",
+				__func__);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -519,6 +553,15 @@ static int __power_on_iris3_hardware(struct msm_vidc_core *core)
 	if (rc)
 		goto fail_regulator;
 
+	/* video controller and hardware powered on successfully */
+	rc = msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_POWER_ENABLE, __func__);
+	if (rc)
+		goto fail_power_on_substate;
+
+	rc = call_res_op(core, gdsc_sw_ctrl, core);
+	if (rc)
+		goto fail_sw_ctrl;
+
 	rc = call_res_op(core, clk_enable, core, "vcodec_clk");
 	if (rc)
 		goto fail_clk_controller;
@@ -526,6 +569,9 @@ static int __power_on_iris3_hardware(struct msm_vidc_core *core)
 	return 0;
 
 fail_clk_controller:
+	call_res_op(core, gdsc_hw_ctrl, core);
+fail_sw_ctrl:
+fail_power_on_substate:
 	call_res_op(core, gdsc_off, core, "vcodec");
 fail_regulator:
 	return rc;
@@ -564,10 +610,6 @@ static int __power_on_iris3(struct msm_vidc_core *core)
 		d_vpr_e("%s: failed to power on iris3 hardware\n", __func__);
 		goto fail_power_on_hardware;
 	}
-	/* video controller and hardware powered on successfully */
-	rc = msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_POWER_ENABLE, __func__);
-	if (rc)
-		goto fail_power_on_substate;
 
 	freq_tbl = core->resource->freq_set.freq_tbl;
 	freq = core->power.clk_freq ? core->power.clk_freq :
@@ -589,9 +631,6 @@ static int __power_on_iris3(struct msm_vidc_core *core)
 	enable_irq(core->resource->irq);
 
 	return rc;
-
-fail_power_on_substate:
-	__power_off_iris3_hardware(core);
 fail_power_on_hardware:
 	__power_off_iris3_controller(core);
 fail_power_on_controller:
@@ -775,6 +814,10 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 		if (rc)
 			return rc;
 
+		rc = __read_register(core, CTRL_INIT_IRIS3, &ctrl_init_val);
+		if (rc)
+			return rc;
+
 		if ((ctrl_status & CTRL_ERROR_STATUS__M_IRIS3) == 0x4) {
 			d_vpr_e("invalid setting for UC_REGION\n");
 			break;
@@ -786,6 +829,7 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 
 	if (count >= max_tries) {
 		d_vpr_e("Error booting up vidc firmware\n");
+		d_vpr_e("ctrl status %#x, ctrl init %#x\n", ctrl_status, ctrl_init_val);
 		return -ETIME;
 	}
 
@@ -801,7 +845,7 @@ static int __boot_firmware_iris3(struct msm_vidc_core *core)
 	return rc;
 }
 
-int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_work_mode_iris3(struct msm_vidc_inst *inst)
 {
 	u32 work_mode;
 	struct v4l2_format *inp_f;
@@ -864,7 +908,7 @@ exit:
 	return 0;
 }
 
-int msm_vidc_decide_work_route_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_work_route_iris3(struct msm_vidc_inst *inst)
 {
 	u32 work_route;
 	struct msm_vidc_core *core;
@@ -900,7 +944,7 @@ exit:
 	return 0;
 }
 
-int msm_vidc_decide_quality_mode_iris3(struct msm_vidc_inst *inst)
+static int msm_vidc_decide_quality_mode_iris3(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_core *core;
 	u32 mbpf, mbps, max_hq_mbpf, max_hq_mbps;
@@ -1021,6 +1065,7 @@ static struct msm_vidc_venus_ops iris3_ops = {
 	.prepare_pc = __prepare_pc_iris3,
 	.watchdog = __watchdog_iris3,
 	.noc_error_info = __noc_error_info_iris3,
+	.switch_gdsc_mode = __switch_gdsc_mode_iris3,
 };
 
 static struct msm_vidc_session_ops msm_session_ops = {

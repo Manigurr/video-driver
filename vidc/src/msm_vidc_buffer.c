@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_media_info.h"
@@ -148,7 +148,7 @@ u32 msm_vidc_output_extra_count(struct msm_vidc_inst *inst)
 
 	if (is_decode_session(inst)) {
 		/* add dcvs buffers, if platform supports dcvs */
-		if (core->capabilities[DCVS].value)
+		if (core->capabilities[DCVS].value && inst->codec != MSM_VIDC_AV1)
 			count = DCVS_DEC_EXTRA_OUTPUT_BUFFERS;
 		/*
 		 * if decode batching enabled, ensure minimum batch size

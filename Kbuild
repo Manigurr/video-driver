@@ -29,6 +29,8 @@ LINUXINCLUDE +=                                 \
 
 # After creating lists, add content of 'ccflags-m' variable to 'ccflags-y' one.
 ccflags-y += ${ccflags-m}
+ccflags-y += -Wmissing-prototypes
+ccflags-y += -Werror
 
 iris_vpu-y := \
                   vidc/src/msm_vidc_debug.o \

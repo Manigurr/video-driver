@@ -204,14 +204,14 @@ static int __opp_set_rate(struct msm_vidc_core *core, u64 freq)
 	if (IS_ERR(opp)) {
 		opp = dev_pm_opp_find_freq_floor(&core->pdev->dev, &opp_freq);
 		if (IS_ERR(opp)) {
-			d_vpr_e("%s: unable to find freq %lld in opp table\n", __func__, freq);
+			d_vpr_e("%s: unable to find freq %llu in opp table\n", __func__, freq);
 			return -EINVAL;
 		}
 	}
 	dev_pm_opp_put(opp);
 
 	/* print freq value */
-	d_vpr_h("%s: set rate %lld (requested %lld)\n",
+	d_vpr_h("%s: set rate %lu (requested %llu)\n",
 		__func__, opp_freq, freq);
 
 	/* scale freq to power up mxc & mmcx */
@@ -236,7 +236,7 @@ static int __init_register_base(struct msm_vidc_core *core)
 			__func__, PTR_ERR(res->register_base_addr));
 		return -EINVAL;
 	}
-	d_vpr_h("%s: reg_base %#x\n", __func__, res->register_base_addr);
+	d_vpr_h("%s: reg_base %#llx\n", __func__, (uint64_t)res->register_base_addr);
 
 	return 0;
 }
@@ -287,7 +287,7 @@ static int __init_bus(struct msm_vidc_core *core)
 	bus_count = core->platform->data.bw_tbl_size;
 
 	if (!bus_tbl || !bus_count) {
-		d_vpr_e("%s: invalid bus tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid bus tbl 0x%p or count %u\n",
 			__func__, bus_tbl, bus_count);
 		return -EINVAL;
 	}
@@ -480,7 +480,7 @@ static int __init_clocks(struct msm_vidc_core *core)
 	clk_count = core->platform->data.clk_tbl_size;
 
 	if (!clk_tbl || !clk_count) {
-		d_vpr_e("%s: invalid clock tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid clock tbl 0x%p or count %d\n",
 			__func__, clk_tbl, clk_count);
 		return -EINVAL;
 	}
@@ -522,7 +522,7 @@ static int __init_clocks(struct msm_vidc_core *core)
 			}
 
 			if (!freq_tbl) {
-				d_vpr_e("%s: invalid freq tbl %#x\n", __func__, freq_tbl);
+				d_vpr_e("%s: invalid freq tbl 0x%p\n", __func__, freq_tbl);
 				return -EINVAL;
 			}
 
@@ -572,7 +572,7 @@ static int __init_reset_clocks(struct msm_vidc_core *core)
 	rst_count = core->platform->data.clk_rst_tbl_size;
 
 	if (!rst_tbl || !rst_count) {
-		d_vpr_e("%s: invalid reset tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid reset tbl 0x%p or count %d\n",
 			__func__, rst_tbl, rst_count);
 		return 0;
 	}
@@ -635,7 +635,7 @@ static int __init_subcaches(struct msm_vidc_core *core)
 	llcc_count = core->platform->data.subcache_tbl_size;
 
 	if (!llcc_tbl || !llcc_count) {
-		d_vpr_e("%s: invalid llcc tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid llcc tbl 0x%p or count %d\n",
 			__func__, llcc_tbl, llcc_count);
 		return -EINVAL;
 	}
@@ -689,7 +689,7 @@ static int __init_freq_table(struct msm_vidc_core *core)
 	freq_count = core->platform->data.freq_tbl_size;
 
 	if (!freq_tbl || !freq_count) {
-		d_vpr_e("%s: invalid freq tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid freq tbl 0x%p or count %d\n",
 			__func__, freq_tbl, freq_count);
 		return -EINVAL;
 	}
@@ -732,7 +732,7 @@ static int __init_context_banks(struct msm_vidc_core *core)
 	cb_count = core->platform->data.context_bank_tbl_size;
 
 	if (!cb_tbl || !cb_count) {
-		d_vpr_e("%s: invalid context bank tbl %#x or count %d\n",
+		d_vpr_e("%s: invalid context bank tbl 0x%p or count %d\n",
 			__func__, cb_tbl, cb_count);
 		return -EINVAL;
 	}
@@ -811,7 +811,7 @@ static int __init_device_region(struct msm_vidc_core *core)
 
 	/* print device region fields */
 	venus_hfi_for_each_device_region(core, dev_reg_info) {
-		d_vpr_h("%s: name %s phy_addr %#x size %#x dev_addr %#x dev_region %d\n",
+		d_vpr_h("%s: name %s phy_addr %#llx size %#x dev_addr %#x dev_region %d\n",
 			__func__, dev_reg_info->name, dev_reg_info->phy_addr, dev_reg_info->size,
 			dev_reg_info->dev_addr, dev_reg_info->region);
 	}
@@ -919,7 +919,10 @@ static int __enable_power_domains(struct msm_vidc_core *core, const char *name)
 		d_vpr_h("%s: enabled power doamin %s\n", __func__, pdinfo->name);
 	}
 
-	return rc;
+	/* power domains are moved to HW ctrl by default after calling get_sync() */
+	msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_GDSC_HANDOFF, __func__);
+
+	return 0;
 }
 
 static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
@@ -933,11 +936,11 @@ static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
 			continue;
 
 		rc = pm_runtime_put_sync(pdinfo->genpd_dev);
-		if (rc) {
+		if (rc < 0) {
 			d_vpr_e("%s: failed to put sync: %s\n", __func__, pdinfo->name);
 			return rc;
 		}
-		d_vpr_h("%s: disabled power doamin %s\n", __func__, pdinfo->name);
+		d_vpr_h("%s: disabled power domain %s\n", __func__, pdinfo->name);
 	}
 
 	/* power down rails(mxc & mmcx) to disable RCG(video_cc_mvs0_clk_src) */
@@ -950,11 +953,26 @@ static int __disable_power_domains(struct msm_vidc_core *core, const char *name)
 	}
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
 
-	return rc;
+	return 0;
 }
 
 static int __hand_off_power_domains(struct msm_vidc_core *core)
 {
+	int rc = 0;
+
+	if (is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
+		d_vpr_h("%s: power domains are already in HW ctrl mode\n",
+			__func__);
+		return 0;
+	}
+
+	rc = call_venus_op(core, switch_gdsc_mode, core, false);
+	if (rc) {
+		d_vpr_e("Failed to switch GDSC into HW control, err: %d\n", rc);
+		return rc;
+	}
+
+	d_vpr_h("%s: moved power doamin into HW control\n", __func__);
 	msm_vidc_change_core_sub_state(core, 0, CORE_SUBSTATE_GDSC_HANDOFF, __func__);
 
 	return 0;
@@ -962,6 +980,21 @@ static int __hand_off_power_domains(struct msm_vidc_core *core)
 
 static int __acquire_power_domains(struct msm_vidc_core *core)
 {
+	int rc = 0;
+
+	if (!is_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF)) {
+		d_vpr_h("%s: power domains are already in SW ctrl mode\n",
+			__func__);
+		return 0;
+	}
+
+	rc = call_venus_op(core, switch_gdsc_mode, core, true);
+	if (rc) {
+		d_vpr_e("Failed to switch GDSC into SW control, err: %d\n", rc);
+		return rc;
+	}
+
+	d_vpr_h("%s: moved power doamin into SW control\n", __func__);
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
 
 	return 0;
@@ -1148,7 +1181,7 @@ static int print_residency_stats(struct msm_vidc_core *core, struct clock_info *
 
 	/* print residency percent for each clock */
 	list_for_each_entry(residency, &cl->residency_list, list) {
-		d_vpr_hs("%s: %s clock rate [%d] total %lluus residency %u%%\n",
+		d_vpr_hs("%s: %s clock rate [%llu] total %llu us residency %llu%%\n",
 			__func__, cl->name, residency->rate, residency->total_time_us,
 			(residency->total_time_us * 100 + total_time_us / 2) / total_time_us);
 	}
