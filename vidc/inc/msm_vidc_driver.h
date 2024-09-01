@@ -15,6 +15,14 @@
 
 #define MSM_VIDC_SESSION_INACTIVE_THRESHOLD_MS 1000
 
+/* Offset base for buffers on the destination queue - used to distinguish
+ * between source and destination buffers when mmapping - they receive the same
+ * offsets but for different queues */
+#define SRC_META_QUEUE_OFF_BASE	(1 << 29)
+#define DST_QUEUE_OFF_BASE	(1 << 30)
+#define DST_META_QUEUE_OFF_BASE	(1 << 31)
+
+
 enum msm_vidc_debugfs_event;
 
 static inline bool is_decode_session(struct msm_vidc_inst *inst)

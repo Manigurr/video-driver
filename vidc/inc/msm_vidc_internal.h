@@ -20,6 +20,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-core.h>
+#include <media/videobuf2-memops.h>
 #include <media/videobuf2-v4l2.h>
 
 struct msm_vidc_inst;
@@ -976,6 +977,10 @@ struct msm_vidc_buffer {
 	void                              *dmabuf;
 	struct sg_table                   *sg_table;
 	struct dma_buf_attachment         *attach;
+	struct vb2_vmarea_handler          handler;
+	refcount_t                         refcount;
+	unsigned long                      dma_attrs;
+	void                              *kvaddr;
 	u32                                dbuf_get:1;
 	u64                                fence_id;
 	u32                                start_time_ms;
