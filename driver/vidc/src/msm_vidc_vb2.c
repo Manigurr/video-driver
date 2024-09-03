@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
-/* Copyright (c) 2022. Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include "msm_vidc_vb2.h"
 #include "msm_vidc_core.h"
@@ -415,6 +415,12 @@ int msm_vidc_start_streaming(struct vb2_queue *q, unsigned int count)
 		rc = msm_vidc_prepare_dependency_list(inst);
 		if (rc)
 			goto unlock;
+
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+		rc = msm_vidc_session_set_core_id(inst);
+		if (rc)
+			goto unlock;
+#endif
 
 		rc = msm_vidc_session_set_codec(inst);
 		if (rc)

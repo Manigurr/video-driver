@@ -1,24 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <dt-bindings/clock/qcom,gcc-kalama.h>
-#include <dt-bindings/clock/qcom,videocc-kalama.h>
+#include <dt-bindings/clock/qcom,gcc-nordau.h>
+#include <dt-bindings/clock/qcom,videocc-nordau.h>
 
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <soc/qcom/of_common.h>
-#include <media/v4l2_vidc_extensions.h>
 
-#include "msm_vidc_kalama.h"
+#include <media/v4l2_vidc_extensions.h>
+#include "msm_vidc_nordau.h"
 #include "msm_vidc_platform.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_control_ext.h"
 #include "msm_vidc_memory_ext.h"
 #include "hfi_property.h"
-#include "msm_vidc_iris3.h"
+#include "msm_vidc_iris33_au.h"
 #include "hfi_command.h"
 
 #define DEFAULT_VIDEO_CONCEAL_COLOR_BLACK 0x8020010
@@ -46,10 +45,11 @@
 #define VP9     MSM_VIDC_VP9
 #define AV1     MSM_VIDC_AV1
 #define HEIC    MSM_VIDC_HEIC
-#define CODECS_ALL     (H264 | HEVC | VP9 | HEIC | AV1)
+#define MPEG2   MSM_VIDC_MPEG2
+#define CODECS_ALL     (H264 | HEVC | VP9 | HEIC | AV1 | MPEG2)
 #define MAXIMUM_OVERRIDE_VP9_FPS 200
 
-static struct codec_info codec_data_kalama[] = {
+static struct codec_info codec_data_nordau[] = {
 	{
 		.v4l2_codec  = V4L2_PIX_FMT_H264,
 		.vidc_codec  = MSM_VIDC_H264,
@@ -75,9 +75,14 @@ static struct codec_info codec_data_kalama[] = {
 		.vidc_codec  = MSM_VIDC_HEIC,
 		.pixfmt_name = "HEIC",
 	},
+	{
+		.v4l2_codec  = V4L2_PIX_FMT_MPEG2,
+		.vidc_codec  = MSM_VIDC_MPEG2,
+		.pixfmt_name = "MPEG2",
+	},
 };
 
-static struct color_format_info color_format_data_kalama[] = {
+static struct color_format_info color_format_data_nordau[] = {
 	{
 		.v4l2_color_format = V4L2_PIX_FMT_NV12,
 		.vidc_color_format = MSM_VIDC_FMT_NV12,
@@ -120,7 +125,7 @@ static struct color_format_info color_format_data_kalama[] = {
 	},
 };
 
-static struct color_primaries_info color_primaries_data_kalama[] = {
+static struct color_primaries_info color_primaries_data_nordau[] = {
 	{
 		.v4l2_color_primaries  = V4L2_COLORSPACE_DEFAULT,
 		.vidc_color_primaries  = MSM_VIDC_PRIMARIES_RESERVED,
@@ -171,7 +176,7 @@ static struct color_primaries_info color_primaries_data_kalama[] = {
 	},
 };
 
-static struct transfer_char_info transfer_char_data_kalama[] = {
+static struct transfer_char_info transfer_char_data_nordau[] = {
 	{
 		.v4l2_transfer_char  = V4L2_XFER_FUNC_DEFAULT,
 		.vidc_transfer_char  = MSM_VIDC_TRANSFER_RESERVED,
@@ -234,7 +239,7 @@ static struct transfer_char_info transfer_char_data_kalama[] = {
 	},
 };
 
-static struct matrix_coeff_info matrix_coeff_data_kalama[] = {
+static struct matrix_coeff_info matrix_coeff_data_nordau[] = {
 	{
 		.v4l2_matrix_coeff  = V4L2_YCBCR_ENC_DEFAULT,
 		.vidc_matrix_coeff  = MSM_VIDC_MATRIX_COEFF_RESERVED,
@@ -281,26 +286,24 @@ static struct matrix_coeff_info matrix_coeff_data_kalama[] = {
 	},
 };
 
-static struct msm_platform_core_capability core_data_kalama[] = {
+static struct msm_platform_core_capability core_data_nordau[] = {
 	/* {type, value} */
 	{ENC_CODECS, H264|HEVC|HEIC},
-	{DEC_CODECS, H264|HEVC|VP9|AV1|HEIC},
-	{MAX_SESSION_COUNT, 16},
-	{MAX_NUM_720P_SESSIONS, 16},
-	{MAX_NUM_1080P_SESSIONS, 16},
-	{MAX_NUM_4K_SESSIONS, 8},
-	{MAX_NUM_8K_SESSIONS, 2},
-	{MAX_SECURE_SESSION_COUNT, 3},
+	{DEC_CODECS, H264|HEVC|VP9|AV1|HEIC|MPEG2},
+	{MAX_SESSION_COUNT, 32},
+	{MAX_NUM_720P_SESSIONS, 32},
+	{MAX_NUM_1080P_SESSIONS, 32},
+	{MAX_NUM_4K_SESSIONS, 16},
+	{MAX_NUM_8K_SESSIONS, 1},
+	{MAX_SECURE_SESSION_COUNT, 4},
 	{MAX_RT_MBPF, 174080},	/* (8192x4352)/256 + (4096x2176)/256*/
 	{MAX_MBPF, 278528}, /* ((8192x4352)/256) * 2 */
-	{MAX_MBPS, 7833600},	/* max_load
-					 * 7680x4320@60fps or 3840x2176@240fps
-					 * which is greater than 4096x2176@120fps,
-					 * 8192x4320@48fps
-					 */
+	{MAX_MBPS, 17925000},	/* max_load
+				 * 3840x2176@550fps
+				 */
 	{MAX_IMAGE_MBPF, 1048576},  /* (16384x16384)/256 */
-	{MAX_MBPF_HQ, 8160}, /* ((1920x1088)/256) */
-	{MAX_MBPS_HQ, 489600}, /* ((1920x1088)/256)@60fps */
+	{MAX_MBPF_HQ, 3600}, /* ((1280x720)/256) */
+	{MAX_MBPS_HQ, 108000}, /* ((1280x720)/256)@30fps */
 	{MAX_MBPF_B_FRAME, 32640}, /* 3840x2176/256 */
 	{MAX_MBPS_B_FRAME, 1958400}, /* 3840x2176/256 MBs@60fps */
 	{MAX_MBPS_ALL_INTRA, 2088960}, /* 4096x2176/256 MBs@60fps */
@@ -323,9 +326,10 @@ static struct msm_platform_core_capability core_data_kalama[] = {
 	{DEVICE_CAPS, V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_META_CAPTURE |
 		V4L2_CAP_STREAMING},
 	{SUPPORTS_REQUESTS, 1},
+	{NUM_VPU, 1},
 };
 
-static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
+static struct msm_platform_inst_capability instance_cap_data_nordau[] = {
 	/* {cap, domain, codec,
 	 *      min, max, step_or_mask, value,
 	 *      v4l2_id,
@@ -336,6 +340,8 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 	{FRAME_WIDTH, DEC, CODECS_ALL, 96, 8192, 1, 1920},
 
 	{FRAME_WIDTH, DEC, VP9, 96, 4096, 1, 1920},
+
+	{FRAME_WIDTH, DEC, MPEG2, 96, 1920, 1, 1920},
 
 	{FRAME_WIDTH, ENC, CODECS_ALL, 128, 8192, 1, 1920},
 
@@ -357,6 +363,8 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 
 	{FRAME_HEIGHT, DEC, VP9, 96, 4096, 1, 1080},
 
+	{FRAME_HEIGHT, DEC, MPEG2, 96, 1920, 1, 1080},
+
 	{FRAME_HEIGHT, ENC, CODECS_ALL, 128, 8192, 1, 1080},
 
 	{FRAME_HEIGHT, ENC, HEVC, 96, 8192, 1, 1080},
@@ -373,7 +381,7 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 
 	{SECURE_FRAME_HEIGHT, ENC, HEVC, 96, 4096, 1, 1080},
 
-	{PIX_FMTS, ENC|DEC, H264,
+	{PIX_FMTS, ENC|DEC, H264|MPEG2,
 		MSM_VIDC_FMT_NV12,
 		MSM_VIDC_FMT_NV12C,
 		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_NV12C,
@@ -539,7 +547,7 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 	 * Client will enable V4L2_CID_MPEG_VIDC_METADATA_OUTBUF_FENCE
 	 * to get fence_id in input metadata buffer done.
 	 */
-	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9|AV1,
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9|AV1|MPEG2,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_INPUT,
 		0, MSM_VIDC_META_DISABLE,
@@ -1166,7 +1174,7 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 		HFI_PROP_CABAC_SESSION,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{ENTROPY_MODE, DEC, H264|HEVC|VP9|AV1,
+	{ENTROPY_MODE, DEC, H264|HEVC|VP9|AV1|MPEG2,
 		V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC,
 		V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC,
 		BIT(V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC) |
@@ -1216,6 +1224,16 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 		BIT(V4L2_MPEG_VIDEO_AV1_PROFILE_MAIN),
 		V4L2_MPEG_VIDEO_AV1_PROFILE_MAIN,
 		V4L2_CID_MPEG_VIDEO_AV1_PROFILE,
+		HFI_PROP_PROFILE,
+		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
+
+	{PROFILE, DEC, MPEG2,
+		V4L2_MPEG_VIDEO_MPEG2_PROFILE_SIMPLE,
+		V4L2_MPEG_VIDEO_MPEG2_PROFILE_MAIN,
+		BIT(V4L2_MPEG_VIDEO_MPEG2_PROFILE_SIMPLE) |
+		BIT(V4L2_MPEG_VIDEO_MPEG2_PROFILE_MAIN),
+		V4L2_MPEG_VIDEO_MPEG2_PROFILE_SIMPLE,
+		V4L2_CID_MPEG_VIDEO_MPEG2_PROFILE,
 		HFI_PROP_PROFILE,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
@@ -1358,6 +1376,18 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 		BIT(V4L2_MPEG_VIDEO_AV1_LEVEL_6_1),
 		V4L2_MPEG_VIDEO_AV1_LEVEL_6_1,
 		V4L2_CID_MPEG_VIDEO_AV1_LEVEL,
+		HFI_PROP_LEVEL,
+		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
+
+	{LEVEL, DEC, MPEG2,
+		V4L2_MPEG_VIDEO_MPEG2_LEVEL_LOW,
+		V4L2_MPEG_VIDEO_MPEG2_LEVEL_HIGH,
+		BIT(V4L2_MPEG_VIDEO_MPEG2_LEVEL_LOW) |
+		BIT(V4L2_MPEG_VIDEO_MPEG2_LEVEL_MAIN) |
+		BIT(V4L2_MPEG_VIDEO_MPEG2_LEVEL_HIGH_1440) |
+		BIT(V4L2_MPEG_VIDEO_MPEG2_LEVEL_HIGH),
+		V4L2_MPEG_VIDEO_MPEG2_LEVEL_LOW,
+		V4L2_CID_MPEG_VIDEO_MPEG2_LEVEL,
 		HFI_PROP_LEVEL,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
@@ -1694,7 +1724,7 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 		HFI_PROP_OPB_LUMA_CHROMA_MISR,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_INTERLACE, DEC, H264,
+	{META_INTERLACE, DEC, H264|MPEG2,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_OUTPUT,
 		0, MSM_VIDC_META_DISABLE,
@@ -1934,15 +1964,9 @@ static struct msm_platform_inst_capability instance_cap_data_kalama[] = {
 		V4L2_CID_MPEG_VIDC_H264_ENCODE_DELIVERY_MODE,
 		HFI_PROP_ENABLE_SLICE_DELIVERY,
 		CAP_FLAG_OUTPUT_PORT},
-
-	{SIGNAL_COLOR_INFO, ENC, CODECS_ALL,
-		0, INT_MAX, 1, 0,
-		V4L2_CID_MPEG_VIDC_SIGNAL_COLOR_INFO,
-		HFI_PROP_SIGNAL_COLOR_INFO,
-		CAP_FLAG_INPUT_PORT | CAP_FLAG_DYNAMIC_ALLOWED},
 };
 
-static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_kalama[] = {
+static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_nordau[] = {
 	/* {cap, domain, codec,
 	 *      parents,
 	 *      children,
@@ -2192,7 +2216,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_kala
 	{BITRATE_BOOST, ENC, H264|HEVC,
 		{BITRATE_MODE, MIN_QUALITY, BIT_RATE},
 		{0},
-		msm_vidc_adjust_bitrate_boost_iris3,
+		msm_vidc_adjust_bitrate_boost_iris33_au,
 		msm_vidc_set_vbr_related_properties},
 
 	{MIN_QUALITY, ENC, H264,
@@ -2578,46 +2602,42 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_kala
 		{0},
 		NULL,
 		msm_vidc_set_vui_timing_info},
-
-	{SIGNAL_COLOR_INFO, ENC, CODECS_ALL,
-		{0},
-		NULL,
-		msm_vidc_set_signal_color_info},
 };
 
 /* Default UBWC config for LPDDR5 */
-static struct msm_vidc_ubwc_config_data ubwc_config_kalama[] = {
-	UBWC_CONFIG(8, 32, 16, 0, 1, 1, 1),
+static struct msm_vidc_ubwc_config_data ubwc_config_nordau[] = {
+	UBWC_CONFIG(8, 32, 16, 0, 0, 0, 1),
 };
 
-static struct msm_vidc_format_capability format_data_kalama = {
-	.codec_info = codec_data_kalama,
-	.codec_info_size = ARRAY_SIZE(codec_data_kalama),
-	.color_format_info = color_format_data_kalama,
-	.color_format_info_size = ARRAY_SIZE(color_format_data_kalama),
-	.color_prim_info = color_primaries_data_kalama,
-	.color_prim_info_size = ARRAY_SIZE(color_primaries_data_kalama),
-	.transfer_char_info = transfer_char_data_kalama,
-	.transfer_char_info_size = ARRAY_SIZE(transfer_char_data_kalama),
-	.matrix_coeff_info = matrix_coeff_data_kalama,
-	.matrix_coeff_info_size = ARRAY_SIZE(matrix_coeff_data_kalama),
+static struct msm_vidc_format_capability format_data_nordau = {
+	.codec_info = codec_data_nordau,
+	.codec_info_size = ARRAY_SIZE(codec_data_nordau),
+	.color_format_info = color_format_data_nordau,
+	.color_format_info_size = ARRAY_SIZE(color_format_data_nordau),
+	.color_prim_info = color_primaries_data_nordau,
+	.color_prim_info_size = ARRAY_SIZE(color_primaries_data_nordau),
+	.transfer_char_info = transfer_char_data_nordau,
+	.transfer_char_info_size = ARRAY_SIZE(transfer_char_data_nordau),
+	.matrix_coeff_info = matrix_coeff_data_nordau,
+	.matrix_coeff_info_size = ARRAY_SIZE(matrix_coeff_data_nordau),
 };
 
 /* name, min_kbps, max_kbps */
-static const struct bw_table kalama_bw_table[] = {
+static const struct bw_table nordau_bw_table[] = {
 	{ "venus-cnoc",  1000, 1000     },
 	{ "venus-ddr",   1000, 15000000 },
 	{ "venus-llcc",  1000, 15000000 },
 };
 
 /* name, hw_trigger */
-static const struct regulator_table kalama_regulator_table[] = {
+static const struct regulator_table nordau_regulator_table[] = {
 	{ "iris-ctl", 0 },
 	{ "vcodec",   1 },
+	{ "vcodec1",  1 },
 };
 
 /* name, clock id, scaling */
-static const struct clk_table kalama_clk_table[] = {
+static const struct clk_table nordau_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
 	{ "core_clk",               VIDEO_CC_MVS0C_CLK,     0 },
 	{ "vcodec_clk",             VIDEO_CC_MVS0_CLK,      0 },
@@ -2625,132 +2645,96 @@ static const struct clk_table kalama_clk_table[] = {
 };
 
 /* name */
-static const struct clk_rst_table kalama_clk_reset_table[] = {
+static const struct clk_rst_table nordau_clk_reset_table[] = {
 	{ "video_axi_reset" },
 };
 
 /* name, llcc_id */
-static const struct subcache_table kalama_subcache_table[] = {
+static const struct subcache_table nordau_subcache_table[] = {
 	{ "vidsc0",     LLCC_VIDSC0 },
 	{ "vidvsp",     LLCC_VIDVSP },
 };
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
-const struct context_bank_table kalama_context_bank_table[] = {
-	{"qcom,vidc,cb-ns",            0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE,       0 },
-	{"qcom,vidc,cb-ns-pxl",        0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0 },
-	{"qcom,vidc,cb-sec-pxl",       0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_PIXEL,     0 },
-	{"qcom,vidc,cb-sec-non-pxl",   0x01000000, 0x24800000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
-	{"qcom,vidc,cb-sec-bitstream", 0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_BITSTREAM, 0 },
+const struct context_bank_table nordau_context_bank_table[] = {
+	{"qcom,vidc,cb-ns-non-pxl",    0x92400000, 0x1f400000, 0, 1,
+		MSM_VIDC_NON_SECURE_NONPIXEL, 0 },
+	{"qcom,vidc,cb-ns-pxl",        0x00500000, 0xefb00000, 0, 1,
+		MSM_VIDC_NON_SECURE_PIXEL,    0 },
+	{"qcom,vidc,cb-ns",            0x00500000, 0xefb00000, 0, 1,
+		MSM_VIDC_NON_SECURE,          0 },
+	{"qcom,vidc,cb-sec-pxl",       0x00500000, 0xefb00000, 1, 0,
+		MSM_VIDC_SECURE_PIXEL,        0 },
+	{"qcom,vidc,cb-sec-non-pxl",   0x0d800000, 0x0c800000, 1, 0,
+		MSM_VIDC_SECURE_NONPIXEL,     0 },
+	{"qcom,vidc,cb-sec-bitstream", 0x00500000, 0xefb00000, 1, 0,
+		MSM_VIDC_SECURE_BITSTREAM,    0 },
 };
 
 /* freq */
-static struct freq_table kalama_freq_table[] = {
-	{481000000}, {444000000}, {366000000}, {338000000}, {240000000}
-};
-
-static struct freq_table kalama_freq_table_v2[] = {
-	{533333333}, {444000000}, {366000000}, {338000000}, {240000000}
+static struct freq_table nordau_freq_table[] = {
+	{560000000}, {533333333}, {480000000}, {435000000}, {240000000}
 };
 
 /* register, value, mask */
-static const struct reg_preset_table kalama_reg_preset_table[] = {
+static const struct reg_preset_table nordau_reg_preset_table[] = {
 	{ 0xB0088, 0x0, 0x11 },
 };
 
-static const struct msm_vidc_platform_data kalama_data = {
+static const struct msm_vidc_platform_data nordau_data = {
 	/* resources dependent on other module */
-	.bw_tbl = kalama_bw_table,
-	.bw_tbl_size = ARRAY_SIZE(kalama_bw_table),
-	.regulator_tbl = kalama_regulator_table,
-	.regulator_tbl_size = ARRAY_SIZE(kalama_regulator_table),
-	.clk_tbl = kalama_clk_table,
-	.clk_tbl_size = ARRAY_SIZE(kalama_clk_table),
-	.clk_rst_tbl = kalama_clk_reset_table,
-	.clk_rst_tbl_size = ARRAY_SIZE(kalama_clk_reset_table),
-	.subcache_tbl = kalama_subcache_table,
-	.subcache_tbl_size = ARRAY_SIZE(kalama_subcache_table),
+	.bw_tbl = nordau_bw_table,
+	.bw_tbl_size = ARRAY_SIZE(nordau_bw_table),
+	.regulator_tbl = nordau_regulator_table,
+	.regulator_tbl_size = ARRAY_SIZE(nordau_regulator_table),
+	.clk_tbl = nordau_clk_table,
+	.clk_tbl_size = ARRAY_SIZE(nordau_clk_table),
+	.clk_rst_tbl = nordau_clk_reset_table,
+	.clk_rst_tbl_size = ARRAY_SIZE(nordau_clk_reset_table),
+	// .subcache_tbl = nordau_subcache_table,
+	// .subcache_tbl_size = ARRAY_SIZE(nordau_subcache_table),
 
 	/* populate context bank */
-	.context_bank_tbl = kalama_context_bank_table,
-	.context_bank_tbl_size = ARRAY_SIZE(kalama_context_bank_table),
+	.context_bank_tbl = nordau_context_bank_table,
+	.context_bank_tbl_size = ARRAY_SIZE(nordau_context_bank_table),
 
 	/* platform specific resources */
-	.freq_tbl = kalama_freq_table,
-	.freq_tbl_size = ARRAY_SIZE(kalama_freq_table),
-	.reg_prst_tbl = kalama_reg_preset_table,
-	.reg_prst_tbl_size = ARRAY_SIZE(kalama_reg_preset_table),
-	.fwname = "vpu30_4v",
+	.freq_tbl = nordau_freq_table,
+	.freq_tbl_size = ARRAY_SIZE(nordau_freq_table),
+	.reg_prst_tbl = nordau_reg_preset_table,
+	.reg_prst_tbl_size = ARRAY_SIZE(nordau_reg_preset_table),
+	.fwname = "vpu36_4v",
 	.pas_id = 9,
-	.supports_mmrm = 1,
+	.supports_mmrm = 0,
 
 	/* caps related resorces */
-	.core_data = core_data_kalama,
-	.core_data_size = ARRAY_SIZE(core_data_kalama),
-	.inst_cap_data = instance_cap_data_kalama,
-	.inst_cap_data_size = ARRAY_SIZE(instance_cap_data_kalama),
-	.inst_cap_dependency_data = instance_cap_dependency_data_kalama,
-	.inst_cap_dependency_data_size = ARRAY_SIZE(instance_cap_dependency_data_kalama),
+	.core_data = core_data_nordau,
+	.core_data_size = ARRAY_SIZE(core_data_nordau),
+	.inst_cap_data = instance_cap_data_nordau,
+	.inst_cap_data_size = ARRAY_SIZE(instance_cap_data_nordau),
+	.inst_cap_dependency_data = instance_cap_dependency_data_nordau,
+	.inst_cap_dependency_data_size = ARRAY_SIZE(instance_cap_dependency_data_nordau),
 	.csc_data.vpe_csc_custom_bias_coeff = vpe_csc_custom_bias_coeff,
 	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
-	.ubwc_config = ubwc_config_kalama,
-	.format_data = &format_data_kalama,
+	.ubwc_config = ubwc_config_nordau,
+	.format_data = &format_data_nordau,
 };
 
-static const struct msm_vidc_platform_data kalama_data_v2 = {
-	/* resources dependent on other module */
-	.bw_tbl = kalama_bw_table,
-	.bw_tbl_size = ARRAY_SIZE(kalama_bw_table),
-	.regulator_tbl = kalama_regulator_table,
-	.regulator_tbl_size = ARRAY_SIZE(kalama_regulator_table),
-	.clk_tbl = kalama_clk_table,
-	.clk_tbl_size = ARRAY_SIZE(kalama_clk_table),
-	.clk_rst_tbl = kalama_clk_reset_table,
-	.clk_rst_tbl_size = ARRAY_SIZE(kalama_clk_reset_table),
-	.subcache_tbl = kalama_subcache_table,
-	.subcache_tbl_size = ARRAY_SIZE(kalama_subcache_table),
-
-	/* populate context bank */
-	.context_bank_tbl = kalama_context_bank_table,
-	.context_bank_tbl_size = ARRAY_SIZE(kalama_context_bank_table),
-
-	/* platform specific resources */
-	.freq_tbl = kalama_freq_table_v2,
-	.freq_tbl_size = ARRAY_SIZE(kalama_freq_table_v2),
-	.reg_prst_tbl = kalama_reg_preset_table,
-	.reg_prst_tbl_size = ARRAY_SIZE(kalama_reg_preset_table),
-	.fwname = "vpu30_4v",
-	.pas_id = 9,
-	.supports_mmrm = 1,
-
-	/* caps related resorces */
-	.core_data = core_data_kalama,
-	.core_data_size = ARRAY_SIZE(core_data_kalama),
-	.inst_cap_data = instance_cap_data_kalama,
-	.inst_cap_data_size = ARRAY_SIZE(instance_cap_data_kalama),
-	.inst_cap_dependency_data = instance_cap_dependency_data_kalama,
-	.inst_cap_dependency_data_size = ARRAY_SIZE(instance_cap_dependency_data_kalama),
-	.csc_data.vpe_csc_custom_bias_coeff = vpe_csc_custom_bias_coeff,
-	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
-	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
-	.ubwc_config = ubwc_config_kalama,
-	.format_data = &format_data_kalama,
-};
-
-int msm_vidc_kalama_check_ddr_type(void)
+int msm_vidc_nordau_check_ddr_type(void)
 {
-	u32 ddr_type;
+	u32 ddr_type = 0;
+	int rc = 0;
 
 	ddr_type = of_fdt_get_ddrtype();
 	if (ddr_type != DDR_TYPE_LPDDR5 &&
 		ddr_type != DDR_TYPE_LPDDR5X) {
 		d_vpr_e("%s: wrong ddr type %d\n", __func__, ddr_type);
-		return -EINVAL;
+		rc = -EINVAL;
 	} else {
 		d_vpr_h("%s: ddr type %d\n", __func__, ddr_type);
 	}
-	return 0;
+	return rc;
 }
 
 static int msm_vidc_init_data(struct msm_vidc_core *core, struct device *dev)
@@ -2761,22 +2745,18 @@ static int msm_vidc_init_data(struct msm_vidc_core *core, struct device *dev)
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
-	d_vpr_h("%s: initialize kalama data\n", __func__);
+	d_vpr_h("%s: initialize nordau data\n", __func__);
 
-	if (of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc-v2"))
-		core->platform->data = kalama_data_v2;
-	else
-		core->platform->data = kalama_data;
-
+	core->platform->data = nordau_data;
 	core->mem_ops = get_mem_ops_ext();
-	rc = msm_vidc_kalama_check_ddr_type();
+	rc = msm_vidc_nordau_check_ddr_type();
 	if (rc)
 		return rc;
 
 	return rc;
 }
 
-int msm_vidc_init_platform_kalama(struct msm_vidc_core *core, struct device *dev)
+int msm_vidc_init_platform_nordau(struct msm_vidc_core *core, struct device *dev)
 {
 	int rc = 0;
 
@@ -2787,7 +2767,7 @@ int msm_vidc_init_platform_kalama(struct msm_vidc_core *core, struct device *dev
 	return 0;
 }
 
-int msm_vidc_deinit_platform_kalama(struct msm_vidc_core *core, struct device *dev)
+int msm_vidc_deinit_platform_nordau(struct msm_vidc_core *core, struct device *dev)
 {
 	/* do nothing */
 	return 0;

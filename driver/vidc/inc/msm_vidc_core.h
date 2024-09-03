@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_CORE_H_
@@ -97,6 +97,11 @@ struct msm_vidc_core {
 	u32                                    spur_count;
 	u32                                    reg_count;
 	u32                                    codecs_count;
+	bool                                   is_hw_virt;
+	u32                                    vmid;
+	u32                                    device_core_mask;
+	bool                                   is_gvm_open;
+	struct task_struct                    *pvm_event_handler_thread;
 	struct msm_vidc_core_capability       *capabilities;
 	struct msm_vidc_inst_capability       *inst_caps;
 	struct msm_vidc_mem_addr               sfr;
@@ -107,6 +112,8 @@ struct msm_vidc_core {
 	struct workqueue_struct               *batch_workq;
 	struct delayed_work                    fw_unload_work;
 	struct work_struct                     ssr_work;
+	struct work_struct                     hw_virt_ssr_work;
+	u32                                    ssr_dev;
 	struct msm_vidc_core_power             power;
 	struct msm_vidc_ssr                    ssr;
 	u32                                    skip_pc_count;

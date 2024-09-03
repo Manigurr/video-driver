@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
-/* Copyright (c) 2022. Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/sort.h>
 #include <linux/clk.h>
@@ -1266,35 +1266,37 @@ static int __init_resources(struct msm_vidc_core *core)
 	if (rc)
 		return rc;
 
-	rc = __init_bus(core);
-	if (rc)
-		return rc;
+	if (!core->is_hw_virt) {
+		rc = __init_bus(core);
+		if (rc)
+			return rc;
 
-	rc = __init_regulators(core);
-	if (rc)
-		return rc;
+		rc = __init_regulators(core);
+		if (rc)
+			return rc;
 
-	rc = __init_clocks(core);
-	if (rc)
-		return rc;
+		rc = __init_clocks(core);
+		if (rc)
+			return rc;
 
-	rc = __init_reset_clocks(core);
-	if (rc)
-		return rc;
+		rc = __init_reset_clocks(core);
+		if (rc)
+			return rc;
 
-	rc = __init_subcaches(core);
-	if (rc)
-		return rc;
+		rc = __init_subcaches(core);
+		if (rc)
+			return rc;
 
-	rc = __init_freq_table(core);
-	if (rc)
-		return rc;
+		rc = __init_freq_table(core);
+		if (rc)
+			return rc;
+
+		rc = __register_mmrm(core);
+		if (rc)
+			return rc;
+	}
 
 	rc = __init_context_banks(core);
-	if (rc)
-		return rc;
-
-	rc = __register_mmrm(core);
 	if (rc)
 		return rc;
 

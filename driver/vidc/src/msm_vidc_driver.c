@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -24,6 +24,9 @@
 #include "venus_hfi_response.h"
 #include "hfi_packet.h"
 #include "msm_vidc_events.h"
+#ifdef MSM_VIDC_HW_VIRT
+#include "vidc_hw_virt.h"
+#endif
 
 extern struct msm_vidc_core *g_core;
 
@@ -4232,18 +4235,26 @@ static int msm_vidc_remove_dangling_session(struct msm_vidc_inst *inst)
 int msm_vidc_session_open(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+	struct msm_vidc_core *core = NULL;
 
-	if (!inst) {
+	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
+	core = inst->core;
 
 	inst->packet_size = 4096;
 	rc = msm_vidc_vmem_alloc(inst->packet_size, (void **)&inst->packet, __func__);
 	if (rc)
 		return rc;
 
-	rc = venus_hfi_session_open(inst);
+	if (core->is_hw_virt) {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_msm_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
+#endif
+	} else {
+		rc = venus_hfi_session_open(inst);
+	}
 	if (rc)
 		goto error;
 
@@ -4270,6 +4281,24 @@ int msm_vidc_session_set_codec(struct msm_vidc_inst *inst)
 
 	return 0;
 }
+
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int msm_vidc_session_set_core_id(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+
+	if (!inst) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = venus_hfi_session_set_core_id(inst);
+	if (rc)
+		d_vpr_e("%s: set_core_id failed\n", __func__);
+
+	return rc;
+}
+#endif
 
 int msm_vidc_session_set_secure_mode(struct msm_vidc_inst *inst)
 {
@@ -4748,7 +4777,9 @@ int msm_vidc_core_deinit_locked(struct msm_vidc_core *core, bool force)
 		}
 	}
 
-	venus_hfi_core_deinit(core, force);
+	if (!core->is_hw_virt) {
+		venus_hfi_core_deinit(core, force);
+	}
 
 	/* unlink all sessions from core, if any */
 	list_for_each_entry_safe(inst, dummy, &core->instances, list) {
@@ -4828,6 +4859,27 @@ unlock:
 	return rc;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+static int msm_vidc_pvm_event_handler(void *p)
+{
+	struct msm_vidc_core *core = p;
+	struct virtio_video_msm_hw_event evt = {0};
+
+	while (core->is_gvm_open) {
+		if (!virtio_video_queue_event_wait(&evt)) {
+			switch (evt.event_type) {
+			case GVM_SSR:
+				core->ssr_dev = *(uint32_t *)evt.payload;
+				schedule_work(&core->hw_virt_ssr_work);
+				break;
+			};
+		}
+	}
+
+	return 0;
+}
+#endif
+
 int msm_vidc_core_init(struct msm_vidc_core *core)
 {
 	int rc = 0;
@@ -4846,6 +4898,24 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 	/* clear PM suspend from core sub_state */
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_PM_SUSPEND, 0, __func__);
 	msm_vidc_change_core_sub_state(core, CORE_SUBSTATE_PAGE_FAULT, 0, __func__);
+
+	/* open gvm */
+	if (core->is_hw_virt && !core->is_gvm_open) {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_msm_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
+			&core->device_core_mask);
+#endif
+		if (rc) {
+			d_vpr_e("%s: open_gvm failed\n", __func__);
+			goto unlock;
+		} else {
+			core->is_gvm_open = true;
+#ifdef MSM_VIDC_HW_VIRT
+			core->pvm_event_handler_thread = kthread_run(msm_vidc_pvm_event_handler,
+					core, "msm_vidc_pvm_evt_handler");
+#endif
+		}
+	}
 
 	rc = venus_hfi_core_init(core);
 	if (rc) {
@@ -5088,35 +5158,58 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 	return 0;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+void msm_vidc_hw_virt_ssr_handler(struct work_struct *work)
+{
+	struct msm_vidc_core *core = NULL;
+
+	core = container_of(work, struct msm_vidc_core, hw_virt_ssr_work);
+	if (!core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, core);
+		return;
+	}
+
+	MSM_VIDC_FATAL(true);
+	msm_vidc_core_deinit(core, true);
+
+	if (core->ssr_dev == GVM_SSR_DEVICE_DRIVER) {
+		virtio_video_msm_cmd_close_gvm();
+		core->is_gvm_open = false;
+	}
+}
+#endif
+
 void msm_vidc_ssr_handler(struct work_struct *work)
 {
-	int rc;
-	struct msm_vidc_core *core;
-	struct msm_vidc_ssr *ssr;
+	int rc = 0;
+	struct msm_vidc_core *core = NULL;
+	struct msm_vidc_ssr *ssr = NULL;
 
 	core = container_of(work, struct msm_vidc_core, ssr_work);
 	if (!core) {
 		d_vpr_e("%s: invalid params %pK\n", __func__, core);
 		return;
 	}
-	ssr = &core->ssr;
+	if (!core->is_hw_virt) {
+		ssr = &core->ssr;
 
-	core_lock(core, __func__);
-	if (is_core_state(core, MSM_VIDC_CORE_INIT)) {
-		/*
-		 * In current implementation, user-initiated SSR triggers
-		 * a fatal error from hardware. However, there is no way
-		 * to know if fatal error is due to SSR or not. Handle
-		 * user SSR as non-fatal.
-		 */
-		rc = venus_hfi_trigger_ssr(core, ssr->ssr_type,
-			ssr->sub_client_id, ssr->test_addr);
-		if (rc)
-			d_vpr_e("%s: trigger_ssr failed\n", __func__);
-	} else {
-		d_vpr_e("%s: video core not initialized\n", __func__);
+		core_lock(core, __func__);
+		if (is_core_state(core, MSM_VIDC_CORE_INIT)) {
+			/*
+			 * In current implementation, user-initiated SSR triggers
+			 * a fatal error from hardware. However, there is no way
+			 * to know if fatal error is due to SSR or not. Handle
+			 * user SSR as non-fatal.
+			 */
+			rc = venus_hfi_trigger_ssr(core, ssr->ssr_type,
+					ssr->sub_client_id, ssr->test_addr);
+			if (rc)
+				d_vpr_e("%s: trigger_ssr failed\n", __func__);
+		} else {
+			d_vpr_e("%s: video core not initialized\n", __func__);
+		}
+		core_unlock(core, __func__);
 	}
-	core_unlock(core, __func__);
 }
 
 int msm_vidc_trigger_stability(struct msm_vidc_core *core,

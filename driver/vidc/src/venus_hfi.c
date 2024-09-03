@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
-/* Copyright (c) 2022. Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/iommu.h>
 #include <linux/qcom_scm.h>
@@ -27,6 +27,9 @@
 #include "venus_hfi_queue.h"
 #include "msm_vidc_events.h"
 #include "firmware.h"
+#ifdef MSM_VIDC_HW_VIRT
+#include "vidc_hw_virt.h"
+#endif
 
 #define update_offset(offset, val)		((offset) += (val))
 #define update_timestamp(ts, val) \
@@ -313,15 +316,21 @@ static int __power_collapse(struct msm_vidc_core *core, bool force)
 		return -EINVAL;
 	}
 
-	__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
+	if (!core->is_hw_virt) {
+		__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
 
-	rc = call_venus_op(core, prepare_pc, core);
-	if (rc)
-		goto skip_power_off;
+		rc = call_venus_op(core, prepare_pc, core);
+		if (rc)
+			goto skip_power_off;
 
-	rc = __suspend(core);
-	if (rc)
-		d_vpr_e("Failed __suspend\n");
+		rc = __suspend(core);
+		if (rc)
+			d_vpr_e("Failed __suspend\n");
+	} else {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_msm_cmd_pause_gvm_session(core->capabilities[NUM_VPU].value, 0);
+#endif
+	}
 
 exit:
 	return rc;
@@ -632,48 +641,54 @@ static int __resume(struct msm_vidc_core *core)
 	if (rc)
 		return rc;
 
-	rc = __venus_power_on(core);
-	if (rc) {
-		d_vpr_e("Failed to power on venus\n");
-		goto err_venus_power_on;
-	}
+	if (!core->is_hw_virt) {
+		rc = __venus_power_on(core);
+		if (rc) {
+			d_vpr_e("Failed to power on venus\n");
+			goto err_venus_power_on;
+		}
 
-	/* Reboot the firmware */
-	rc = fw_resume(core);
-	if (rc) {
-		d_vpr_e("Failed to resume video core %d\n", rc);
-		goto err_set_video_state;
-	}
+		/* Reboot the firmware */
+		rc = fw_resume(core);
+		if (rc) {
+			d_vpr_e("Failed to resume video core %d\n", rc);
+			goto err_set_video_state;
+		}
 
-	/*
-	 * Hand off control of regulators to h/w _after_ loading fw.
-	 * Note that the GDSC will turn off when switching from normal
-	 * (s/w triggered) to fast (HW triggered) unless the h/w vote is
-	 * present.
-	 */
-	call_res_op(core, gdsc_hw_ctrl, core);
+		/*
+		 * Hand off control of regulators to h/w _after_ loading fw.
+		 * Note that the GDSC will turn off when switching from normal
+		 * (s/w triggered) to fast (HW triggered) unless the h/w vote is
+		 * present.
+		 */
+		call_res_op(core, gdsc_hw_ctrl, core);
 
-	/* Wait for boot completion */
-	rc = call_venus_op(core, boot_firmware, core);
-	if (rc) {
-		d_vpr_e("Failed to reset venus core\n");
-		goto err_reset_core;
-	}
+		/* Wait for boot completion */
+		rc = call_venus_op(core, boot_firmware, core);
+		if (rc) {
+			d_vpr_e("Failed to reset venus core\n");
+			goto err_reset_core;
+		}
 
-	__sys_set_debug(core, (msm_vidc_debug & FW_LOGMASK) >> FW_LOGSHIFT);
+		__sys_set_debug(core, (msm_vidc_debug & FW_LOGMASK) >> FW_LOGSHIFT);
 
-	rc = call_res_op(core, llcc, core, true);
-	if (rc) {
-		d_vpr_e("Failed to activate subcache\n");
-		goto err_reset_core;
-	}
-	__set_subcaches(core);
+		rc = call_res_op(core, llcc, core, true);
+		if (rc) {
+			d_vpr_e("Failed to activate subcache\n");
+			goto err_reset_core;
+		}
+		__set_subcaches(core);
 
-	rc = __sys_set_power_control(core, true);
-	if (rc) {
-		d_vpr_e("%s: set power control failed\n", __func__);
-		call_res_op(core, gdsc_sw_ctrl, core);
-		rc = 0;
+		rc = __sys_set_power_control(core, true);
+		if (rc) {
+			d_vpr_e("%s: set power control failed\n", __func__);
+			call_res_op(core, gdsc_sw_ctrl, core);
+			rc = 0;
+		}
+	} else {
+#ifdef MSM_VIDC_HW_VIRT
+		rc = virtio_video_msm_cmd_resume_gvm_session(core->capabilities[NUM_VPU].value, 0);
+#endif
 	}
 
 	d_vpr_h("Resumed from power collapse\n");
@@ -746,15 +761,17 @@ static int __response_handler(struct msm_vidc_core *core)
 {
 	int rc = 0;
 
-	if (call_venus_op(core, watchdog, core, core->intr_status)) {
-		struct hfi_packet pkt = {.type = HFI_SYS_ERROR_WD_TIMEOUT};
+	if (!core->is_hw_virt) {
+		if (call_venus_op(core, watchdog, core, core->intr_status)) {
+			struct hfi_packet pkt = {.type = HFI_SYS_ERROR_WD_TIMEOUT};
 
-		/* mark cpu watchdog error */
-		msm_vidc_change_core_sub_state(core,
-			0, CORE_SUBSTATE_CPU_WATCHDOG, __func__);
-		d_vpr_e("%s: CPU WD error received\n", __func__);
+			/* mark cpu watchdog error */
+			msm_vidc_change_core_sub_state(core,
+				0, CORE_SUBSTATE_CPU_WATCHDOG, __func__);
+			d_vpr_e("%s: CPU WD error received\n", __func__);
 
-		return handle_system_error(core, &pkt);
+			return handle_system_error(core, &pkt);
+		}
 	}
 
 	memset(core->response_packet, 0, core->packet_size);
@@ -769,7 +786,9 @@ static int __response_handler(struct msm_vidc_core *core)
 	}
 
 	__schedule_power_collapse_work(core);
-	__flush_debug_queue(core, core->response_packet, core->packet_size);
+
+	if (!core->is_hw_virt)
+		__flush_debug_queue(core, core->response_packet, core->packet_size);
 
 	return rc;
 }
@@ -921,39 +940,41 @@ int venus_hfi_core_init(struct msm_vidc_core *core)
 	if (rc)
 		goto error;
 
-	rc = __load_fw(core);
-	if (rc)
-		goto error;
+	if (!core->is_hw_virt) {
+		rc = __load_fw(core);
+		if (rc)
+			goto error;
 
-	rc = call_venus_op(core, boot_firmware, core);
-	if (rc)
-		goto error;
+		rc = call_venus_op(core, boot_firmware, core);
+		if (rc)
+			goto error;
 
-	rc = call_res_op(core, llcc, core, true);
-	if (rc)
-		goto error;
+		rc = call_res_op(core, llcc, core, true);
+		if (rc)
+			goto error;
 
-	rc = __sys_init(core);
-	if (rc)
-		goto error;
+		rc = __sys_init(core);
+		if (rc)
+			goto error;
 
-	rc = __sys_image_version(core);
-	if (rc)
-		goto error;
+		rc = __sys_image_version(core);
+		if (rc)
+			goto error;
 
-	rc = __sys_set_debug(core, (msm_vidc_debug & FW_LOGMASK) >> FW_LOGSHIFT);
-	if (rc)
-		goto error;
+		rc = __sys_set_debug(core, (msm_vidc_debug & FW_LOGMASK) >> FW_LOGSHIFT);
+		if (rc)
+			goto error;
 
-	rc = __set_subcaches(core);
-	if (rc)
-		goto error;
+		rc = __set_subcaches(core);
+		if (rc)
+			goto error;
 
-	rc = __sys_set_power_control(core, true);
-	if (rc) {
-		d_vpr_e("%s: set power control failed\n", __func__);
-		call_res_op(core, gdsc_sw_ctrl, core);
-		rc = 0;
+		rc = __sys_set_power_control(core, true);
+		if (rc) {
+			d_vpr_e("%s: set power control failed\n", __func__);
+			call_res_op(core, gdsc_sw_ctrl, core);
+			rc = 0;
+		}
 	}
 
 	d_vpr_h("%s(): successful\n", __func__);
@@ -981,16 +1002,19 @@ int venus_hfi_core_deinit(struct msm_vidc_core *core, bool force)
 	if (is_core_state(core, MSM_VIDC_CORE_DEINIT))
 		return 0;
 	__resume(core);
-	__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
-	__release_subcaches(core);
-	call_res_op(core, llcc, core, false);
-	__unload_fw(core);
-	/**
-	 * coredump need to be called after firmware unload, coredump also
-	 * copying queues memory. So need to be called before queues deinit.
-	 */
-	if (msm_vidc_fw_dump)
-		fw_coredump(core);
+
+	if (!core->is_hw_virt) {
+		__flush_debug_queue(core, (!force ? core->packet : NULL), core->packet_size);
+		__release_subcaches(core);
+		call_res_op(core, llcc, core, false);
+		__unload_fw(core);
+		/**
+		 * coredump need to be called after firmware unload, coredump also
+		 * copying queues memory. So need to be called before queues deinit.
+		 */
+		if (msm_vidc_fw_dump)
+			fw_coredump(core);
+	}
 
 	return 0;
 }
@@ -1278,6 +1302,73 @@ unlock:
 	core_unlock(core, __func__);
 	return rc;
 }
+
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int venus_hfi_session_set_core_id(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+	struct msm_vidc_core *core = NULL;
+	u32 device_core_mask = HFI_CORE_0;
+
+	if (!inst || !inst->core || !inst->packet) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+	core = inst->core;
+	core_lock(core, __func__);
+
+	if (!__valdiate_session(core, inst, __func__)) {
+		rc = -EINVAL;
+		goto unlock;
+	}
+
+	rc = hfi_create_header(inst->packet, inst->packet_size,
+			inst->session_id, core->header_id++);
+	if (rc)
+		goto unlock;
+
+	/* Encoder supports multiple cores for a single session on specific scenarios.
+	 * Certain GOP structures can utilize both the cores independently.
+	 * 1. Hierarchical-P
+	 * 2. All Intra
+	 * 3. Lossless Encoding
+	 * If in one of these scenarios, set device_core_mask to the available cores mask.
+	 */
+	if ((is_encode_session(inst)) &&
+		(inst->capabilities->cap[LAYER_TYPE].value ==
+		V4L2_MPEG_VIDEO_HEVC_HIERARCHICAL_CODING_P) &&
+		(inst->capabilities->cap[ALL_INTRA].value == 1) &&
+		(inst->capabilities->cap[LOSSLESS].value == 1)) {
+		device_core_mask = core->device_core_mask;
+	} else {
+		if (core->device_core_mask & HFI_CORE_0)
+			device_core_mask = HFI_CORE_0;
+		else
+			device_core_mask = HFI_CORE_1;
+	}
+
+	d_vpr_h("Setting core id 0x%x\n", device_core_mask);
+	rc = hfi_create_packet(inst->packet, inst->packet_size,
+			HFI_PROP_CORE_ID,
+			HFI_HOST_FLAGS_NONE,
+			HFI_PAYLOAD_U32,
+			HFI_PORT_NONE,
+			core->packet_id++,
+			&device_core_mask,
+			sizeof(u32));
+	if (rc)
+		goto unlock;
+
+	rc = __cmdq_write(inst->core, inst->packet);
+	if (rc)
+		goto unlock;
+
+unlock:
+	core_unlock(core, __func__);
+
+	return rc;
+}
+#endif
 
 int venus_hfi_session_set_secure_mode(struct msm_vidc_inst *inst)
 {

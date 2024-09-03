@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/workqueue.h>
@@ -11,7 +12,6 @@
 #include <linux/component.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
-#include <linux/dma-iommu.h>
 #ifdef CONFIG_MSM_MMRM
 #include <linux/soc/qcom/msm_mmrm.h>
 #endif
@@ -26,6 +26,10 @@
 #include "msm_vidc_memory.h"
 #include "venus_hfi.h"
 #include "video_generated_h"
+#ifdef MSM_VIDC_HW_VIRT
+#include "vidc_hw_virt.h"
+#include <linux/reboot.h>
+#endif
 
 #define BASE_DEVICE_NUMBER 32
 
@@ -341,6 +345,9 @@ static int msm_vidc_initialize_core(struct msm_vidc_core *core)
 	INIT_DELAYED_WORK(&core->pm_work, venus_hfi_pm_work_handler);
 	INIT_DELAYED_WORK(&core->fw_unload_work, msm_vidc_fw_unload_handler);
 	INIT_WORK(&core->ssr_work, msm_vidc_ssr_handler);
+#ifdef MSM_VIDC_HW_VIRT
+	INIT_WORK(&core->hw_virt_ssr_work, msm_vidc_hw_virt_ssr_handler);
+#endif
 
 	return 0;
 exit:
@@ -363,6 +370,10 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 {
 	struct context_bank_info *cb = NULL;
 	int rc = 0;
+#if defined(CONFIG_MSM_VIDC_NORDAU)
+	int len = 0;
+	const __be32 *prop;
+#endif
 
 	if (!core || !dev) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -379,6 +390,12 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 	/* populate dev & domain field */
 	cb->dev = dev;
 	cb->domain = iommu_get_domain_for_dev(cb->dev);
+	/* update context bank address and size only for nordau */
+#if defined(CONFIG_MSM_VIDC_NORDAU)
+	prop = of_get_property(dev->of_node, "qcom,iommu-dma-addr-pool", &len);
+	cb->addr_range.start = be32_to_cpup(&prop[0]);
+	cb->addr_range.size = be32_to_cpup(&prop[1]);
+#endif
 
 	if (cb->dma_mask) {
 		rc = dma_set_mask_and_coherent(cb->dev, cb->dma_mask);
@@ -617,6 +634,36 @@ static int msm_vidc_remove(struct platform_device *pdev)
 	return -EINVAL;
 }
 
+#ifdef MSM_VIDC_HW_VIRT
+static int vidc_reboot_notify(
+		struct notifier_block *nfb, unsigned long action, void *data)
+{
+	struct msm_vidc_core *core = NULL;
+
+	d_vpr_h("%s(): %ld", __func__, action);
+	core = g_core;
+
+	switch (action) {
+	case SYS_DOWN:
+	case SYS_HALT:
+	case SYS_POWER_OFF:
+		msm_vidc_core_deinit(core, true);
+		if (core && core->is_hw_virt && core->is_gvm_open) {
+			/* close gvm */
+			virtio_video_msm_cmd_close_gvm();
+			core->is_gvm_open = false;
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block vidc_reboot_nb = {
+	.notifier_call = vidc_reboot_notify,
+};
+#endif
+
 static int msm_vidc_probe_video_device(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -631,6 +678,17 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 	if (rc)
 		return rc;
 	g_core = core;
+
+	/* Read and store is_hw_virt flag, vmid */
+	if (of_property_read_u32(pdev->dev.of_node, "vmid", &core->vmid)) {
+		d_vpr_h("Failed to read vmid. Defaulting to 0");
+		core->vmid = 0;
+		core->is_hw_virt = false;
+	} else {
+		/* If gvm, set hw virtualization flag */
+		if (core->vmid != 0)
+			core->is_hw_virt = true;
+	}
 
 	core->debugfs_parent = msm_vidc_debugfs_init_drv();
 	if (!core->debugfs_parent)
@@ -758,6 +816,10 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
             place_marker("M - DRIVER Video Ready");
         #endif
             pr_info("boot_kpi: M - DRIVER Video Ready\n");
+
+#ifdef MSM_VIDC_HW_VIRT
+	register_reboot_notifier(&vidc_reboot_nb);
+#endif
 
 	d_vpr_h("%s(): succssful\n", __func__);
 
@@ -942,7 +1004,17 @@ static int __init msm_vidc_init(void)
 
 static void __exit msm_vidc_exit(void)
 {
+	struct msm_vidc_core *core = NULL;
+
 	d_vpr_h("%s()\n", __func__);
+	core = g_core;
+	if (core && core->is_hw_virt && core->is_gvm_open) {
+#ifdef MSM_VIDC_HW_VIRT
+		/* close gvm */
+		virtio_video_msm_cmd_close_gvm();
+#endif
+		core->is_gvm_open = false;
+	}
 
 	platform_driver_unregister(&msm_vidc_driver);
 	d_vpr_h("%s(): succssful\n", __func__);

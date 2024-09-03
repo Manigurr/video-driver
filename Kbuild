@@ -40,6 +40,15 @@ LINUXINCLUDE    += -include $(VIDEO_ROOT)/config/lemans_video.h \
                    -I$(VIDEO_ROOT)/driver/platform/lemans/inc
 endif
 
+ifeq ($(CONFIG_ARCH_NORDAU), y)
+ifeq ($(ENABLE_HYP), true)
+KBUILD_CPPFLAGS += -DMSM_VIDC_HW_VIRT
+endif
+include $(VIDEO_ROOT)/config/nordau_video.conf
+LINUXINCLUDE    += -include $(VIDEO_ROOT)/config/nordau_video.h \
+                   -I$(VIDEO_ROOT)/driver/platform/nordau/inc
+endif
+
 LINUXINCLUDE    += -I$(VIDEO_ROOT)/driver/vidc/inc \
                    -I$(VIDEO_ROOT)/driver/platform/common/inc \
                    -I$(VIDEO_ROOT)/driver/variant/common/inc \
@@ -70,6 +79,10 @@ ifeq ($(CONFIG_MSM_VIDC_LEMANS), y)
 msm_video-objs += driver/platform/lemans/src/msm_vidc_lemans.o
 endif
 
+ifeq ($(CONFIG_MSM_VIDC_NORDAU), y)
+msm_video-objs += driver/platform/nordau/src/msm_vidc_nordau.o
+endif
+
 ifeq ($(CONFIG_MSM_VIDC_IRIS2), y)
 LINUXINCLUDE   += -I$(VIDEO_ROOT)/driver/variant/iris2/inc
 msm_video-objs += driver/variant/iris2/src/msm_vidc_buffer_iris2.o \
@@ -89,6 +102,13 @@ LINUXINCLUDE    += -I$(VIDEO_ROOT)/driver/variant/iris33/inc
 msm_video-objs += driver/variant/iris33/src/msm_vidc_buffer_iris33.o \
                   driver/variant/iris33/src/msm_vidc_power_iris33.o \
                   driver/variant/iris33/src/msm_vidc_iris33.o
+endif
+
+ifeq ($(CONFIG_MSM_VIDC_IRIS33_AU), y)
+LINUXINCLUDE    += -I$(VIDEO_ROOT)/driver/variant/iris33_au/inc
+msm_video-objs += driver/variant/iris33_au/src/msm_vidc_buffer_iris33_au.o \
+                  driver/variant/iris33_au/src/msm_vidc_power_iris33_au.o \
+                  driver/variant/iris33_au/src/msm_vidc_iris33_au.o
 endif
 
 msm_video-objs += driver/vidc/src/msm_vidc_v4l2.o \

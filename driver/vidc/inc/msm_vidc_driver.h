@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_DRIVER_H_
@@ -15,6 +15,11 @@
 
 #define MSM_VIDC_SESSION_INACTIVE_THRESHOLD_MS 1000
 #define HEIC_GRID_DIMENSION 512
+
+#ifdef MSM_VIDC_HW_VIRT
+#define GVM_SSR_DEVICE_DRIVER       0x80000000
+#define GVM_SSR                     0x300
+#endif
 
 enum msm_vidc_debugfs_event;
 
@@ -437,6 +442,9 @@ int msm_vidc_add_session(struct msm_vidc_inst *inst);
 int msm_vidc_session_open(struct msm_vidc_inst *inst);
 int msm_vidc_session_set_codec(struct msm_vidc_inst *inst);
 int msm_vidc_session_set_secure_mode(struct msm_vidc_inst *inst);
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+int msm_vidc_session_set_core_id(struct msm_vidc_inst *inst);
+#endif
 int msm_vidc_session_set_default_header(struct msm_vidc_inst *inst);
 int msm_vidc_session_streamoff(struct msm_vidc_inst *inst,
 		enum msm_vidc_port_type port);
@@ -460,6 +468,9 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 		u64 trigger_ssr_val);
 void msm_vidc_ssr_handler(struct work_struct *work);
+#ifdef MSM_VIDC_HW_VIRT
+void msm_vidc_hw_virt_ssr_handler(struct work_struct *work);
+#endif
 int msm_vidc_trigger_stability(struct msm_vidc_core *core,
 		u64 trigger_stability_val);
 void msm_vidc_stability_handler(struct work_struct *work);

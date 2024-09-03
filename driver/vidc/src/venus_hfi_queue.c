@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
- /* Copyright (c) 2022. Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include "venus_hfi_queue.h"
 #include "msm_vidc_debug.h"
@@ -426,8 +426,10 @@ void venus_hfi_queue_deinit(struct msm_vidc_core *core)
 
 	call_mem_op(core, memory_unmap, core, &core->iface_q_table.map);
 	call_mem_op(core, memory_free, core, &core->iface_q_table.alloc);
-	call_mem_op(core, memory_unmap, core, &core->sfr.map);
-	call_mem_op(core, memory_free, core, &core->sfr.alloc);
+	if (!core->is_hw_virt) {
+		call_mem_op(core, memory_unmap, core, &core->sfr.map);
+		call_mem_op(core, memory_free, core, &core->sfr.alloc);
+	}
 
 	for (i = 0; i < VIDC_IFACEQ_NUMQ; i++) {
 		core->iface_queues[i].q_hdr = NULL;
@@ -438,8 +440,10 @@ void venus_hfi_queue_deinit(struct msm_vidc_core *core)
 	core->iface_q_table.align_virtual_addr = NULL;
 	core->iface_q_table.align_device_addr = 0;
 
-	core->sfr.align_virtual_addr = NULL;
-	core->sfr.align_device_addr = 0;
+	if (!core->is_hw_virt) {
+		core->sfr.align_virtual_addr = NULL;
+		core->sfr.align_device_addr = 0;
+	}
 }
 
 int venus_hfi_reset_queue_header(struct msm_vidc_core *core)
@@ -493,6 +497,13 @@ int venus_hfi_queue_init(struct msm_vidc_core *core)
 	u32 i;
 
 	d_vpr_h("%s()\n", __func__);
+
+	if (!(core && core->mem_ops &&
+		core->mem_ops->memory_alloc &&
+		core->mem_ops->memory_map)) {
+		d_vpr_e("%s: mem_ops not populated\n", __func__);
+		return -EINVAL;
+	}
 
 	if (core->iface_q_table.align_virtual_addr) {
 		d_vpr_h("%s: queues already allocated\n", __func__);
@@ -571,36 +582,38 @@ int venus_hfi_queue_init(struct msm_vidc_core *core)
 	 */
 	q_hdr->qhdr_rx_req = 0;
 
-	/* sfr buffer */
-	memset(&alloc, 0, sizeof(alloc));
-	alloc.type = MSM_VIDC_BUF_QUEUE;
-	alloc.region = MSM_VIDC_NON_SECURE;
-	alloc.size = ALIGNED_SFR_SIZE;
-	alloc.secure = false;
-	alloc.map_kernel = true;
-	rc = call_mem_op(core, memory_alloc, core, &alloc);
-	if (rc) {
-		d_vpr_e("%s: sfr alloc failed\n", __func__);
-		goto fail_alloc_queue;
-	}
-	core->sfr.align_virtual_addr = alloc.kvaddr;
-	core->sfr.alloc = alloc;
+	if (!core->is_hw_virt) {
+		/* sfr buffer */
+		memset(&alloc, 0, sizeof(alloc));
+		alloc.type = MSM_VIDC_BUF_QUEUE;
+		alloc.region = MSM_VIDC_NON_SECURE;
+		alloc.size = ALIGNED_SFR_SIZE;
+		alloc.secure = false;
+		alloc.map_kernel = true;
+		rc = call_mem_op(core, memory_alloc, core, &alloc);
+		if (rc) {
+			d_vpr_e("%s: sfr alloc failed\n", __func__);
+			goto fail_alloc_queue;
+		}
+		core->sfr.align_virtual_addr = alloc.kvaddr;
+		core->sfr.alloc = alloc;
 
-	memset(&map, 0, sizeof(map));
-	map.type = alloc.type;
-	map.region = alloc.region;
-	map.dmabuf = alloc.dmabuf;
-	rc = call_mem_op(core, memory_map, core, &map);
-	if (rc) {
-		d_vpr_e("%s: sfr map failed\n", __func__);
-		goto fail_alloc_queue;
-	}
-	core->sfr.align_device_addr = map.device_addr;
-	core->sfr.map = map;
+		memset(&map, 0, sizeof(map));
+		map.type = alloc.type;
+		map.region = alloc.region;
+		map.dmabuf = alloc.dmabuf;
+		rc = call_mem_op(core, memory_map, core, &map);
+		if (rc) {
+			d_vpr_e("%s: sfr map failed\n", __func__);
+			goto fail_alloc_queue;
+		}
+		core->sfr.align_device_addr = map.device_addr;
+		core->sfr.map = map;
 
-	core->sfr.mem_size = ALIGNED_SFR_SIZE;
-	/* write sfr buffer size in first word */
-	*((u32 *)core->sfr.align_virtual_addr) = core->sfr.mem_size;
+		core->sfr.mem_size = ALIGNED_SFR_SIZE;
+		/* write sfr buffer size in first word */
+		*((u32 *)core->sfr.align_virtual_addr) = core->sfr.mem_size;
+	}
 
 	return 0;
 fail_alloc_queue:
