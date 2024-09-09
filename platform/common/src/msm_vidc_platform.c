@@ -23,6 +23,7 @@
 #include "venus_hfi.h"
 
 #include "msm_vidc_sa8775p.h"
+#include "msm_vidc_qcs8300.h"
 #include "msm_vidc_qcm6490.h"
 #include "msm_vidc_iris3.h"
 #include "msm_vidc_iris2.h"
@@ -207,6 +208,11 @@ static const struct msm_vidc_compat_handle compat_handle[] = {
 		.compat                     = "qcom,qcm6490-iris-vpu",
 		.init_platform              = msm_vidc_init_platform_qcm6490,
 		.init_iris                  = msm_vidc_init_iris2,
+	},
+	{
+		.compat                     = "qcom,qcs8300-iris",
+		.init_platform              = msm_vidc_init_platform_qcs8300,
+		.init_iris                  = msm_vidc_init_iris3,
 	},
 };
 
