@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_media_info.h"
@@ -320,6 +321,11 @@ static int msm_venc_set_colorspace(struct msm_vidc_inst* inst,
 	if (port != INPUT_PORT) {
 		i_vpr_e(inst, "%s: invalid port %d\n", __func__, port);
 		return -EINVAL;
+	}
+
+	if (inst->capabilities->cap[SIGNAL_COLOR_INFO].flags & CAP_FLAG_CLIENT_SET) {
+		i_vpr_h(inst, "%s: client configured colorspace via control\n", __func__);
+		return 0;
 	}
 
 	input_fmt = &inst->fmts[INPUT_PORT];

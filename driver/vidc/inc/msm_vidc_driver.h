@@ -16,6 +16,11 @@
 #define MSM_VIDC_SESSION_INACTIVE_THRESHOLD_MS 1000
 #define HEIC_GRID_DIMENSION 512
 
+#ifdef MSM_VIDC_HW_VIRT
+#define GVM_SSR_DEVICE_DRIVER       0x80000000
+#define GVM_SSR                     0x300
+#endif
+
 enum msm_vidc_debugfs_event;
 
 static inline bool is_decode_session(struct msm_vidc_inst *inst)

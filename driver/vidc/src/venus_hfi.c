@@ -28,7 +28,7 @@
 #include "msm_vidc_events.h"
 #include "firmware.h"
 #ifdef MSM_VIDC_HW_VIRT
-#include "vidc/vidc_hw_virt.h"
+#include "vidc_hw_virt.h"
 #endif
 
 #define update_offset(offset, val)		((offset) += (val))
@@ -328,7 +328,7 @@ static int __power_collapse(struct msm_vidc_core *core, bool force)
 			d_vpr_e("Failed __suspend\n");
 	} else {
 #ifdef MSM_VIDC_HW_VIRT
-		rc = virtio_video_cmd_pause_gvm_session(core->capabilities[NUM_VPU].value, 0);
+		rc = virtio_video_msm_cmd_pause_gvm_session(core->capabilities[NUM_VPU].value, 0);
 #endif
 	}
 
@@ -687,7 +687,7 @@ static int __resume(struct msm_vidc_core *core)
 		}
 	} else {
 #ifdef MSM_VIDC_HW_VIRT
-		rc = virtio_video_cmd_resume_gvm_session(core->capabilities[NUM_VPU].value, 0);
+		rc = virtio_video_msm_cmd_resume_gvm_session(core->capabilities[NUM_VPU].value, 0);
 #endif
 	}
 
