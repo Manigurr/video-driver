@@ -2512,6 +2512,9 @@ static const struct pd_table sa8775p_pd_table[] = {
 	{ "vcodec"   },
 };
 
+/* name */
+static const char * const sa8775p_opp_pd_table[] = { "mx", "mmcx", NULL };
+
 /* name, clock id, scaling */
 static const struct clk_table sa8775p_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
@@ -2660,6 +2663,8 @@ static const struct msm_vidc_platform_data sa8775p_data = {
 	/* populate power domain and opp table */
 	.pd_tbl = sa8775p_pd_table,
 	.pd_tbl_size = ARRAY_SIZE(sa8775p_pd_table),
+	.opp_tbl = sa8775p_opp_pd_table,
+	.opp_tbl_size = ARRAY_SIZE(sa8775p_opp_pd_table),
 
 	/* platform specific resources */
 	.freq_tbl = sa8775p_freq_table,
