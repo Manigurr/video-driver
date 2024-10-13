@@ -384,6 +384,9 @@ static int handle_session_error(struct msm_vidc_inst *inst,
 	case HFI_ERROR_FATAL:
 		error = "fatal error";
 		break;
+	case HFI_CMD_BUFFER:
+		error = "session level buffer fault";
+		break;
 	default:
 		error = "unknown";
 		break;
