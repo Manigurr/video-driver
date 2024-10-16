@@ -11,11 +11,15 @@ endif
 # Build video kernel driver
 ifeq ($(TARGET_VIDC_ENABLE),true)
 ifeq ($(TARGET_BOARD_AUTO),true)
-ifneq ($(ENABLE_HYP),true)
 ifeq ($(call is-board-platform-in-list,$(TARGET_BOARD_PLATFORM)),true)
+ifneq ($(ENABLE_HYP),true)
 BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
-
 BUILD_VIDEO_TECHPACK_SOURCE := true
+else
+	ifeq ($(TARGET_BOARD_PLATFORM),gen5)
+		BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
+		BUILD_VIDEO_TECHPACK_SOURCE := true
+	endif
 endif
 endif
 endif
