@@ -16,6 +16,7 @@
 #include "msm_v4l2_private.h"
 #include "msm_vidc_clocks.h"
 #include <soc/qcom/boot_stats.h>
+#include <linux/bootmarker_kernel.h>
 
 #define BASE_DEVICE_NUMBER 32
 #define VIDC_CORE_STATE_CHNG_WAIT_MAX_RETRY 300
@@ -608,8 +609,11 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	place_marker("M - DRIVER Video Ready");
-#endif
+#elif (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - DRIVER Video Ready");
+#else
 	pr_err("boot_kpi: M - DRIVER Video Ready\n");
+#endif
 
 	return rc;
 
