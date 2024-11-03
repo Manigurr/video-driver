@@ -604,6 +604,9 @@ static int handle_read_only_buffer(struct msm_vidc_inst *inst,
 		ro_buf->fd = buf->fd;
 		ro_buf->dmabuf = buf->dmabuf;
 		ro_buf->device_addr = buf->device_addr;
+		ro_buf->kvaddr = buf->kvaddr;
+		ro_buf->handler = buf->handler;
+		ro_buf->refcount = buf->refcount;
 		ro_buf->data_offset = buf->data_offset;
 		ro_buf->dbuf_get = buf->dbuf_get;
 		buf->dbuf_get = 0;

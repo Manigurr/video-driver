@@ -32,6 +32,9 @@ void *msm_vb2_attach_dmabuf(struct vb2_buffer *vb, struct device *dev,
 
 void msm_vb2_put(void *buf_priv);
 int msm_vb2_mmap(void *buf_priv, struct vm_area_struct *vma);
+struct dma_buf *msm_vb2_get_dmabuf(struct vb2_buffer *vb,
+				   void *buf_priv,
+				   unsigned long flags);
 void msm_vb2_detach_dmabuf(void *buf_priv);
 int msm_vb2_map_dmabuf(void *buf_priv);
 void msm_vb2_unmap_dmabuf(void *buf_priv);
