@@ -1156,7 +1156,11 @@ static struct msm_vidc_codec_capability sm8150_capabilities[] = {
 
 	/* VP8 specific */
 	{CAP_FRAME_WIDTH, ENC|DEC, VP8, 96, 4096, 1, 4096},
-	{CAP_FRAME_HEIGHT, ENC|DEC, VP8, 96, 2304, 1, 2304},
+	{CAP_FRAME_HEIGHT, DEC, VP8, 96, 4096, 1, 2304},
+
+	/* H264,HEVC,VP8 enc specific */
+	{CAP_FRAME_HEIGHT, ENC, H264|HEVC|VP8, 96, 4096, 1, 2304},
+
 	/* (4096 * 2304) / 256 */
 	{CAP_MBS_PER_FRAME, ENC|DEC, VP8, 36, 36864, 1, 36864},
 	/* ((1920 * 1088) / 256) * 120*/
