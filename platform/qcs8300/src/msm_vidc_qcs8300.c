@@ -290,7 +290,7 @@ static struct msm_platform_core_capability core_data_qcs8300[] = {
 	{MAX_MBPS_ALL_INTRA, (((1920 * 1088) / 256) * 120)}, /* ((1920*1088)/256)@120fps */
 	{MAX_ENH_LAYER_COUNT, 5},
 	{NUM_VPP_PIPE, 2},
-	{SW_PC, 1},
+	{SW_PC, 0},
 	{FW_UNLOAD, 0},
 	{HW_RESPONSE_TIMEOUT, HW_RESPONSE_TIMEOUT_VALUE}, /* 1000 ms */
 	{SW_PC_DELAY,         SW_PC_DELAY_VALUE        }, /* 1500 ms (>HW_RESPONSE_TIMEOUT)*/
