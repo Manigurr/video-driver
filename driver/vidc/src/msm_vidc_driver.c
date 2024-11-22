@@ -4901,6 +4901,8 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 
 	/* open gvm */
 	if (core->is_hw_virt && !core->is_gvm_open) {
+		d_vpr_h("%s: Hardware virtualization enabled.\n"
+			"Calling open_gvm\n", __func__);
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
 			&core->device_core_mask);
