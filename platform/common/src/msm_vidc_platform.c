@@ -23,6 +23,7 @@
 #include "venus_hfi.h"
 
 #include "msm_vidc_sa8775p.h"
+#include "msm_vidc_qcs8300.h"
 #include "msm_vidc_qcm6490.h"
 #include "msm_vidc_iris3.h"
 #include "msm_vidc_iris2.h"
@@ -75,6 +76,7 @@ static struct v4l2_file_operations msm_v4l2_file_operations = {
 	.release                        = msm_v4l2_close,
 	.unlocked_ioctl                 = video_ioctl2,
 	.poll                           = msm_v4l2_poll,
+	.mmap                           = msm_v4l2_mmap,
 };
 
 static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_enc = {
@@ -109,6 +111,7 @@ static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_enc = {
 	.vidioc_querybuf                = msm_v4l2_querybuf,
 	.vidioc_create_bufs             = msm_v4l2_create_bufs,
 	.vidioc_prepare_buf             = msm_v4l2_prepare_buf,
+	.vidioc_expbuf                  = msm_v4l2_export_buf,
 	.vidioc_qbuf                    = msm_v4l2_qbuf,
 	.vidioc_dqbuf                   = msm_v4l2_dqbuf,
 	.vidioc_streamon                = msm_v4l2_streamon,
@@ -151,6 +154,7 @@ static struct v4l2_ioctl_ops msm_v4l2_ioctl_ops_dec = {
 	.vidioc_querybuf                = msm_v4l2_querybuf,
 	.vidioc_create_bufs             = msm_v4l2_create_bufs,
 	.vidioc_prepare_buf             = msm_v4l2_prepare_buf,
+	.vidioc_expbuf                  = msm_v4l2_export_buf,
 	.vidioc_qbuf                    = msm_v4l2_qbuf,
 	.vidioc_dqbuf                   = msm_v4l2_dqbuf,
 	.vidioc_streamon                = msm_v4l2_streamon,
@@ -181,6 +185,7 @@ static struct vb2_mem_ops msm_vb2_mem_ops = {
 	.alloc                          = msm_vb2_alloc,
 	.put                            = msm_vb2_put,
 	.mmap                           = msm_vb2_mmap,
+	.get_dmabuf                     = msm_vb2_get_dmabuf,
 	.attach_dmabuf                  = msm_vb2_attach_dmabuf,
 	.detach_dmabuf                  = msm_vb2_detach_dmabuf,
 	.map_dmabuf                     = msm_vb2_map_dmabuf,
@@ -207,6 +212,11 @@ static const struct msm_vidc_compat_handle compat_handle[] = {
 		.compat                     = "qcom,qcm6490-iris-vpu",
 		.init_platform              = msm_vidc_init_platform_qcm6490,
 		.init_iris                  = msm_vidc_init_iris2,
+	},
+	{
+		.compat                     = "qcom,qcs8300-iris",
+		.init_platform              = msm_vidc_init_platform_qcs8300,
+		.init_iris                  = msm_vidc_init_iris3,
 	},
 };
 

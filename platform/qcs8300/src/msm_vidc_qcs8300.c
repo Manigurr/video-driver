@@ -4,7 +4,7 @@
  * Copyright (c) 2021-2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <dt-bindings/clock/qcom,sa8775p-gcc.h>
+#include <dt-bindings/clock/qcom,qcs8300-gcc.h>
 #include <dt-bindings/clock/qcom,sa8775p-videocc.h>
 #include <media/v4l2_vidc_extensions.h>
 #include "hfi_command.h"
@@ -13,7 +13,7 @@
 #include "msm_vidc_debug.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_iris3.h"
-#include "msm_vidc_sa8775p.h"
+#include "msm_vidc_qcs8300.h"
 #include "msm_vidc_platform.h"
 #include "msm_vidc_platform_ext.h"
 #include "msm_vidc_memory_ext.h"
@@ -43,10 +43,11 @@
 #define HEVC    MSM_VIDC_HEVC
 #define VP9     MSM_VIDC_VP9
 #define AV1     MSM_VIDC_AV1
-#define HEIC    MSM_VIDC_HEIC
-#define CODECS_ALL    (H264 | HEVC | VP9 | HEIC | AV1)
+#define CODECS_ALL        (H264 | HEVC | VP9 | AV1)
+#define ENC_CODECS_ALL    (H264 | HEVC)
+#define MAXIMUM_OVERRIDE_VP9_FPS 200
 
-static struct codec_info codec_data_sa8775p[] = {
+static struct codec_info codec_data_qcs8300[] = {
 	{
 		.v4l2_codec  = V4L2_PIX_FMT_H264,
 		.vidc_codec  = MSM_VIDC_H264,
@@ -67,14 +68,9 @@ static struct codec_info codec_data_sa8775p[] = {
 		.vidc_codec  = MSM_VIDC_AV1,
 		.pixfmt_name = "AV1",
 	},
-	{
-		.v4l2_codec  = V4L2_PIX_FMT_VIDC_HEIC,
-		.vidc_codec  = MSM_VIDC_HEIC,
-		.pixfmt_name = "HEIC",
-	},
 };
 
-static struct color_format_info color_format_data_sa8775p[] = {
+static struct color_format_info color_format_data_qcs8300[] = {
 	{
 		.v4l2_color_format = V4L2_PIX_FMT_NV12,
 		.vidc_color_format = MSM_VIDC_FMT_NV12,
@@ -112,7 +108,7 @@ static struct color_format_info color_format_data_sa8775p[] = {
 	},
 };
 
-static struct color_primaries_info color_primaries_data_sa8775p[] = {
+static struct color_primaries_info color_primaries_data_qcs8300[] = {
 	{
 		.v4l2_color_primaries  = V4L2_COLORSPACE_DEFAULT,
 		.vidc_color_primaries  = MSM_VIDC_PRIMARIES_RESERVED,
@@ -163,7 +159,7 @@ static struct color_primaries_info color_primaries_data_sa8775p[] = {
 	},
 };
 
-static struct transfer_char_info transfer_char_data_sa8775p[] = {
+static struct transfer_char_info transfer_char_data_qcs8300[] = {
 	{
 		.v4l2_transfer_char  = V4L2_XFER_FUNC_DEFAULT,
 		.vidc_transfer_char  = MSM_VIDC_TRANSFER_RESERVED,
@@ -226,7 +222,7 @@ static struct transfer_char_info transfer_char_data_sa8775p[] = {
 	},
 };
 
-static struct matrix_coeff_info matrix_coeff_data_sa8775p[] = {
+static struct matrix_coeff_info matrix_coeff_data_qcs8300[] = {
 	{
 		.v4l2_matrix_coeff  = V4L2_YCBCR_ENC_DEFAULT,
 		.vidc_matrix_coeff  = MSM_VIDC_MATRIX_COEFF_RESERVED,
@@ -273,31 +269,27 @@ static struct matrix_coeff_info matrix_coeff_data_sa8775p[] = {
 	},
 };
 
-static struct msm_platform_core_capability core_data_sa8775p[] = {
+static struct msm_platform_core_capability core_data_qcs8300[] = {
 	/* {type, value} */
-	{ENC_CODECS, H264|HEVC|HEIC},
-	{DEC_CODECS, H264|HEVC|VP9|AV1|HEIC},
-	{MAX_SESSION_COUNT, 32},
-	{MAX_NUM_720P_SESSIONS, 32},
-	{MAX_NUM_1080P_SESSIONS, 32},
-	{MAX_NUM_4K_SESSIONS, 8},
-	{MAX_NUM_8K_SESSIONS, 2},
+	{ENC_CODECS, H264|HEVC},
+	{DEC_CODECS, H264|HEVC|VP9|AV1},
+	{MAX_SESSION_COUNT, 16},
+	{MAX_NUM_720P_SESSIONS, 16},
+	{MAX_NUM_1080P_SESSIONS, 16},
+	{MAX_NUM_4K_SESSIONS, 4},
+	{MAX_NUM_8K_SESSIONS, 1},
 	{MAX_SECURE_SESSION_COUNT, 3},
-	{MAX_RT_MBPF, 174080},	/* (8192x4352)/256 + (4096x2176)/256*/
-	{MAX_MBPF, 278528}, /* ((8192x4352)/256) * 2 */
-	{MAX_MBPS, 7833600},	/* max_load
-					 * 7680x4320@60fps or 3840x2176@240fps
-					 * which is greater than 4096x2176@120fps,
-					 * 8192x4320@48fps
-					 */
-	{MAX_IMAGE_MBPF, 1048576},  /* (16384x16384)/256 */
-	{MAX_MBPF_HQ, 8160}, /* ((1920x1088)/256) */
-	{MAX_MBPS_HQ, 489600}, /* ((1920x1088)/256)@60fps */
-	{MAX_MBPF_B_FRAME, 32640}, /* 3840x2176/256 */
-	{MAX_MBPS_B_FRAME, 1958400}, /* 3840x2176/256 MBs@60fps */
-	{MAX_MBPS_ALL_INTRA, 2088960}, /* 4096x2176/256 MBs@60fps */
+	{MAX_RT_MBPF, ((8192 * 4352) / 256)},	/* (8192*4352)/256*/
+	{MAX_MBPF, ((8192 * 4352) / 256)}, /* (8192*4352)/256*/
+	{MAX_MBPS, (((7680 * 4320) / 256) * 30)},	/* max_load 7680x4320@30fps*/
+	{MAX_IMAGE_MBPF, ((16384 * 16384) / 256)},  /* (16384x16384)/256 */
+	{MAX_MBPF_HQ, ((1280 * 720) / 256)}, /* ((1280*720)/256)) */
+	{MAX_MBPS_HQ, (((1280 * 720) / 256) * 30)}, /* ((1280*720)/256))@30fps */
+	{MAX_MBPF_B_FRAME, ((1920 * 1088) / 256 * 2)}, /* (1920*1088)/256 * 2 */
+	{MAX_MBPS_B_FRAME, (((1920 * 1088 ) / 256) * 120)}, /* ((1920*1088)/256)@120fps */
+	{MAX_MBPS_ALL_INTRA, (((1920 * 1088) / 256) * 120)}, /* ((1920*1088)/256)@120fps */
 	{MAX_ENH_LAYER_COUNT, 5},
-	{NUM_VPP_PIPE, 4},
+	{NUM_VPP_PIPE, 2},
 	{SW_PC, 1},
 	{FW_UNLOAD, 0},
 	{HW_RESPONSE_TIMEOUT, HW_RESPONSE_TIMEOUT_VALUE}, /* 1000 ms */
@@ -306,7 +298,7 @@ static struct msm_platform_core_capability core_data_sa8775p[] = {
 	{PAGEFAULT_NON_FATAL, 1},
 	{PAGETABLE_CACHING, 0},
 	{DCVS, 1},
-	{DECODE_BATCH, 0},
+	{DECODE_BATCH, 1},
 	{DECODE_BATCH_TIMEOUT, 200},
 	{STATS_TIMEOUT_MS, 2000},
 	{AV_SYNC_WINDOW_SIZE, 40},
@@ -318,7 +310,7 @@ static struct msm_platform_core_capability core_data_sa8775p[] = {
 	{SUPPORTS_REQUESTS, 0},
 };
 
-static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
+static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 	/* {cap, domain, codec,
 	 *      min, max, step_or_mask, value,
 	 *      v4l2_id,
@@ -331,43 +323,23 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 
 	{FRAME_WIDTH, DEC, CODECS_ALL, 96, 8192, 1, 1920},
 
-	{FRAME_WIDTH, DEC, VP9, 96, 4096, 1, 1920},
+	{FRAME_WIDTH, ENC, ENC_CODECS_ALL, 128, 8192, 1, 1920},
 
-	{FRAME_WIDTH, ENC, CODECS_ALL, 128, 8192, 1, 1920},
+	{LOSSLESS_FRAME_WIDTH, ENC, HEVC, 96, 1280, 1, 1280},
 
-	{FRAME_WIDTH, ENC, HEVC, 96, 8192, 1, 1920},
+	{SECURE_FRAME_WIDTH, DEC, H264|HEVC|VP9, 96, 4096, 1, 1920},
 
-	{FRAME_WIDTH, ENC, HEIC, 128, 16384, 1, 16384},
-
-	{LOSSLESS_FRAME_WIDTH, ENC, CODECS_ALL, 128, 4096, 1, 1920},
-
-	{LOSSLESS_FRAME_WIDTH, ENC, HEVC, 96, 4096, 1, 1920},
-
-	{SECURE_FRAME_WIDTH, DEC, CODECS_ALL, 96, 4096, 1, 1920},
-
-	{SECURE_FRAME_WIDTH, ENC, CODECS_ALL, 128, 4096, 1, 1920},
-
-	{SECURE_FRAME_WIDTH, ENC, HEVC, 96, 4096, 1, 1920},
+	{SECURE_FRAME_WIDTH, ENC, ENC_CODECS_ALL, 128, 4096, 1, 1920},
 
 	{FRAME_HEIGHT, DEC, CODECS_ALL, 96, 8192, 1, 1080},
 
-	{FRAME_HEIGHT, DEC, VP9, 96, 4096, 1, 1080},
+	{FRAME_HEIGHT, ENC, ENC_CODECS_ALL, 128, 8192, 1, 1080},
 
-	{FRAME_HEIGHT, ENC, CODECS_ALL, 128, 8192, 1, 1080},
+	{LOSSLESS_FRAME_HEIGHT, ENC, HEVC, 96, 720, 1, 720},
 
-	{FRAME_HEIGHT, ENC, HEVC, 96, 8192, 1, 1080},
+	{SECURE_FRAME_HEIGHT, DEC, H264|HEVC|VP9, 96, 4096, 1, 1080},
 
-	{FRAME_HEIGHT, ENC, HEIC, 128, 16384, 1, 16384},
-
-	{LOSSLESS_FRAME_HEIGHT, ENC, CODECS_ALL, 128, 4096, 1, 1080},
-
-	{LOSSLESS_FRAME_HEIGHT, ENC, HEVC, 96, 4096, 1, 1080},
-
-	{SECURE_FRAME_HEIGHT, DEC, CODECS_ALL, 96, 4096, 1, 1080},
-
-	{SECURE_FRAME_HEIGHT, ENC, CODECS_ALL, 128, 4096, 1, 1080},
-
-	{SECURE_FRAME_HEIGHT, ENC, HEVC, 96, 4096, 1, 1080},
+	{SECURE_FRAME_HEIGHT, ENC, ENC_CODECS_ALL, 128, 4096, 1, 1080},
 
 	{PIX_FMTS, ENC | DEC, H264,
 		MSM_VIDC_FMT_NV12,
@@ -375,27 +347,14 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_NV12C,
 		MSM_VIDC_FMT_NV12C},
 
-	{PIX_FMTS, ENC | DEC, HEVC | AV1,
+	{PIX_FMTS, ENC | DEC, HEVC,
 		MSM_VIDC_FMT_NV12,
 		MSM_VIDC_FMT_TP10C,
 		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_NV12C |
 		MSM_VIDC_FMT_P010 | MSM_VIDC_FMT_TP10C,
 		MSM_VIDC_FMT_NV12C},
 
-	{PIX_FMTS, ENC, HEIC,
-		MSM_VIDC_FMT_NV12,
-		MSM_VIDC_FMT_P010,
-		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_P010,
-		MSM_VIDC_FMT_NV12},
-
-	{PIX_FMTS, DEC, HEIC,
-		MSM_VIDC_FMT_NV12,
-		MSM_VIDC_FMT_TP10C,
-		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_NV12C |
-		MSM_VIDC_FMT_P010 | MSM_VIDC_FMT_TP10C,
-		MSM_VIDC_FMT_NV12C},
-
-	{PIX_FMTS, DEC, VP9,
+	{PIX_FMTS, DEC, VP9 | AV1,
 		MSM_VIDC_FMT_NV12,
 		MSM_VIDC_FMT_TP10C,
 		MSM_VIDC_FMT_NV12 | MSM_VIDC_FMT_NV21 | MSM_VIDC_FMT_NV12C |
@@ -407,13 +366,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		0,
 		CAP_FLAG_VOLATILE},
 
-	{MIN_BUFFERS_INPUT, ENC | DEC, HEIC, 0, 64, 1, 1,
-		V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
-		0,
-		CAP_FLAG_VOLATILE},
-
-	{MIN_BUFFERS_OUTPUT, ENC | DEC, CODECS_ALL,
-		0, 64, 1, 4,
+	{MIN_BUFFERS_OUTPUT, ENC | DEC, CODECS_ALL, 0, 64, 1, 4,
 		V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
 		HFI_PROP_BUFFER_FW_MIN_OUTPUT_COUNT,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_VOLATILE},
@@ -421,43 +374,26 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 	/* (8192 * 4320) / 256 */
 	{MBPF, ENC, CODECS_ALL, 64, 138240, 1, 138240},
 
-	{MBPF, ENC, HEVC, 36, 138240, 1, 138240},
-
-	/* ((16384x16384)/256) */
-	{MBPF, ENC, HEIC, 36, 1048576, 1, 1048576},
-
 	{MBPF, DEC, CODECS_ALL, 36, 138240, 1, 138240},
 
 	/* (4096 * 2304) / 256 */
 	{MBPF, DEC, VP9, 36, 36864, 1, 36864},
 
-	/* ((8192x8192)/256) */
-	{MBPF, DEC, HEIC, 64, 262144,  1, 262144 },
-
 	/* (4096 * 2304) / 256 */
-	{LOSSLESS_MBPF, ENC, H264|HEVC, 64, 36864, 1, 36864},
+	{LOSSLESS_MBPF, ENC, ENC_CODECS_ALL, 64, 36864, 1, 36864},
 
 	/* Batch Mode Decode */
 	/* TODO: update with new values based on updated voltage corner */
-	{BATCH_MBPF, DEC, H264|HEVC|VP9|AV1, 64, 34816, 1, 34816},
+	{BATCH_MBPF, DEC, CODECS_ALL, 64, 34816, 1, 34816},
 
 	/* (4096 * 2304) / 256 */
-	{BATCH_FPS, DEC, H264|HEVC|VP9|AV1, 1, 120, 1, 120},
+	{BATCH_FPS, DEC, CODECS_ALL, 1, 120, 1, 120},
 
-	{SECURE_MBPF, ENC|DEC, H264|HEVC|VP9|AV1, 64, 36864, 1, 36864},
-
-	{SECURE_MBPF, ENC, HEVC, 36, 36864, 1, 36864},
+	{SECURE_MBPF, ENC | DEC, CODECS_ALL, 64, 36864, 1, 36864},
 
 	{FRAME_RATE, ENC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
 		1, (DEFAULT_FPS << 16),
-		0,
-		HFI_PROP_FRAME_RATE,
-		CAP_FLAG_OUTPUT_PORT},
-
-	{FRAME_RATE, ENC, HEIC,
-		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
-		1, (MINIMUM_FPS << 16),
 		0,
 		HFI_PROP_FRAME_RATE,
 		CAP_FLAG_OUTPUT_PORT},
@@ -476,6 +412,14 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 
 	{OPERATING_RATE, DEC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_DEC_FPS << 16),
+		1, (DEFAULT_FPS << 16),
+		V4L2_CID_MPEG_VIDC_OPERATING_RATE,
+		0,
+		CAP_FLAG_OUTPUT_PORT |
+		CAP_FLAG_INPUT_PORT | CAP_FLAG_DYNAMIC_ALLOWED},
+
+	{OPERATING_RATE, DEC, VP9,
+		(MINIMUM_FPS << 16), (MAXIMUM_OVERRIDE_VP9_FPS << 16),
 		1, (DEFAULT_FPS << 16),
 		V4L2_CID_MPEG_VIDC_OPERATING_RATE,
 		0,
@@ -506,12 +450,11 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 
 	{MB_CYCLES_LP, DEC, CODECS_ALL, 200, 200, 1, 200},
 
-	{MB_CYCLES_FW, ENC|DEC, CODECS_ALL, 489583, 489583, 1, 489583},
+	{MB_CYCLES_FW, ENC | DEC, CODECS_ALL, 326389, 326389, 1, 326389},
 
-	{MB_CYCLES_FW_VPP, ENC, CODECS_ALL, 48405, 48405, 1, 48405},
+	{MB_CYCLES_FW_VPP, ENC | DEC, CODECS_ALL, 44156, 44156, 1, 44156},
 
-	{ENC_RING_BUFFER_COUNT, ENC, CODECS_ALL,
-		0, 0, 1, 0},
+	{ENC_RING_BUFFER_COUNT, ENC, CODECS_ALL, 0, 0, 1, 0},
 
 	{CLIENT_ID, ENC | DEC, CODECS_ALL,
 		INVALID_CLIENT_ID, INT_MAX, 1, INVALID_CLIENT_ID,
@@ -674,15 +617,6 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_RATE_CONTROL,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{BITRATE_MODE, ENC, HEIC,
-		V4L2_MPEG_VIDEO_BITRATE_MODE_CQ,
-		V4L2_MPEG_VIDEO_BITRATE_MODE_CQ,
-		BIT(V4L2_MPEG_VIDEO_BITRATE_MODE_CQ),
-		V4L2_MPEG_VIDEO_BITRATE_MODE_CQ,
-		V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
-		HFI_PROP_RATE_CONTROL,
-		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
-
 	{CABAC_MAX_BITRATE, ENC, H264 | HEVC, 0,
 		160000000, 1, 160000000},
 
@@ -702,7 +636,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		0, 1, 1, 0,
 		V4L2_CID_MPEG_VIDEO_HEVC_LOSSLESS_CU},
 
-	{FRAME_SKIP_MODE, ENC, H264 | HEVC | HEIC,
+	{FRAME_SKIP_MODE, ENC, H264 | HEVC,
 		V4L2_MPEG_VIDEO_FRAME_SKIP_MODE_DISABLED,
 		V4L2_MPEG_VIDEO_FRAME_SKIP_MODE_BUF_LIMIT,
 		BIT(V4L2_MPEG_VIDEO_FRAME_SKIP_MODE_DISABLED) |
@@ -713,19 +647,12 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		0,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{FRAME_RC_ENABLE, ENC, H264 | HEVC | HEIC,
+	{FRAME_RC_ENABLE, ENC, H264 | HEVC,
 		0, 1, 1, 1,
 		V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE},
 
 	{CONSTANT_QUALITY, ENC, HEVC,
 		1, MAX_CONSTANT_QUALITY, 1, 90,
-		V4L2_CID_MPEG_VIDEO_CONSTANT_QUALITY,
-		HFI_PROP_CONSTANT_QUALITY,
-		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_INPUT_PORT |
-			CAP_FLAG_DYNAMIC_ALLOWED},
-
-	{CONSTANT_QUALITY, ENC, HEIC,
-		1, MAX_CONSTANT_QUALITY, 1, 100,
 		V4L2_CID_MPEG_VIDEO_CONSTANT_QUALITY,
 		HFI_PROP_CONSTANT_QUALITY,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_INPUT_PORT |
@@ -738,25 +665,12 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_INPUT_PORT |
 			CAP_FLAG_DYNAMIC_ALLOWED},
 
-	{GOP_SIZE, ENC, HEIC,
-		0, INT_MAX, 1, 0 /* all intra */,
-		V4L2_CID_MPEG_VIDEO_GOP_SIZE,
-		HFI_PROP_MAX_GOP_FRAMES,
-		CAP_FLAG_OUTPUT_PORT |
-			CAP_FLAG_INPUT_PORT | CAP_FLAG_DYNAMIC_ALLOWED},
-
 	{GOP_CLOSURE, ENC, H264 | HEVC,
 		0, 1, 1, 1,
 		V4L2_CID_MPEG_VIDEO_GOP_CLOSURE,
 		0},
 
 	{B_FRAME, ENC, H264 | HEVC,
-		0, 1, 1, 0,
-		V4L2_CID_MPEG_VIDEO_B_FRAMES,
-		HFI_PROP_MAX_B_FRAMES,
-		CAP_FLAG_OUTPUT_PORT},
-
-	{B_FRAME, ENC, HEIC,
 		0, 1, 1, 0,
 		V4L2_CID_MPEG_VIDEO_B_FRAMES,
 		HFI_PROP_MAX_B_FRAMES,
@@ -858,12 +772,6 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_TIME_DELTA_BASED_RATE_CONTROL,
 		CAP_FLAG_OUTPUT_PORT},
 
-	{TIME_DELTA_BASED_RC, ENC, HEIC,
-		0, 1, 1, 0,
-		V4L2_CID_MPEG_VIDC_TIME_DELTA_BASED_RC,
-		HFI_PROP_TIME_DELTA_BASED_RATE_CONTROL,
-		CAP_FLAG_OUTPUT_PORT},
-
 	{CONTENT_ADAPTIVE_CODING, ENC, H264 | HEVC,
 		0, 1, 1, 1,
 		V4L2_CID_MPEG_VIDC_CONTENT_ADAPTIVE_CODING,
@@ -892,7 +800,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		CAP_FLAG_OUTPUT_PORT},
 
 	{VBV_DELAY, ENC, H264 | HEVC,
-		200, 300, 100, 300,
+		100, 300, 100, 300,  // if the min value is wrong?
 		V4L2_CID_MPEG_VIDEO_VBV_DELAY,
 		HFI_PROP_VBV_DELAY,
 		CAP_FLAG_OUTPUT_PORT},
@@ -911,7 +819,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_MIN_QP_PACKED,
 		CAP_FLAG_OUTPUT_PORT},
 
-	{MIN_FRAME_QP, ENC, HEVC | HEIC,
+	{MIN_FRAME_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MIN_QP_10BIT,
 		V4L2_CID_MPEG_VIDEO_HEVC_MIN_QP,
 		HFI_PROP_MIN_QP_PACKED,
@@ -921,7 +829,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MIN_QP_8BIT,
 		V4L2_CID_MPEG_VIDEO_H264_I_FRAME_MIN_QP},
 
-	{I_FRAME_MIN_QP, ENC, HEVC | HEIC,
+	{I_FRAME_MIN_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MIN_QP_10BIT,
 		V4L2_CID_MPEG_VIDEO_HEVC_I_FRAME_MIN_QP},
 
@@ -929,7 +837,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MIN_QP_8BIT,
 		V4L2_CID_MPEG_VIDEO_H264_P_FRAME_MIN_QP},
 
-	{P_FRAME_MIN_QP, ENC, HEVC | HEIC,
+	{P_FRAME_MIN_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MIN_QP_10BIT,
 		V4L2_CID_MPEG_VIDEO_HEVC_P_FRAME_MIN_QP},
 
@@ -937,7 +845,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MIN_QP_8BIT,
 		V4L2_CID_MPEG_VIDEO_H264_B_FRAME_MIN_QP},
 
-	{B_FRAME_MIN_QP, ENC, HEVC | HEIC,
+	{B_FRAME_MIN_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MIN_QP_10BIT,
 		V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_MIN_QP},
 
@@ -947,7 +855,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_MAX_QP_PACKED,
 		CAP_FLAG_OUTPUT_PORT},
 
-	{MAX_FRAME_QP, ENC, HEVC | HEIC,
+	{MAX_FRAME_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_HEVC_MAX_QP,
 		HFI_PROP_MAX_QP_PACKED,
@@ -957,7 +865,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_H264_I_FRAME_MAX_QP},
 
-	{I_FRAME_MAX_QP, ENC, HEVC | HEIC,
+	{I_FRAME_MAX_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_HEVC_I_FRAME_MAX_QP},
 
@@ -965,7 +873,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_H264_P_FRAME_MAX_QP},
 
-	{P_FRAME_MAX_QP, ENC, HEVC | HEIC,
+	{P_FRAME_MAX_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_HEVC_P_FRAME_MAX_QP},
 
@@ -973,7 +881,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MIN_QP_8BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_H264_B_FRAME_MAX_QP},
 
-	{B_FRAME_MAX_QP, ENC, HEVC | HEIC,
+	{B_FRAME_MAX_QP, ENC, HEVC,
 		MIN_QP_10BIT, MAX_QP, 1, MAX_QP,
 		V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_MAX_QP},
 
@@ -1186,7 +1094,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_PROFILE,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{PROFILE, ENC | DEC, HEVC | HEIC,
+	{PROFILE, ENC | DEC, HEVC,
 		V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN,
 		V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10_STILL_PICTURE,
 		BIT(V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN) |
@@ -1243,7 +1151,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_LEVEL,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{LEVEL, ENC, HEVC | HEIC,
+	{LEVEL, ENC, HEVC,
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_1) |
@@ -1292,7 +1200,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_LEVEL,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{LEVEL, DEC, HEVC | HEIC,
+	{LEVEL, DEC, HEVC,
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_1) |
@@ -1379,16 +1287,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_TIER,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{HEVC_TIER, ENC | DEC, HEIC,
-		V4L2_MPEG_VIDEO_HEVC_TIER_MAIN,
-		V4L2_MPEG_VIDEO_HEVC_TIER_MAIN,
-		BIT(V4L2_MPEG_VIDEO_HEVC_TIER_MAIN),
-		V4L2_MPEG_VIDEO_HEVC_TIER_MAIN,
-		V4L2_CID_MPEG_VIDEO_HEVC_TIER,
-		HFI_PROP_TIER,
-		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
-
-	{LF_MODE, ENC, H264,
+	{LF_MODE, ENC, H264 | HEVC,
 		V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_ENABLED,
 		DB_H264_DISABLE_SLICE_BOUNDARY,
 		BIT(V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_ENABLED) |
@@ -1399,7 +1298,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_DEBLOCKING_MODE,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
 
-	{LF_MODE, ENC, HEVC | HEIC,
+	{LF_MODE, ENC, HEVC,
 		V4L2_MPEG_VIDEO_HEVC_LOOP_FILTER_MODE_DISABLED,
 		DB_HEVC_DISABLE_SLICE_BOUNDARY,
 		BIT(V4L2_MPEG_VIDEO_HEVC_LOOP_FILTER_MODE_DISABLED) |
@@ -1414,7 +1313,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		-6, 6, 1, 0,
 		V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_ALPHA},
 
-	{LF_ALPHA, ENC, HEVC | HEIC,
+	{LF_ALPHA, ENC, HEVC,
 		-6, 6, 1, 0,
 		V4L2_CID_MPEG_VIDEO_HEVC_LF_TC_OFFSET_DIV2},
 
@@ -1422,7 +1321,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		-6, 6, 1, 0,
 		V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_BETA},
 
-	{LF_BETA, ENC, HEVC | HEIC,
+	{LF_BETA, ENC, HEVC,
 		-6, 6, 1, 0,
 		V4L2_CID_MPEG_VIDEO_HEVC_LF_BETA_OFFSET_DIV2},
 
@@ -1432,15 +1331,6 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		BIT(V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE) |
 		BIT(V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB) |
 		BIT(V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_BYTES),
-		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
-		V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
-		0,
-		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU},
-
-	{SLICE_MODE, ENC, HEIC,
-		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
-		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
-		BIT(V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE),
 		V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
 		V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
 		0,
@@ -1531,10 +1421,10 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 
 	{PIPE, DEC|ENC, CODECS_ALL,
 		MSM_VIDC_PIPE_1,
-		MSM_VIDC_PIPE_4, 1,
-		MSM_VIDC_PIPE_4,
+		MSM_VIDC_PIPE_2, 1,
+		MSM_VIDC_PIPE_2,
 		0,
-		HFI_PROP_PIPE},
+		HFI_PROP_PIPE},  //modify pipe num
 
 	{POC, DEC, H264,
 		0, 2, 1, 1,
@@ -1557,7 +1447,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		MSM_VIDC_POWER_SAVE_MODE, 1,
 		MSM_VIDC_POWER_SAVE_MODE},
 
-	{CODED_FRAMES, DEC, H264 | HEVC | HEIC,
+	{CODED_FRAMES, DEC, H264 | HEVC,
 		CODED_FRAMES_PROGRESSIVE, CODED_FRAMES_INTERLACE,
 		1, CODED_FRAMES_PROGRESSIVE,
 		V4L2_CID_MPEG_VIDC_INTERLACE,
@@ -1568,7 +1458,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		0,
 		HFI_PROP_LUMA_CHROMA_BIT_DEPTH},
 
-	{CODEC_CONFIG, DEC, H264 | HEVC | HEIC | AV1, 0, 1, 1, 0,
+	{CODEC_CONFIG, DEC, H264 | HEVC | AV1, 0, 1, 1, 0,
 		V4L2_CID_MPEG_VIDC_CODEC_CONFIG, 0,
 		CAP_FLAG_DYNAMIC_ALLOWED},
 
@@ -1741,7 +1631,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_PICTURE_TYPE,
 		CAP_FLAG_BITMASK | CAP_FLAG_META | CAP_FLAG_DYNAMIC_ALLOWED},
 
-	{META_SEI_MASTERING_DISP, ENC, HEVC | HEIC,
+	{META_SEI_MASTERING_DISP, ENC, HEVC,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE |
 		MSM_VIDC_META_DYN_ENABLE | MSM_VIDC_META_TX_INPUT,
@@ -1750,7 +1640,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_SEI_MASTERING_DISPLAY_COLOUR,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_SEI_MASTERING_DISP, DEC, HEVC | HEIC | AV1,
+	{META_SEI_MASTERING_DISP, DEC, HEVC | AV1,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_INPUT |
 			MSM_VIDC_META_RX_OUTPUT,
@@ -1759,7 +1649,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_SEI_MASTERING_DISPLAY_COLOUR,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_SEI_CLL, ENC, HEVC | HEIC,
+	{META_SEI_CLL, ENC, HEVC,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE |
 		MSM_VIDC_META_DYN_ENABLE | MSM_VIDC_META_TX_INPUT,
@@ -1768,7 +1658,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_SEI_CONTENT_LIGHT_LEVEL,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_SEI_CLL, DEC, HEVC | HEIC | AV1,
+	{META_SEI_CLL, DEC, HEVC | AV1,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_INPUT |
 			MSM_VIDC_META_RX_OUTPUT,
@@ -1777,7 +1667,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_SEI_CONTENT_LIGHT_LEVEL,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_HDR10PLUS, ENC, HEVC | HEIC,
+	{META_HDR10PLUS, ENC, HEVC,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE |
 		MSM_VIDC_META_DYN_ENABLE | MSM_VIDC_META_TX_INPUT,
@@ -1786,7 +1676,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_SEI_HDR10PLUS_USERDATA,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_HDR10PLUS, DEC, HEVC | HEIC | AV1,
+	{META_HDR10PLUS, DEC, HEVC | AV1,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_INPUT |
 			MSM_VIDC_META_RX_OUTPUT,
@@ -1835,7 +1725,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_DPB_TAG_LIST,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{META_SUBFRAME_OUTPUT, ENC, HEIC | H264 | HEVC,
+	{META_SUBFRAME_OUTPUT, ENC, H264 | HEVC,
 		MSM_VIDC_META_DISABLE,
 		MSM_VIDC_META_ENABLE | MSM_VIDC_META_RX_OUTPUT,
 		0, MSM_VIDC_META_DISABLE,
@@ -1875,17 +1765,6 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		HFI_PROP_DEC_QP_METADATA,
 		CAP_FLAG_BITMASK | CAP_FLAG_META},
 
-	{GRID_ENABLE, ENC, HEIC,
-		0, 1, 1, 1,
-		0,
-		HFI_PROP_HEIC_GRID_ENABLE,
-		CAP_FLAG_OUTPUT_PORT},
-
-	{GRID_SIZE, ENC, HEIC,
-		HEIC_GRID_WIDTH, HEIC_GRID_WIDTH * 2,
-		HEIC_GRID_WIDTH, HEIC_GRID_WIDTH,
-		V4L2_CID_MPEG_VIDC_GRID_WIDTH},
-
 	{COMPLEXITY, ENC, H264 | HEVC,
 		0, 100,
 		1, DEFAULT_COMPLEXITY,
@@ -1910,7 +1789,7 @@ static struct msm_platform_inst_capability instance_cap_data_sa8775p[] = {
 		CAP_FLAG_INPUT_PORT | CAP_FLAG_DYNAMIC_ALLOWED},
 };
 
-static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa8775p[] = {
+static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_qcs8300[] = {
 	/* {cap, domain, codec,
 	 *      children,
 	 *      adjust, set}
@@ -1924,10 +1803,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 			B_FRAME_QP, META_ROI_INFO, MIN_QUALITY, BLUR_TYPES, IR_PERIOD,
 			LTR_COUNT, CSC}},
 
-	{PIX_FMTS, ENC, HEIC,
-		{PROFILE, CSC}},
-
-	{PIX_FMTS, DEC, HEVC | HEIC,
+	{PIX_FMTS, DEC, HEVC,
 		{PROFILE}},
 
 	{FRAME_RATE, ENC, CODECS_ALL,
@@ -2031,12 +1907,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		msm_vidc_adjust_bitrate_mode,
 		msm_vidc_set_u32_enum},
 
-	{BITRATE_MODE, ENC, HEIC,
-		{TIME_DELTA_BASED_RC, CONSTANT_QUALITY},
-		msm_vidc_adjust_bitrate_mode,
-		msm_vidc_set_u32_enum},
-
-	{CONSTANT_QUALITY, ENC, HEVC | HEIC,
+	{CONSTANT_QUALITY, ENC, HEVC,
 		{0},
 		NULL,
 		msm_vidc_set_constant_quality},
@@ -2046,19 +1917,9 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		msm_vidc_adjust_gop_size,
 		msm_vidc_set_gop_size},
 
-	{GOP_SIZE, ENC, HEIC,
-		{0},
-		NULL,
-		msm_vidc_set_u32},
-
 	{B_FRAME, ENC, H264 | HEVC,
 		{ALL_INTRA},
 		msm_vidc_adjust_b_frame,
-		msm_vidc_set_u32},
-
-	{B_FRAME, ENC, HEIC,
-		{0},
-		NULL,
 		msm_vidc_set_u32},
 
 	{BLUR_TYPES, ENC, H264 | HEVC,
@@ -2267,12 +2128,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		NULL,
 		msm_vidc_set_u32_enum},
 
-	{PROFILE, ENC, HEVC | HEIC,
+	{PROFILE, ENC, HEVC,
 		{META_SEI_MASTERING_DISP, META_SEI_CLL, META_HDR10PLUS},
 		msm_vidc_adjust_profile,
 		msm_vidc_set_u32_enum},
 
-	{PROFILE, DEC, HEVC | HEIC,
+	{PROFILE, DEC, HEVC,
 		{0},
 		msm_vidc_adjust_profile,
 		msm_vidc_set_u32_enum},
@@ -2297,7 +2158,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		NULL,
 		msm_vidc_set_u32_enum},
 
-	{HEVC_TIER, ENC | DEC, HEVC | HEIC,
+	{HEVC_TIER, ENC | DEC, HEVC,
 		{0},
 		NULL,
 		msm_vidc_set_u32_enum},
@@ -2309,11 +2170,6 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 
 	{SLICE_MODE, ENC, H264 | HEVC,
 		{STAGE, DELIVERY_MODE},
-		msm_vidc_adjust_slice_count,
-		msm_vidc_set_slice_count},
-
-	{SLICE_MODE, ENC, HEIC,
-		{0},
 		msm_vidc_adjust_slice_count,
 		msm_vidc_set_slice_count},
 
@@ -2397,11 +2253,6 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		NULL,
 		msm_vidc_set_u32},
 
-	{THUMBNAIL_MODE, DEC, HEIC,
-		{0},
-		NULL,
-		msm_vidc_set_u32},
-
 	{RAP_FRAME, DEC, CODECS_ALL,
 		{0},
 		NULL,
@@ -2432,11 +2283,6 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		msm_vidc_adjust_roi_info,
 		NULL},
 
-	{GRID_ENABLE, ENC, HEIC,
-		{0},
-		NULL,
-		msm_vidc_set_u32},
-
 	{VUI_TIMING_INFO, ENC, CODECS_ALL,
 		{0},
 		NULL,
@@ -2457,17 +2303,17 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 		NULL,
 		msm_vidc_set_u32},
 
-	{META_SEI_MASTERING_DISP, ENC, HEVC | HEIC,
+	{META_SEI_MASTERING_DISP, ENC, HEVC,
 		{0},
 		msm_vidc_adjust_sei_mastering_disp,
 		NULL},
 
-	{META_SEI_CLL, ENC, HEVC | HEIC,
+	{META_SEI_CLL, ENC, HEVC,
 		{0},
 		msm_vidc_adjust_sei_cll,
 		NULL},
 
-	{META_HDR10PLUS, ENC, HEVC | HEIC,
+	{META_HDR10PLUS, ENC, HEVC,
 		{0},
 		msm_vidc_adjust_hdr10plus,
 		NULL},
@@ -2479,70 +2325,70 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_sa87
 };
 
 /* Default UBWC config for LPDDR5 */
-static struct msm_vidc_ubwc_config_data ubwc_config_sa8775p[] = {
-	UBWC_CONFIG(8, 32, 13, 0, 0, 1, 1),
+static struct msm_vidc_ubwc_config_data ubwc_config_qcs8300[] = {
+	UBWC_CONFIG(8, 32, 16, 0, 1, 1, 1), //sync with auto
 };
 
-static struct msm_vidc_efuse_data efuse_data_sa8775p[] = {
+static struct msm_vidc_efuse_data efuse_data_qcs8300[] = {
 	/* IRIS_MULTIPIPE_DISABLE - max 4K@30 */
 	EFUSE_ENTRY(0x221C8118, 4, 0x400, 0xA, SKU_VERSION),
 };
-static struct msm_vidc_format_capability format_data_sa8775p = {
-	.codec_info = codec_data_sa8775p,
-	.codec_info_size = ARRAY_SIZE(codec_data_sa8775p),
-	.color_format_info = color_format_data_sa8775p,
-	.color_format_info_size = ARRAY_SIZE(color_format_data_sa8775p),
-	.color_prim_info = color_primaries_data_sa8775p,
-	.color_prim_info_size = ARRAY_SIZE(color_primaries_data_sa8775p),
-	.transfer_char_info = transfer_char_data_sa8775p,
-	.transfer_char_info_size = ARRAY_SIZE(transfer_char_data_sa8775p),
-	.matrix_coeff_info = matrix_coeff_data_sa8775p,
-	.matrix_coeff_info_size = ARRAY_SIZE(matrix_coeff_data_sa8775p),
+static struct msm_vidc_format_capability format_data_qcs8300 = {
+	.codec_info = codec_data_qcs8300,
+	.codec_info_size = ARRAY_SIZE(codec_data_qcs8300),
+	.color_format_info = color_format_data_qcs8300,
+	.color_format_info_size = ARRAY_SIZE(color_format_data_qcs8300),
+	.color_prim_info = color_primaries_data_qcs8300,
+	.color_prim_info_size = ARRAY_SIZE(color_primaries_data_qcs8300),
+	.transfer_char_info = transfer_char_data_qcs8300,
+	.transfer_char_info_size = ARRAY_SIZE(transfer_char_data_qcs8300),
+	.matrix_coeff_info = matrix_coeff_data_qcs8300,
+	.matrix_coeff_info_size = ARRAY_SIZE(matrix_coeff_data_qcs8300),
 };
 
 /* name, min_kbps, max_kbps */
-static const struct bw_table sa8775p_bw_table[] = {
+static const struct bw_table qcs8300_bw_table[] = {
 	{ "iris-cnoc",  1000, 1000     },
 	{ "iris-ddr",   1000, 15000000 },
 };
 
 /* name */
-static const struct pd_table sa8775p_pd_table[] = {
+static const struct pd_table qcs8300_pd_table[] = {
 	{ "iris-ctl" },
 	{ "vcodec"   },
 };
 
 /* name, clock id, scaling */
-static const struct clk_table sa8775p_clk_table[] = {
+static const struct clk_table qcs8300_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
 	{ "core_clk",               VIDEO_CC_MVS0C_CLK,     0 },
 	{ "vcodec_clk",             VIDEO_CC_MVS0_CLK,      1 },
 };
 
 /* name, exclusive_release */
-static const struct clk_rst_table sa8775p_clk_reset_table[] = {
+static const struct clk_rst_table qcs8300_clk_reset_table[] = {
 	{ "video_axi_reset",        0  },
 };
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
-const struct context_bank_table sa8775p_context_bank_table[] = {
-	{"qcom,vidc,cb-ns", 0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE, 0},
-	{"qcom,vidc,cb-ns-pxl", 0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0},
-	{"qcom,vidc,cb-sec-non-pxl",   0x01400000, 0x24400000, 1, 0, MSM_VIDC_SECURE_NONPIXEL, 0},
+const struct context_bank_table qcs8300_context_bank_table[] = {
+	{"qcom,vidc,cb-ns", 0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE, 0 }, //todo
+	{"qcom,vidc,cb-ns-pxl", 0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0 },
+	{"qcom,vidc,cb-sec-non-pxl",   0x01000000, 0x24800000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
 };
 
 /* freq */
-static struct freq_table sa8775p_freq_table[] = {
-	{560000000}, {533000000}, {444000000}, {366000000}
+static struct freq_table qcs8300_freq_table[] = {
+	{560000000}, {533000000}, {444000000}, {366000000}  //same with sa8775p, sync from auto
 };
 
 /* register, value, mask */
-static const struct reg_preset_table sa8775p_reg_preset_table[] = {
+static const struct reg_preset_table qcs8300_reg_preset_table[] = {
 	{ 0xB0088, 0x0, 0x11 },
 };
 
 /* decoder properties */
-static const u32 sa8775p_vdec_psc_avc[] = {
+static const u32 qcs8300_vdec_psc_avc[] = {
 	HFI_PROP_BITSTREAM_RESOLUTION,
 	HFI_PROP_CROP_OFFSETS,
 	HFI_PROP_CODED_FRAMES,
@@ -2555,7 +2401,7 @@ static const u32 sa8775p_vdec_psc_avc[] = {
 	HFI_PROP_MAX_NUM_REORDER_FRAMES,
 };
 
-static const u32 sa8775p_vdec_psc_hevc[] = {
+static const u32 qcs8300_vdec_psc_hevc[] = {
 	HFI_PROP_BITSTREAM_RESOLUTION,
 	HFI_PROP_CROP_OFFSETS,
 	HFI_PROP_LUMA_CHROMA_BIT_DEPTH,
@@ -2567,7 +2413,7 @@ static const u32 sa8775p_vdec_psc_hevc[] = {
 	HFI_PROP_MAX_NUM_REORDER_FRAMES,
 };
 
-static const u32 sa8775p_vdec_psc_vp9[] = {
+static const u32 qcs8300_vdec_psc_vp9[] = {
 	HFI_PROP_BITSTREAM_RESOLUTION,
 	HFI_PROP_CROP_OFFSETS,
 	HFI_PROP_LUMA_CHROMA_BIT_DEPTH,
@@ -2576,7 +2422,7 @@ static const u32 sa8775p_vdec_psc_vp9[] = {
 	HFI_PROP_LEVEL,
 };
 
-static const u32 sa8775p_vdec_psc_av1[] = {
+static const u32 qcs8300_vdec_psc_av1[] = {
 	HFI_PROP_BITSTREAM_RESOLUTION,
 	HFI_PROP_CROP_OFFSETS,
 	HFI_PROP_LUMA_CHROMA_BIT_DEPTH,
@@ -2589,22 +2435,22 @@ static const u32 sa8775p_vdec_psc_av1[] = {
 	HFI_PROP_SIGNAL_COLOR_INFO,
 };
 
-static const u32 sa8775p_vdec_input_properties_avc[] = {
+static const u32 qcs8300_vdec_input_properties_avc[] = {
 	HFI_PROP_NO_OUTPUT,
 	HFI_PROP_SUBFRAME_INPUT,
 };
 
-static const u32 sa8775p_vdec_input_properties_hevc[] = {
+static const u32 qcs8300_vdec_input_properties_hevc[] = {
 	HFI_PROP_NO_OUTPUT,
 	HFI_PROP_SUBFRAME_INPUT,
 };
 
-static const u32 sa8775p_vdec_input_properties_vp9[] = {
+static const u32 qcs8300_vdec_input_properties_vp9[] = {
 	HFI_PROP_NO_OUTPUT,
 	HFI_PROP_SUBFRAME_INPUT,
 };
 
-static const u32 sa8775p_vdec_input_properties_av1[] = {
+static const u32 qcs8300_vdec_input_properties_av1[] = {
 	HFI_PROP_NO_OUTPUT,
 	HFI_PROP_SUBFRAME_INPUT,
 	HFI_PROP_DPB_LIST,
@@ -2612,7 +2458,7 @@ static const u32 sa8775p_vdec_input_properties_av1[] = {
 	HFI_PROP_AV1_UNIFORM_TILE_SPACING,
 };
 
-static const u32 sa8775p_vdec_output_properties_avc[] = {
+static const u32 qcs8300_vdec_output_properties_avc[] = {
 	HFI_PROP_WORST_COMPRESSION_RATIO,
 	HFI_PROP_WORST_COMPLEXITY_FACTOR,
 	HFI_PROP_PICTURE_TYPE,
@@ -2620,21 +2466,21 @@ static const u32 sa8775p_vdec_output_properties_avc[] = {
 	HFI_PROP_CABAC_SESSION,
 };
 
-static const u32 sa8775p_vdec_output_properties_hevc[] = {
+static const u32 qcs8300_vdec_output_properties_hevc[] = {
 	HFI_PROP_WORST_COMPRESSION_RATIO,
 	HFI_PROP_WORST_COMPLEXITY_FACTOR,
 	HFI_PROP_PICTURE_TYPE,
 	HFI_PROP_DPB_LIST,
 };
 
-static const u32 sa8775p_vdec_output_properties_vp9[] = {
+static const u32 qcs8300_vdec_output_properties_vp9[] = {
 	HFI_PROP_WORST_COMPRESSION_RATIO,
 	HFI_PROP_WORST_COMPLEXITY_FACTOR,
 	HFI_PROP_PICTURE_TYPE,
 	HFI_PROP_DPB_LIST,
 };
 
-static const u32 sa8775p_vdec_output_properties_av1[] = {
+static const u32 qcs8300_vdec_output_properties_av1[] = {
 	HFI_PROP_WORST_COMPRESSION_RATIO,
 	HFI_PROP_WORST_COMPLEXITY_FACTOR,
 	HFI_PROP_PICTURE_TYPE,
@@ -2642,84 +2488,84 @@ static const u32 sa8775p_vdec_output_properties_av1[] = {
 	HFI_PROP_CABAC_SESSION,
 };
 
-static const struct msm_vidc_platform_data sa8775p_data = {
+static const struct msm_vidc_platform_data qcs8300_data = {
 	/* resources dependent on other module */
-	.bw_tbl = sa8775p_bw_table,
-	.bw_tbl_size = ARRAY_SIZE(sa8775p_bw_table),
-	.clk_tbl = sa8775p_clk_table,
-	.clk_tbl_size = ARRAY_SIZE(sa8775p_clk_table),
-	.clk_rst_tbl = sa8775p_clk_reset_table,
-	.clk_rst_tbl_size = ARRAY_SIZE(sa8775p_clk_reset_table),
+	.bw_tbl = qcs8300_bw_table,
+	.bw_tbl_size = ARRAY_SIZE(qcs8300_bw_table),
+	.clk_tbl = qcs8300_clk_table,
+	.clk_tbl_size = ARRAY_SIZE(qcs8300_clk_table),
+	.clk_rst_tbl = qcs8300_clk_reset_table,
+	.clk_rst_tbl_size = ARRAY_SIZE(qcs8300_clk_reset_table),
 	.subcache_tbl = NULL,
 	.subcache_tbl_size = 0,
 
 	/* populate context bank */
-	.context_bank_tbl = sa8775p_context_bank_table,
-	.context_bank_tbl_size = ARRAY_SIZE(sa8775p_context_bank_table),
+	.context_bank_tbl = qcs8300_context_bank_table,
+	.context_bank_tbl_size = ARRAY_SIZE(qcs8300_context_bank_table),
 
 	/* populate power domain and opp table */
-	.pd_tbl = sa8775p_pd_table,
-	.pd_tbl_size = ARRAY_SIZE(sa8775p_pd_table),
+	.pd_tbl = qcs8300_pd_table,
+	.pd_tbl_size = ARRAY_SIZE(qcs8300_pd_table),
 
 	/* platform specific resources */
-	.freq_tbl = sa8775p_freq_table,
-	.freq_tbl_size = ARRAY_SIZE(sa8775p_freq_table),
-	.reg_prst_tbl = sa8775p_reg_preset_table,
-	.reg_prst_tbl_size = ARRAY_SIZE(sa8775p_reg_preset_table),
-	.fwname = "./qcom/vpu-3.0/vpu30_4v",
+	.freq_tbl = qcs8300_freq_table,
+	.freq_tbl_size = ARRAY_SIZE(qcs8300_freq_table),
+	.reg_prst_tbl = qcs8300_reg_preset_table,
+	.reg_prst_tbl_size = ARRAY_SIZE(qcs8300_reg_preset_table),
+	.fwname = "./qcom/vpu-3.0/vpu30_4v",    //todo
 	.pas_id = 9,
 	.supports_mmrm = 0,
 
 	/* caps related resorces */
-	.core_data = core_data_sa8775p,
-	.core_data_size = ARRAY_SIZE(core_data_sa8775p),
-	.inst_cap_data = instance_cap_data_sa8775p,
-	.inst_cap_data_size = ARRAY_SIZE(instance_cap_data_sa8775p),
-	.inst_cap_dependency_data = instance_cap_dependency_data_sa8775p,
-	.inst_cap_dependency_data_size = ARRAY_SIZE(instance_cap_dependency_data_sa8775p),
+	.core_data = core_data_qcs8300,
+	.core_data_size = ARRAY_SIZE(core_data_qcs8300),
+	.inst_cap_data = instance_cap_data_qcs8300,
+	.inst_cap_data_size = ARRAY_SIZE(instance_cap_data_qcs8300),
+	.inst_cap_dependency_data = instance_cap_dependency_data_qcs8300,
+	.inst_cap_dependency_data_size = ARRAY_SIZE(instance_cap_dependency_data_qcs8300),
 	.csc_data.vpe_csc_custom_bias_coeff = vpe_csc_custom_bias_coeff,
 	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
-	.ubwc_config = ubwc_config_sa8775p,
-	.format_data = &format_data_sa8775p,
+	.ubwc_config = ubwc_config_qcs8300,
+	.format_data = &format_data_qcs8300,
 
 	/* decoder properties related*/
-	.psc_avc_tbl = sa8775p_vdec_psc_avc,
-	.psc_avc_tbl_size = ARRAY_SIZE(sa8775p_vdec_psc_avc),
-	.psc_hevc_tbl = sa8775p_vdec_psc_hevc,
-	.psc_hevc_tbl_size = ARRAY_SIZE(sa8775p_vdec_psc_hevc),
-	.psc_vp9_tbl = sa8775p_vdec_psc_vp9,
-	.psc_vp9_tbl_size = ARRAY_SIZE(sa8775p_vdec_psc_vp9),
-	.psc_av1_tbl = sa8775p_vdec_psc_av1,
-	.psc_av1_tbl_size = ARRAY_SIZE(sa8775p_vdec_psc_av1),
-	.dec_input_prop_avc = sa8775p_vdec_input_properties_avc,
-	.dec_input_prop_hevc = sa8775p_vdec_input_properties_hevc,
-	.dec_input_prop_vp9 = sa8775p_vdec_input_properties_vp9,
-	.dec_input_prop_av1 = sa8775p_vdec_input_properties_av1,
-	.dec_input_prop_size_avc = ARRAY_SIZE(sa8775p_vdec_input_properties_avc),
-	.dec_input_prop_size_hevc = ARRAY_SIZE(sa8775p_vdec_input_properties_hevc),
-	.dec_input_prop_size_vp9 = ARRAY_SIZE(sa8775p_vdec_input_properties_vp9),
-	.dec_input_prop_size_av1 = ARRAY_SIZE(sa8775p_vdec_input_properties_av1),
-	.dec_output_prop_avc = sa8775p_vdec_output_properties_avc,
-	.dec_output_prop_hevc = sa8775p_vdec_output_properties_hevc,
-	.dec_output_prop_vp9 = sa8775p_vdec_output_properties_vp9,
-	.dec_output_prop_av1 = sa8775p_vdec_output_properties_av1,
-	.dec_output_prop_size_avc = ARRAY_SIZE(sa8775p_vdec_output_properties_avc),
-	.dec_output_prop_size_hevc = ARRAY_SIZE(sa8775p_vdec_output_properties_hevc),
-	.dec_output_prop_size_vp9 = ARRAY_SIZE(sa8775p_vdec_output_properties_vp9),
-	.dec_output_prop_size_av1 = ARRAY_SIZE(sa8775p_vdec_output_properties_av1),
+	.psc_avc_tbl = qcs8300_vdec_psc_avc,
+	.psc_avc_tbl_size = ARRAY_SIZE(qcs8300_vdec_psc_avc),
+	.psc_hevc_tbl = qcs8300_vdec_psc_hevc,
+	.psc_hevc_tbl_size = ARRAY_SIZE(qcs8300_vdec_psc_hevc),
+	.psc_vp9_tbl = qcs8300_vdec_psc_vp9,
+	.psc_vp9_tbl_size = ARRAY_SIZE(qcs8300_vdec_psc_vp9),
+	.psc_av1_tbl = qcs8300_vdec_psc_av1,
+	.psc_av1_tbl_size = ARRAY_SIZE(qcs8300_vdec_psc_av1),
+	.dec_input_prop_avc = qcs8300_vdec_input_properties_avc,
+	.dec_input_prop_hevc = qcs8300_vdec_input_properties_hevc,
+	.dec_input_prop_vp9 = qcs8300_vdec_input_properties_vp9,
+	.dec_input_prop_av1 = qcs8300_vdec_input_properties_av1,
+	.dec_input_prop_size_avc = ARRAY_SIZE(qcs8300_vdec_input_properties_avc),
+	.dec_input_prop_size_hevc = ARRAY_SIZE(qcs8300_vdec_input_properties_hevc),
+	.dec_input_prop_size_vp9 = ARRAY_SIZE(qcs8300_vdec_input_properties_vp9),
+	.dec_input_prop_size_av1 = ARRAY_SIZE(qcs8300_vdec_input_properties_av1),
+	.dec_output_prop_avc = qcs8300_vdec_output_properties_avc,
+	.dec_output_prop_hevc = qcs8300_vdec_output_properties_hevc,
+	.dec_output_prop_vp9 = qcs8300_vdec_output_properties_vp9,
+	.dec_output_prop_av1 = qcs8300_vdec_output_properties_av1,
+	.dec_output_prop_size_avc = ARRAY_SIZE(qcs8300_vdec_output_properties_avc),
+	.dec_output_prop_size_hevc = ARRAY_SIZE(qcs8300_vdec_output_properties_hevc),
+	.dec_output_prop_size_vp9 = ARRAY_SIZE(qcs8300_vdec_output_properties_vp9),
+	.dec_output_prop_size_av1 = ARRAY_SIZE(qcs8300_vdec_output_properties_av1),
 
 	/* Fuse specific resources */
-	.efuse_data = efuse_data_sa8775p,
-	.efuse_data_size = ARRAY_SIZE(efuse_data_sa8775p),
+	.efuse_data = efuse_data_qcs8300,
+	.efuse_data_size = ARRAY_SIZE(efuse_data_qcs8300),
 	.sku_version = SKU_VERSION_0,
 };
 
 static int msm_vidc_init_data(struct msm_vidc_core *core)
 {
-	d_vpr_h("%s: initialize sa8775p data\n", __func__);
+	d_vpr_h("%s: initialize qcs8300 data\n", __func__);
 
-	core->platform->data = sa8775p_data;
+	core->platform->data = qcs8300_data;
 
 	core->mem_ops = get_mem_ops_ext();
 	if (!core->mem_ops) {
@@ -2730,7 +2576,7 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 	return 0;
 }
 
-int msm_vidc_init_platform_sa8775p(struct msm_vidc_core *core)
+int msm_vidc_init_platform_qcs8300(struct msm_vidc_core *core)
 {
 	return msm_vidc_init_data(core);
 }
