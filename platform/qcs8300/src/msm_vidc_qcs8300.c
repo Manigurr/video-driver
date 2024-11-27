@@ -2358,6 +2358,9 @@ static const struct pd_table qcs8300_pd_table[] = {
 	{ "vcodec"   },
 };
 
+/* name */
+static const char * const qcs8300_opp_pd_table[] = { "mx", "mmcx", NULL };
+
 /* name, clock id, scaling */
 static const struct clk_table qcs8300_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
@@ -2506,6 +2509,9 @@ static const struct msm_vidc_platform_data qcs8300_data = {
 	/* populate power domain and opp table */
 	.pd_tbl = qcs8300_pd_table,
 	.pd_tbl_size = ARRAY_SIZE(qcs8300_pd_table),
+	.opp_tbl = qcs8300_opp_pd_table,
+	.opp_tbl_size = ARRAY_SIZE(qcs8300_opp_pd_table),
+
 
 	/* platform specific resources */
 	.freq_tbl = qcs8300_freq_table,
