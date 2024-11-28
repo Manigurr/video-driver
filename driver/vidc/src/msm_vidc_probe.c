@@ -652,6 +652,11 @@ static int vidc_reboot_notify(
 			/* close gvm */
 			virtio_video_msm_cmd_close_gvm();
 			core->is_gvm_open = false;
+			/* update core state and clear all substates */
+			msm_vidc_change_core_sub_state(core,
+				CORE_SUBSTATE_MAX - 1, 0, __func__);
+			msm_vidc_change_core_state(core,
+				MSM_VIDC_CORE_DEINIT, __func__);
 		}
 		break;
 	}
@@ -1014,6 +1019,11 @@ static void __exit msm_vidc_exit(void)
 		virtio_video_msm_cmd_close_gvm();
 #endif
 		core->is_gvm_open = false;
+		/* update core state and clear all substates */
+		msm_vidc_change_core_sub_state(core,
+			CORE_SUBSTATE_MAX - 1, 0, __func__);
+		msm_vidc_change_core_state(core,
+			MSM_VIDC_CORE_DEINIT, __func__);
 	}
 
 	platform_driver_unregister(&msm_vidc_driver);
