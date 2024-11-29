@@ -3,8 +3,10 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#ifndef MSM_VIDC_HW_VIRT
 #include <dt-bindings/clock/qcom,gcc-nordau.h>
 #include <dt-bindings/clock/qcom,videocc-nordau.h>
+#endif
 
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <soc/qcom/of_common.h>
@@ -2636,6 +2638,7 @@ static const struct regulator_table nordau_regulator_table[] = {
 	{ "vcodec1",  1 },
 };
 
+#ifndef MSM_VIDC_HW_VIRT
 /* name, clock id, scaling */
 static const struct clk_table nordau_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
@@ -2643,6 +2646,7 @@ static const struct clk_table nordau_clk_table[] = {
 	{ "vcodec_clk",             VIDEO_CC_MVS0_CLK,      0 },
 	{ "video_cc_mvs0_clk_src",  VIDEO_CC_MVS0_CLK_SRC,  1 },
 };
+#endif
 
 /* name */
 static const struct clk_rst_table nordau_clk_reset_table[] = {
@@ -2687,8 +2691,10 @@ static const struct msm_vidc_platform_data nordau_data = {
 	.bw_tbl_size = ARRAY_SIZE(nordau_bw_table),
 	.regulator_tbl = nordau_regulator_table,
 	.regulator_tbl_size = ARRAY_SIZE(nordau_regulator_table),
+#ifndef MSM_VIDC_HW_VIRT
 	.clk_tbl = nordau_clk_table,
 	.clk_tbl_size = ARRAY_SIZE(nordau_clk_table),
+#endif
 	.clk_rst_tbl = nordau_clk_reset_table,
 	.clk_rst_tbl_size = ARRAY_SIZE(nordau_clk_reset_table),
 	// .subcache_tbl = nordau_subcache_table,
