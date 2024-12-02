@@ -5,26 +5,27 @@ ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
 		TARGET_VIDC_ENABLE := true
 	endif
 else
-TARGET_VIDC_ENABLE := true
+	TARGET_VIDC_ENABLE := true
 endif
+
+#Set FULL_VIRTUALIZATION_ENABLE to false to enable paravirtualization
+FULL_VIRTUALIZATION_ENABLE := true
 
 # Build video kernel driver
 ifeq ($(TARGET_VIDC_ENABLE),true)
-ifeq ($(TARGET_BOARD_AUTO),true)
-ifeq ($(call is-board-platform-in-list,$(TARGET_BOARD_PLATFORM)),true)
-ifneq ($(ENABLE_HYP),true)
-BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
-BUILD_VIDEO_TECHPACK_SOURCE := true
-else
-	ifeq ($(TARGET_BOARD_PLATFORM),gen5)
-		BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
-		BUILD_VIDEO_TECHPACK_SOURCE := true
+	ifeq ($(TARGET_BOARD_AUTO),true)
+		ifeq ($(call is-board-platform-in-list,$(TARGET_BOARD_PLATFORM)),true)
+			ifneq ($(ENABLE_HYP),true)
+				BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
+			else
+				ifeq ($(TARGET_BOARD_PLATFORM),gen5)
+					ifeq ($(FULL_VIRTUALIZATION_ENABLE),true)
+						BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/msm_video.ko
+					endif
+				endif
+			endif
+		endif
 	endif
 endif
-endif
-endif
-endif
 
-ifeq ($(ENABLE_HYP),true)
 BUILD_VIDEO_TECHPACK_SOURCE := true
-endif
