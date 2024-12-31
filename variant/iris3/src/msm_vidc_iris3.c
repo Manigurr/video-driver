@@ -249,11 +249,6 @@ static int __switch_gdsc_mode_iris3(struct msm_vidc_core *core, bool sw_mode)
 {
 	int rc;
 
-	if (!core->capabilities[SW_PC].value) {
-		//GDSC switch is disable and kept in SW mode when sw_pc is diabled
-		return 0;
-	}
-
 	if (sw_mode) {
 		rc = __write_register(core, WRAPPER_CORE_POWER_CONTROL, 0x0);
 		if (rc)
