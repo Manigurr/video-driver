@@ -554,6 +554,14 @@ static int __power_on_iris3_hardware(struct msm_vidc_core *core)
 {
 	int rc = 0;
 
+	/* When the vcodec GDSC is powered on, it moves into HW control. As it moves into HW control,
+	 * vcodec is initiated with power down sequence. Driver then requests for migrating GDSC into
+	 * sw control, which implies power up sequence for vcodec. Due to b2b switch of power off and
+	 * on for video hardware, it ends up in transient state and hungs eventually.
+	 * Writing the register explicitly to avoid power off sequence when HW control is set.
+	 */
+	writel_relaxed(0x0, (u8 *)core->resource->register_base_addr + WRAPPER_CORE_POWER_CONTROL);
+
 	rc = call_res_op(core, gdsc_on, core, "vcodec");
 	if (rc)
 		goto fail_regulator;
