@@ -27,7 +27,6 @@
 #define DEFAULT_BITRATE         20000000
 #define MINIMUM_FPS             1
 #define MAXIMUM_FPS             480
-#define MAXIMUM_DEC_FPS         960
 #define MAX_QP                  51
 #define DEFAULT_QP              20
 #define MAX_CONSTANT_QUALITY    100
@@ -35,7 +34,7 @@
 #define MAX_SLICE_BYTE_SIZE       \
     ((MAX_BITRATE) >> 3)
 #define MAX_SLICE_MB_SIZE         \
-    (((4096 + 15) >> 4) * ((2304 + 15) >> 4))
+    (((4096 + 15) >> 4) * ((2160 + 15) >> 4))
 
 #define ENC     MSM_VIDC_ENCODER
 #define DEC     MSM_VIDC_DECODER
@@ -277,11 +276,10 @@ static struct msm_platform_core_capability core_data_qcs8300[] = {
 	{MAX_NUM_720P_SESSIONS, 16},
 	{MAX_NUM_1080P_SESSIONS, 16},
 	{MAX_NUM_4K_SESSIONS, 4},
-	{MAX_NUM_8K_SESSIONS, 1},
 	{MAX_SECURE_SESSION_COUNT, 3},
-	{MAX_RT_MBPF, ((8192 * 4352) / 256)},	/* (8192*4352)/256*/
-	{MAX_MBPF, ((8192 * 4352) / 256)}, /* (8192*4352)/256*/
-	{MAX_MBPS, (((7680 * 4320) / 256) * 30)},	/* max_load 7680x4320@30fps*/
+	{MAX_RT_MBPF, (((4096 * 2176) / 256) * 4)},	/* (4096*2176)/256 * 4 */
+	{MAX_MBPF, (((4096 * 2176) / 256) * 4)}, /* (4096*2176)/256 * 4 */
+	{MAX_MBPS, (((3840 * 2176) / 256) * 120)},	/* max_load 3840x2176@120fps */
 	{MAX_IMAGE_MBPF, ((16384 * 16384) / 256)},  /* (16384x16384)/256 */
 	{MAX_MBPF_HQ, ((1280 * 720) / 256)}, /* ((1280*720)/256)) */
 	{MAX_MBPS_HQ, (((1280 * 720) / 256) * 30)}, /* ((1280*720)/256))@30fps */
@@ -321,9 +319,9 @@ static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 		0, INT_MAX, 1, DRIVER_VERSION,
 		V4L2_CID_MPEG_VIDC_DRIVER_VERSION},
 
-	{FRAME_WIDTH, DEC, CODECS_ALL, 96, 8192, 1, 1920},
+	{FRAME_WIDTH, DEC, CODECS_ALL, 96, 4096, 1, 1920},
 
-	{FRAME_WIDTH, ENC, ENC_CODECS_ALL, 128, 8192, 1, 1920},
+	{FRAME_WIDTH, ENC, ENC_CODECS_ALL, 128, 4096, 1, 1920},
 
 	{LOSSLESS_FRAME_WIDTH, ENC, HEVC, 96, 1280, 1, 1280},
 
@@ -331,9 +329,9 @@ static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 
 	{SECURE_FRAME_WIDTH, ENC, ENC_CODECS_ALL, 128, 4096, 1, 1920},
 
-	{FRAME_HEIGHT, DEC, CODECS_ALL, 96, 8192, 1, 1080},
+	{FRAME_HEIGHT, DEC, CODECS_ALL, 96, 4096, 1, 1080},
 
-	{FRAME_HEIGHT, ENC, ENC_CODECS_ALL, 128, 8192, 1, 1080},
+	{FRAME_HEIGHT, ENC, ENC_CODECS_ALL, 128, 4096, 1, 1080},
 
 	{LOSSLESS_FRAME_HEIGHT, ENC, HEVC, 96, 720, 1, 720},
 
@@ -371,25 +369,25 @@ static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 		HFI_PROP_BUFFER_FW_MIN_OUTPUT_COUNT,
 		CAP_FLAG_OUTPUT_PORT | CAP_FLAG_VOLATILE},
 
-	/* (8192 * 4320) / 256 */
-	{MBPF, ENC, CODECS_ALL, 64, 138240, 1, 138240},
+	/* (4096 * 2176) / 256 */
+	{MBPF, ENC, CODECS_ALL, 64, 34816, 1, 34816},
 
-	{MBPF, DEC, CODECS_ALL, 36, 138240, 1, 138240},
+	{MBPF, DEC, CODECS_ALL, 36, 34816, 1, 34816},
 
-	/* (4096 * 2304) / 256 */
-	{MBPF, DEC, VP9, 36, 36864, 1, 36864},
+	/* (4096 * 2176) / 256 */
+	{MBPF, DEC, VP9, 36, 34816, 1, 34816},
 
-	/* (4096 * 2304) / 256 */
-	{LOSSLESS_MBPF, ENC, ENC_CODECS_ALL, 64, 36864, 1, 36864},
+	/* (4096 * 2176) / 256 */
+	{LOSSLESS_MBPF, ENC, ENC_CODECS_ALL, 64, 34816, 1, 34816},
 
 	/* Batch Mode Decode */
 	/* TODO: update with new values based on updated voltage corner */
 	{BATCH_MBPF, DEC, CODECS_ALL, 64, 34816, 1, 34816},
 
-	/* (4096 * 2304) / 256 */
+	/* (4096 * 2176) / 256 */
 	{BATCH_FPS, DEC, CODECS_ALL, 1, 120, 1, 120},
 
-	{SECURE_MBPF, ENC | DEC, CODECS_ALL, 64, 36864, 1, 36864},
+	{SECURE_MBPF, ENC | DEC, CODECS_ALL, 64, 34816, 1, 34816},
 
 	{FRAME_RATE, ENC, CODECS_ALL,
 		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
@@ -399,7 +397,7 @@ static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 		CAP_FLAG_OUTPUT_PORT},
 
 	{FRAME_RATE, DEC, CODECS_ALL,
-		(MINIMUM_FPS << 16), (MAXIMUM_DEC_FPS << 16),
+		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
 		1, (DEFAULT_FPS << 16),
 		V4L2_CID_MPEG_VIDC_FRAME_RATE,
 		0,
@@ -411,7 +409,7 @@ static struct msm_platform_inst_capability instance_cap_data_qcs8300[] = {
 		1, (DEFAULT_FPS << 16)},
 
 	{OPERATING_RATE, DEC, CODECS_ALL,
-		(MINIMUM_FPS << 16), (MAXIMUM_DEC_FPS << 16),
+		(MINIMUM_FPS << 16), (MAXIMUM_FPS << 16),
 		1, (DEFAULT_FPS << 16),
 		V4L2_CID_MPEG_VIDC_OPERATING_RATE,
 		0,
@@ -2375,7 +2373,7 @@ static const struct clk_rst_table qcs8300_clk_reset_table[] = {
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
 const struct context_bank_table qcs8300_context_bank_table[] = {
-	{"qcom,vidc,cb-ns", 0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE, 0 }, //todo
+	{"qcom,vidc,cb-ns", 0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE, 0 },
 	{"qcom,vidc,cb-ns-pxl", 0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0 },
 	{"qcom,vidc,cb-sec-non-pxl",   0x01000000, 0x24800000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
 };
@@ -2518,7 +2516,7 @@ static const struct msm_vidc_platform_data qcs8300_data = {
 	.freq_tbl_size = ARRAY_SIZE(qcs8300_freq_table),
 	.reg_prst_tbl = qcs8300_reg_preset_table,
 	.reg_prst_tbl_size = ARRAY_SIZE(qcs8300_reg_preset_table),
-	.fwname = "./qcom/vpu-3.0/vpu30_4v",    //todo
+	.fwname = "./qcom/vpu-3.0/vpu30_4v",
 	.pas_id = 9,
 	.supports_mmrm = 0,
 
