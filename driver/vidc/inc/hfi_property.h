@@ -503,6 +503,8 @@ enum hfi_nal_length_field_type {
 
 #define HFI_PROP_NO_INPUT                                       0x0300019B
 
+#define HFI_PROP_LSR_SESSION                                    0x03F00000
+
 #define HFI_PROP_END                                            0x03FFFFFF
 
 #define HFI_SESSION_ERROR_BEGIN                                 0x04000000
