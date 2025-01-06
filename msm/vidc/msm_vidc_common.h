@@ -446,4 +446,5 @@ int msm_comm_memory_drain(struct msm_vidc_inst *inst);
 int msm_comm_check_prefetch_sufficient(struct msm_vidc_inst *inst);
 int msm_comm_check_memory_supported(struct msm_vidc_inst *vidc_inst);
 int msm_comm_update_dpb_bufreqs(struct msm_vidc_inst *inst);
+int msm_comm_get_dpb_bufreqs(struct msm_vidc_inst *inst, struct hal_buffer_requirements *req);
 #endif

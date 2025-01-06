@@ -129,6 +129,23 @@ union msm_v4l2_cmd {
 	struct v4l2_encoder_cmd enc;
 };
 
+struct h264_level_table {
+	u64 level;
+	u64 max_mbsps;
+	u64 max_frame_size;
+	u64 max_bit_rate;
+	u64 max_dpb_mbs;
+};
+
+struct h265_level_table {
+	u64 level;
+	u64 max_mbsps;
+	u64 max_frame_size;
+	u64 max_br_main_tier;
+	u64 max_br_high_tier;
+};
+
+int msm_vidc_adjust_level_tier(void *instance);
 void *msm_vidc_open(int core_id, int session_type);
 int msm_vidc_close(void *instance);
 int msm_vidc_suspend(int core_id);

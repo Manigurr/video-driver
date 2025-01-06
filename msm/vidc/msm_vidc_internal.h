@@ -585,6 +585,8 @@ struct msm_vidc_inst {
 	u32 colour_space;
 	u32 profile;
 	u32 level;
+	u32 tier;
+	bool tier_client_set;
 	u32 entropy_mode;
 	u32 rc_type;
 	u32 hybrid_hp;
