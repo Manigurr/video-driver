@@ -36,6 +36,7 @@ struct msm_vidc_venus_ops {
 	int (*power_off)(struct msm_vidc_core *core);
 	int (*watchdog)(struct msm_vidc_core *core, u32 intr_status);
 	int (*noc_error_info)(struct msm_vidc_core *core);
+	int (*setup_intr)(struct msm_vidc_core *core);
 };
 
 struct msm_vidc_mem_addr {

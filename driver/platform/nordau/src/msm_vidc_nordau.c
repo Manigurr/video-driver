@@ -2661,12 +2661,12 @@ static const struct subcache_table nordau_subcache_table[] = {
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
 const struct context_bank_table nordau_context_bank_table[] = {
-	{"qcom,vidc,cb-ns-non-pxl",    0x92400000, 0x1f400000, 0, 1,
-		MSM_VIDC_NON_SECURE_NONPIXEL, 0 },
+	{"qcom,vidc,cb-ns",    0x92400000, 0x1f400000, 0, 1,
+		MSM_VIDC_NON_SECURE, 0 },
 	{"qcom,vidc,cb-ns-pxl",        0x00500000, 0xefb00000, 0, 1,
 		MSM_VIDC_NON_SECURE_PIXEL,    0 },
-	{"qcom,vidc,cb-ns",            0x00500000, 0xefb00000, 0, 1,
-		MSM_VIDC_NON_SECURE,          0 },
+	{"qcom,vidc,cb-ns-bitstream",            0x00500000, 0xefb00000, 0, 1,
+		MSM_VIDC_NON_SECURE_BITSTREAM,          0 },
 	{"qcom,vidc,cb-sec-pxl",       0x00500000, 0xefb00000, 1, 0,
 		MSM_VIDC_SECURE_PIXEL,        0 },
 	{"qcom,vidc,cb-sec-non-pxl",   0x0d800000, 0x0c800000, 1, 0,
@@ -2755,9 +2755,13 @@ static int msm_vidc_init_data(struct msm_vidc_core *core, struct device *dev)
 
 	core->platform->data = nordau_data;
 	core->mem_ops = get_mem_ops_ext();
-	rc = msm_vidc_nordau_check_ddr_type();
-	if (rc)
-		return rc;
+
+	/* if hw_virt, skip ddr check */
+	if (!core->is_hw_virt) {
+		rc = msm_vidc_nordau_check_ddr_type();
+		if (rc)
+			return rc;
+	}
 
 	return rc;
 }

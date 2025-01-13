@@ -1058,6 +1058,13 @@ adjust:
 	return 0;
 }
 
+static int __setup_intr_iris33_au(struct msm_vidc_core *vidc_core)
+{
+	/* Enable interrupt */
+	d_vpr_h("%s(): enable intr\n", __func__);
+	return __write_register(vidc_core, CPU_CS_H2XSOFTINTEN_IRIS33_AU, 0x1);
+}
+
 
 
 static struct msm_vidc_venus_ops iris33_au_ops = {
@@ -1069,6 +1076,7 @@ static struct msm_vidc_venus_ops iris33_au_ops = {
 	.prepare_pc = __prepare_pc_iris33_au,
 	.watchdog = __watchdog_iris33_au,
 	.noc_error_info = __noc_error_info_iris33_au,
+	.setup_intr = __setup_intr_iris33_au,
 };
 
 static struct msm_vidc_session_ops msm_session_ops = {

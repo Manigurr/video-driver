@@ -4917,6 +4917,8 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 				__func__);
 			msm_vidc_change_core_sub_state(core, 0,
 				CORE_SUBSTATE_POWER_ENABLE, __func__);
+
+			call_venus_op(core, setup_intr, core);
 #ifdef MSM_VIDC_HW_VIRT
 			core->pvm_event_handler_thread = kthread_run(msm_vidc_pvm_event_handler,
 					core, "msm_vidc_pvm_evt_handler");
