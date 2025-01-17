@@ -178,22 +178,14 @@ exit:
 
 void msm_vb2_put(void *buf_priv)
 {
-	struct msm_vidc_buffer *ro_buf, *dummy;
 	struct msm_vidc_buffer *buf = buf_priv;
 	struct msm_vidc_inst *inst = buf->inst;
 	struct msm_vidc_core *core = inst->core;
 	struct context_bank_info *cb = NULL;
 	enum msm_vidc_buffer_region region;
 
-	if (is_decode_session(inst) && is_output_buffer(buf->type)) {
-		list_for_each_entry_safe(ro_buf, dummy, &inst->buffers.read_only.list, list) {
-			if (ro_buf->device_addr != buf->device_addr)
-				continue;
-			buf->kvaddr = NULL;
-			buf->device_addr = 0x0;
-			return;
-		}
-	}
+	if (refcount_read(&buf->refcount) == 0)
+		return;
 
 	region = call_mem_op(core, buffer_region, inst, buf->type);
 	cb = msm_vidc_get_context_bank_for_region(inst->core, region);
