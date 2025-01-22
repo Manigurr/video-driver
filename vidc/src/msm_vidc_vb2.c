@@ -207,7 +207,6 @@ void msm_vb2_put(void *buf_priv)
 
 int msm_vb2_mmap(void *buf_priv, struct vm_area_struct *vma)
 {
-	struct msm_vidc_buffer *ro_buf, *dummy;
 	struct msm_vidc_buffer *buf = buf_priv;
 	struct msm_vidc_inst *inst = buf->inst;
 	struct msm_vidc_core *core = inst->core;
@@ -217,17 +216,6 @@ int msm_vb2_mmap(void *buf_priv, struct vm_area_struct *vma)
 
 	if (!buf)
 		return -EINVAL;
-
-	if (is_decode_session(inst) && is_output_buffer(buf->type)) {
-		list_for_each_entry_safe(ro_buf, dummy, &inst->buffers.read_only.list, list) {
-			if (ro_buf->device_addr != buf->device_addr)
-				continue;
-			vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
-			vma->vm_private_data	= &ro_buf->handler;
-			vma->vm_ops		= &vb2_common_vm_ops;
-			return 0;
-		}
-	}
 
 	region = call_mem_op(core, buffer_region, inst, buf->type);
 	cb = msm_vidc_get_context_bank_for_region(inst->core, region);
