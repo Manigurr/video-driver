@@ -551,12 +551,7 @@ static int __resume(struct msm_vidc_core *core)
 	}
 	__set_subcaches(core);
 
-	if (!core->capabilities[SW_PC].value) {
-		rc = __sys_set_power_control(core, false);
-	} else {
-		rc = __sys_set_power_control(core, true);
-	}
-
+	rc = __sys_set_power_control(core, true);
 	if (rc) {
 		d_vpr_e("%s: set power control failed\n", __func__);
 		call_res_op(core, gdsc_sw_ctrl, core);
@@ -834,12 +829,7 @@ int venus_hfi_core_init(struct msm_vidc_core *core)
 	if (rc)
 		goto error;
 
-	if (!core->capabilities[SW_PC].value) {
-		rc = __sys_set_power_control(core, false);
-	} else {
-		rc = __sys_set_power_control(core, true);
-	}
-
+	rc = __sys_set_power_control(core, true);
 	if (rc) {
 		d_vpr_e("%s: set power control failed\n", __func__);
 		call_res_op(core, gdsc_sw_ctrl, core);

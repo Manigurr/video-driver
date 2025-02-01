@@ -4436,9 +4436,6 @@ int msm_vidc_flush_read_only_buffers(struct msm_vidc_inst *inst,
 		if (ro_buf->attach && ro_buf->dmabuf)
 			call_mem_op(core, dma_buf_detach, core,
 				ro_buf->dmabuf, ro_buf->attach);
-		if (ro_buf->kvaddr && ro_buf->device_addr)
-			dma_free_attrs(&core->pdev->dev, ro_buf->buffer_size, ro_buf->kvaddr,
-				       ro_buf->device_addr, ro_buf->dma_attrs);
 		if (ro_buf->dbuf_get)
 			call_mem_op(core, dma_buf_put, inst, ro_buf->dmabuf);
 		ro_buf->attach = NULL;
@@ -4514,9 +4511,9 @@ void msm_vidc_destroy_buffers(struct msm_vidc_inst *inst)
 				buf->attach, buf->sg_table);
 		if (buf->attach && buf->dmabuf)
 			call_mem_op(core, dma_buf_detach, core, buf->dmabuf, buf->attach);
-		if (buf->kvaddr && buf->device_addr)
-			dma_free_attrs(&core->pdev->dev, buf->buffer_size, buf->kvaddr,
-				       buf->device_addr, buf->dma_attrs);
+		if (buf->kvaddr && buf->device_addr && refcount_read(&buf->refcount) > 0)
+			i_vpr_e(inst, "%s: destroying ro buffer with Non-Zero refcount %d, daddr 0x%llx\n",
+					__func__, refcount_read(&buf->refcount), buf->device_addr);
 		if (buf->dbuf_get)
 			call_mem_op(core, dma_buf_put, inst, buf->dmabuf);
 		list_del_init(&buf->list);
@@ -4534,9 +4531,9 @@ void msm_vidc_destroy_buffers(struct msm_vidc_inst *inst)
 					buf->attach, buf->sg_table);
 			if (buf->attach && buf->dmabuf)
 				call_mem_op(core, dma_buf_detach, core, buf->dmabuf, buf->attach);
-			if (buf->kvaddr && buf->device_addr)
-				dma_free_attrs(&core->pdev->dev, buf->buffer_size, buf->kvaddr,
-					       buf->device_addr, buf->dma_attrs);
+			if (buf->kvaddr && buf->device_addr && refcount_read(&buf->refcount) > 0)
+				i_vpr_e(inst, "%s: destroying ext buffer with Non-Zero refcount %d, daddr 0x%llx\n",
+						__func__, refcount_read(&buf->refcount), buf->device_addr);
 			if (buf->dbuf_get) {
 				print_vidc_buffer(VIDC_ERR, "err ", "destroying: put dmabuf",
 						  inst, buf);
