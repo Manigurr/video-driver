@@ -44,6 +44,7 @@ static inline bool is_video_device(struct device *dev)
 		of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc") ||
 		of_device_is_compatible(dev->of_node, "qcom,sm8550-vidc-v2") ||
 		of_device_is_compatible(dev->of_node, "qcom,sa8255-vidc") ||
+		of_device_is_compatible(dev->of_node, "qcom,sa8797-vidc") ||
 		of_device_is_compatible(dev->of_node, "qcom,sm8650-vidc"));
 }
 
@@ -122,6 +123,7 @@ static const struct of_device_id msm_vidc_dt_match[] = {
 	{.compatible = "qcom,sm8550-vidc-v2"},
 	{.compatible = "qcom,sm8650-vidc"},
 	{.compatible = "qcom,sa8255-vidc"},
+	{.compatible = "qcom,sa8797-vidc"},
 	{.compatible = "qcom,vidc,cb-ns-pxl"},
 	{.compatible = "qcom,vidc,cb-ns"},
 	{.compatible = "qcom,vidc,cb-sec-non-pxl"},
@@ -652,6 +654,11 @@ static int vidc_reboot_notify(
 			/* close gvm */
 			virtio_video_msm_cmd_close_gvm();
 			core->is_gvm_open = false;
+			/* update core state and clear all substates */
+			msm_vidc_change_core_sub_state(core,
+				CORE_SUBSTATE_MAX - 1, 0, __func__);
+			msm_vidc_change_core_state(core,
+				MSM_VIDC_CORE_DEINIT, __func__);
 		}
 		break;
 	}
@@ -1014,6 +1021,11 @@ static void __exit msm_vidc_exit(void)
 		virtio_video_msm_cmd_close_gvm();
 #endif
 		core->is_gvm_open = false;
+		/* update core state and clear all substates */
+		msm_vidc_change_core_sub_state(core,
+			CORE_SUBSTATE_MAX - 1, 0, __func__);
+		msm_vidc_change_core_state(core,
+			MSM_VIDC_CORE_DEINIT, __func__);
 	}
 
 	platform_driver_unregister(&msm_vidc_driver);

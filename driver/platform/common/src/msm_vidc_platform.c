@@ -432,7 +432,7 @@ static int msm_vidc_init_vpu(struct msm_vidc_core *core, struct device *dev)
 	}
 #endif
 #if defined(CONFIG_MSM_VIDC_IRIS33_AU)
-	if (of_device_is_compatible(dev->of_node, "qcom,sm8797-vidc")) {
+	if (of_device_is_compatible(dev->of_node, "qcom,sa8797-vidc")) {
 		rc = msm_vidc_init_iris33_au(core);
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);

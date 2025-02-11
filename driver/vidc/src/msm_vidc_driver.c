@@ -4901,6 +4901,8 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 
 	/* open gvm */
 	if (core->is_hw_virt && !core->is_gvm_open) {
+		d_vpr_h("%s: Hardware virtualization enabled.\n"
+			"Calling open_gvm\n", __func__);
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_open_gvm(core->vmid, core->capabilities[NUM_VPU].value,
 			&core->device_core_mask);
@@ -4910,6 +4912,11 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 			goto unlock;
 		} else {
 			core->is_gvm_open = true;
+			/* set up core state and substate */
+			msm_vidc_change_core_state(core, MSM_VIDC_CORE_INIT,
+				__func__);
+			msm_vidc_change_core_sub_state(core, 0,
+				CORE_SUBSTATE_POWER_ENABLE, __func__);
 #ifdef MSM_VIDC_HW_VIRT
 			core->pvm_event_handler_thread = kthread_run(msm_vidc_pvm_event_handler,
 					core, "msm_vidc_pvm_evt_handler");
@@ -5175,6 +5182,11 @@ void msm_vidc_hw_virt_ssr_handler(struct work_struct *work)
 	if (core->ssr_dev == GVM_SSR_DEVICE_DRIVER) {
 		virtio_video_msm_cmd_close_gvm();
 		core->is_gvm_open = false;
+		/* update core state and clear all substates */
+		msm_vidc_change_core_sub_state(core,
+			CORE_SUBSTATE_MAX - 1, 0, __func__);
+		msm_vidc_change_core_state(core,
+			MSM_VIDC_CORE_DEINIT, __func__);
 	}
 }
 #endif
