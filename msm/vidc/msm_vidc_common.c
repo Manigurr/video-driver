@@ -3374,7 +3374,7 @@ int msm_comm_update_dpb_bufreqs(struct msm_vidc_inst *inst)
 	return rc;
 }
 
-static int msm_comm_get_dpb_bufreqs(struct msm_vidc_inst *inst,
+int msm_comm_get_dpb_bufreqs(struct msm_vidc_inst *inst,
 	struct hal_buffer_requirements *req)
 {
 	struct hal_buffer_requirements *dpb = NULL;

@@ -21,6 +21,150 @@
 static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 	struct v4l2_ctrl *ctrl);
 
+static s64 msm_vidc_adjust_h264_level(struct msm_vidc_inst *inst, u64 frame_size,
+				      u64 samples_per_sec, u64 dpb_size, u64 target_bitrate)
+{
+	static struct h264_level_table level_table[] = {
+		/*  level, max_mbsps, max_frame_size,max_bit_rate, max_dpb_mbs */
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_1_0,      1485,     99,      64,     396 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_1B,       1485,     99,     128,     396 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_1_1,      3000,    396,     192,     900 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_1_2,      6000,    396,     384,    2376 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_1_3,     11880,    396,     768,    2376 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_2_0,     11880,    396,    2000,    2376 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_2_1,     19800,    792,    4000,    4752 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_2_2,     20250,   1620,    4000,    8100 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_3_0,     40500,   1620,   10000,    8100 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_3_1,    108000,   3600,   14000,   18000 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_3_2,    216000,   5120,   20000,   20480 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_4_0,    245760,   8192,   20000,   32768 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_4_1,    245760,   8192,   50000,   32768 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_4_2,    522240,   8704,   50000,   34816 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_5_0,    589824,  22080,  135000,  110400 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_5_1,    983040,  36864,  240000,  184320 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_5_2,   2073600,  36864,  240000,  184320 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_6_0,   4177920, 139264,  240000,  696320 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_6_1,   8355840, 139264,  480000,  696320 },
+		{ V4L2_MPEG_VIDEO_H264_LEVEL_6_2,  16711680, 139264,  800000,  696320 },
+	};
+	s64 level = inst->level;
+	int cnt;
+
+	for (cnt = 0; cnt < ARRAY_SIZE(level_table); cnt++) {
+		if (frame_size <= level_table[cnt].max_frame_size * 256 &&
+		    target_bitrate <= level_table[cnt].max_bit_rate * 1000 &&
+		    dpb_size <= level_table[cnt].max_dpb_mbs * 256 &&
+		    samples_per_sec <= level_table[cnt].max_mbsps * 256)
+			break;
+	}
+
+	if (cnt == ARRAY_SIZE(level_table)) {
+		d_vpr_e("%s: failed. size %llu, samples/sec %llu, bitrate %llu\n",
+			__func__, frame_size, samples_per_sec, target_bitrate);
+		return level;
+	}
+
+	return level_table[cnt].level;
+}
+
+static s64 msm_vidc_adjust_h265_level_tier(struct msm_vidc_inst *inst, u64 frame_size,
+					   u64 samples_per_sec, u64 target_bitrate)
+{
+	static struct h265_level_table level_table[] = {
+	   /* level, max_mbsps, max_frame_size,  max_br_main_tier, max_br_high_tier*/
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_1,        552960,     36864,     350,     350 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_2,       3686400,    122880,    1500,    1500 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1,     7372800,    245760,    3000,    3000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_3,      16588800,    552960,    6000,    6000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_3_1,    33177600,    983040,   10000,   10000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_4,      66846720,   2228224,   12000,   30000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_4_1,   133693440,   2228224,   20000,   50000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_5,     267386880,   8912896,   25000,  100000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1,   534773760,   8912896,   40000,  160000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_5_2,  1069547520,   8912896,   60000,  240000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_6,    1069547520,  35651584,   60000,  240000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1,  2139095040,  35651584,  120000,  480000 },
+		{ V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,  4278190080,  35651584,  240000,  800000 },
+	};
+	s64 level = inst->level;
+	s64 tier_value = inst->tier;
+	int cnt;
+
+	for (cnt = 0; cnt < ARRAY_SIZE(level_table); cnt++) {
+		if (frame_size <= level_table[cnt].max_frame_size &&
+		    samples_per_sec <= level_table[cnt].max_mbsps) {
+			if (inst->tier_client_set) {
+				if (tier_value == V4L2_MPEG_VIDEO_HEVC_TIER_MAIN &&
+				    target_bitrate <= level_table[cnt].max_br_main_tier * 1000)
+					break;
+				else if (tier_value == V4L2_MPEG_VIDEO_HEVC_TIER_HIGH &&
+					 target_bitrate <= level_table[cnt].max_br_high_tier * 1000)
+					break;
+			} else {
+				if (target_bitrate <= level_table[cnt].max_br_main_tier * 1000) {
+					tier_value = V4L2_MPEG_VIDEO_HEVC_TIER_MAIN;
+					break;
+				} else if (target_bitrate <=
+					 level_table[cnt].max_br_high_tier * 1000) {
+					tier_value = V4L2_MPEG_VIDEO_HEVC_TIER_HIGH;
+					break;
+				}
+			}
+		}
+	}
+
+	if (cnt == ARRAY_SIZE(level_table)) {
+		d_vpr_e("%s: failed. size %llu, samples/sec %llu, bitrate %llu\n",
+			__func__, frame_size, samples_per_sec, target_bitrate);
+		return level;
+	}
+
+	inst->tier = tier_value;
+
+	return level_table[cnt].level;
+}
+
+int msm_vidc_adjust_level_tier(void *instance)
+{
+	struct msm_vidc_inst *inst = (struct msm_vidc_inst *)instance;
+	struct v4l2_format *f;
+	int rc = 0;
+
+	u64 frame_size, frame_rate, samples_per_sec;
+	u64 width, height, num_ref_frames = 0, dpb_size = 0;
+	s32 bitrate, adjust_level;
+
+	f = &inst->fmts[OUTPUT_PORT].v4l2_fmt;
+	width = f->fmt.pix_mp.width;
+	height = f->fmt.pix_mp.height;
+
+	frame_size = width * height;
+	frame_rate = inst->clk_data.frame_rate >> 16;
+	samples_per_sec = frame_size * frame_rate;
+	adjust_level = inst->level;
+	bitrate = inst->clk_data.bitrate;
+
+	if (get_v4l2_codec(inst) == V4L2_PIX_FMT_H264) {
+		struct hal_buffer_requirements dpb = {0};
+
+		rc = msm_comm_get_dpb_bufreqs(inst, &dpb);
+		if (rc)
+			d_vpr_e("%s: get dpb bufreq failed\n", __func__);
+		num_ref_frames = dpb.buffer_count_min;
+		if (num_ref_frames)
+			dpb_size =  (num_ref_frames - 1) * frame_size;
+		else
+			dpb_size = frame_size;
+		adjust_level = msm_vidc_adjust_h264_level(inst, frame_size, samples_per_sec,
+							  dpb_size, bitrate);
+	} else if (get_v4l2_codec(inst) == V4L2_PIX_FMT_HEVC) {
+		adjust_level = msm_vidc_adjust_h265_level_tier(inst, frame_size, samples_per_sec,
+							       bitrate);
+	}
+	inst->level = adjust_level;
+	return 0;
+}
+
 static int get_poll_flags(void *instance)
 {
 	struct msm_vidc_inst *inst = instance;
@@ -1518,9 +1662,13 @@ static int try_get_ctrl_for_instance(struct msm_vidc_inst *inst,
 			inst->level, inst->sid);
 		break;
 	case V4L2_CID_MPEG_VIDEO_HEVC_LEVEL:
+		inst->level = inst->level & 0x0fffffff;
 		ctrl->val = msm_comm_hfi_to_v4l2(
 			V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
 			inst->level, inst->sid);
+		break;
+	case V4L2_CID_MPEG_VIDEO_HEVC_TIER:
+		ctrl->val = inst->tier;
 		break;
 	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
 		ctrl->val = inst->fmts[OUTPUT_PORT].count_min_host;
