@@ -7,6 +7,7 @@
 #ifndef _MSM_VIDC_INTERNAL_H_
 #define _MSM_VIDC_INTERNAL_H_
 
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 #include <linux/bits.h>
 #include <linux/workqueue.h>
