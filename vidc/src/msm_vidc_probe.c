@@ -663,19 +663,19 @@ static const struct component_master_ops msm_vidc_component_master_ops = {
 	.unbind         = msm_vidc_component_master_unbind,
 };
 
-static int msm_vidc_remove_video_device(struct platform_device *pdev)
+static void msm_vidc_remove_video_device(struct platform_device *pdev)
 {
 	struct msm_vidc_core *core;
 
 	if (!pdev) {
 		d_vpr_e("%s: invalid input %pK", __func__, pdev);
-		return -EINVAL;
+		return;
 	}
 
 	core = dev_get_drvdata(&pdev->dev);
 	if (!core) {
 		d_vpr_e("%s: invalid core\n", __func__);
-		return -EINVAL;
+		return;
 	}
 
 	d_vpr_h("%s()\n", __func__);
@@ -697,7 +697,7 @@ static int msm_vidc_remove_video_device(struct platform_device *pdev)
 	g_core = NULL;
 	d_vpr_h("%s(): succssful\n", __func__);
 
-	return 0;
+	return;
 }
 
 static int msm_vidc_remove_context_bank(struct platform_device *pdev)
@@ -709,7 +709,7 @@ static int msm_vidc_remove_context_bank(struct platform_device *pdev)
 	return 0;
 }
 
-static int msm_vidc_remove(struct platform_device *pdev)
+static void msm_vidc_remove(struct platform_device *pdev)
 {
 	/*
 	 * Sub devices remove will be triggered by of_platform_depopulate()
@@ -717,13 +717,13 @@ static int msm_vidc_remove(struct platform_device *pdev)
 	 * sub-device remove.
 	 */
 	if (is_video_device(&pdev->dev))
-		return msm_vidc_remove_video_device(pdev);
+		msm_vidc_remove_video_device(pdev);
 	else if (is_video_context_bank_device(&pdev->dev))
-		return msm_vidc_remove_context_bank(pdev);
+		msm_vidc_remove_context_bank(pdev);
+	else
+		WARN_ON(1); /* How did we end up here? */
 
-	/* How did we end up here? */
-	WARN_ON(1);
-	return -EINVAL;
+	return;
 }
 
 static int msm_vidc_probe_video_device(struct platform_device *pdev)
