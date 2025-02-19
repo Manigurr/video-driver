@@ -268,6 +268,10 @@ struct msm_v4l2_synx_fence {
 #define V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE                         \
 	(V4L2_CID_MPEG_BASE + 654)
 #endif
+#ifndef V4L2_CID_MPEG_VIDEO_DEC_LSR_SESSION
+#define V4L2_CID_MPEG_VIDEO_DEC_LSR_SESSION                                  \
+	(V4L2_CID_MPEG_BASE + 655)
+#endif
 
 enum v4l2_mpeg_vidc_metapayload_header_flags {
 	METADATA_FLAGS_NONE             = 0,

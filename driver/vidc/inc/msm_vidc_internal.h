@@ -448,6 +448,7 @@ enum msm_vidc_inst_capability_type {
 	DPB_LIST,
 	ALL_INTRA,
 	STREAM_TYPE,
+	LSR_SESSION,
 	META_LTR_MARK_USE,
 	META_DPB_MISR,
 	META_OPB_MISR,

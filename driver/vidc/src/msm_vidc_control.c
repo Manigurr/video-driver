@@ -52,6 +52,7 @@ static bool is_priv_ctrl(u32 id)
 	case V4L2_CID_MPEG_VIDEO_USE_LTR_FRAMES:
 	case V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY:
 	case V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE:
+	case V4L2_CID_MPEG_VIDEO_DEC_LSR_SESSION:
 		private = true;
 		break;
 	default:
