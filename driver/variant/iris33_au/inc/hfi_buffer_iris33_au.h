@@ -786,8 +786,8 @@ typedef HFI_U32 HFI_BOOL;
 	} while (0)
 
 #define VPX_DECODER_FRAME_CONCURENCY_LVL (2)
-#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO (1 / 2)
-#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO (3 / 2)
+#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO 1 / 2
+#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO 3 / 2
 
 #define HFI_BUFFER_BIN_VP9D(_size, frame_width, frame_height, \
 				is_interlaced, num_vpp_pipes) \
