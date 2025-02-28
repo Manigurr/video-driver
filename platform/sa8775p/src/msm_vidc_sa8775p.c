@@ -2500,29 +2500,29 @@ static struct msm_vidc_format_capability format_data_sa8775p = {
 
 /* name, min_kbps, max_kbps */
 static const struct bw_table sa8775p_bw_table[] = {
-	{ "iris-cnoc",  1000, 1000     },
-	{ "iris-ddr",   1000, 15000000 },
+	{ "cpu-cfg",    1000, 1000     },
+	{ "video-mem",  1000, 15000000 },
 };
 
 /* name */
 static const struct pd_table sa8775p_pd_table[] = {
-	{ "iris-ctl" },
-	{ "vcodec"   },
+	{ "venus" 	},
+	{ "vcodec0"	},
 };
 
 /* name */
-static const char * const sa8775p_opp_pd_table[] = { "mx", "mmcx", NULL };
+static const char * const sa8775p_opp_pd_table[] = { "mxc", "mmcx", NULL };
 
 /* name, clock id, scaling */
 static const struct clk_table sa8775p_clk_table[] = {
-	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
-	{ "core_clk",               VIDEO_CC_MVS0C_CLK,     0 },
-	{ "vcodec_clk",             VIDEO_CC_MVS0_CLK,      1 },
+	{ "iface",         GCC_VIDEO_AXI0_CLK,     0 },
+	{ "core",          VIDEO_CC_MVS0C_CLK,     0 },
+	{ "vcodec0_core",  VIDEO_CC_MVS0_CLK,      1 },
 };
 
 /* name, exclusive_release */
 static const struct clk_rst_table sa8775p_clk_reset_table[] = {
-	{ "video_axi_reset",        0  },
+	{ "bus",        0  },
 };
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
