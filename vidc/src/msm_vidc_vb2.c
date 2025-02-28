@@ -18,6 +18,9 @@
 
 extern struct msm_vidc_core *g_core;
 
+static void msm_vb2_vm_open(struct vm_area_struct *vma);
+static void msm_vb2_vm_close(struct vm_area_struct *vma);
+
 struct vb2_queue *msm_vidc_get_vb2q(struct msm_vidc_inst *inst,
 	u32 type, const char *func)
 {
@@ -70,7 +73,7 @@ void *msm_vb2_alloc(struct vb2_buffer *vb, struct device *dev,
 	inst = get_inst_ref(g_core, inst);
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params %pK\n", __func__, inst);
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	core = inst->core;
@@ -80,15 +83,14 @@ void *msm_vb2_alloc(struct vb2_buffer *vb, struct device *dev,
 	buf = msm_vidc_fetch_buffer(inst, vb);
 	if (!buf) {
 		i_vpr_e(inst, "%s: failed to fetch buffer\n", __func__);
-		buf = NULL;
-		goto exit;
+		goto error;
 	}
 
 	region = call_mem_op(core, buffer_region, inst, buf_type);
 	cb = msm_vidc_get_context_bank_for_region(inst->core, region);
 	if (!cb) {
 		i_vpr_e(inst, "%s: failed to get context bank device\n", __func__);
-		goto exit;
+		goto error;
 	}
 
 	buf->inst = inst;
@@ -104,7 +106,7 @@ void *msm_vb2_alloc(struct vb2_buffer *vb, struct device *dev,
 				      buf->dma_attrs);
 	if (!buf->kvaddr) {
 		i_vpr_e(inst, "dma alloc of size %lu failed\n", size);
-		return ERR_PTR(-ENOMEM);
+		goto error;
 	}
 
 	buf->handler.refcount = &buf->refcount;
@@ -113,11 +115,12 @@ void *msm_vb2_alloc(struct vb2_buffer *vb, struct device *dev,
 
 	refcount_set(&buf->refcount, 1);
 
-exit:
-	if (!buf)
-		msm_vidc_change_state(inst, MSM_VIDC_ERROR, __func__);
-	put_inst(inst);
 	return buf;
+
+error:
+	msm_vidc_change_state(inst, MSM_VIDC_ERROR, __func__);
+	put_inst(inst);
+	return ERR_PTR(-ENOMEM);
 }
 
 void *msm_vb2_attach_dmabuf(struct vb2_buffer *vb, struct device *dev,
@@ -176,13 +179,48 @@ exit:
 }
 #endif
 
+void msm_vb2_vm_open(struct vm_area_struct *vma)
+{
+	struct vb2_vmarea_handler *h = vma->vm_private_data;
+
+	if (IS_ERR_OR_NULL(h))
+		return;
+
+	refcount_inc(h->refcount);
+}
+
+void msm_vb2_vm_close(struct vm_area_struct *vma)
+{
+	struct vb2_vmarea_handler *h = vma->vm_private_data;
+
+	if (IS_ERR_OR_NULL(h))
+		return;
+
+	if (h->put && h->arg)
+		h->put(h->arg);
+}
+
+static const struct vm_operations_struct msm_vb2_vm_dma_ops = {
+	.open = msm_vb2_vm_open,
+	.close = msm_vb2_vm_close,
+};
+
 void msm_vb2_put(void *buf_priv)
 {
 	struct msm_vidc_buffer *buf = buf_priv;
-	struct msm_vidc_inst *inst = buf->inst;
-	struct msm_vidc_core *core = inst->core;
-	struct context_bank_info *cb = NULL;
 	enum msm_vidc_buffer_region region;
+	struct context_bank_info *cb;
+	struct msm_vidc_inst *inst;
+	struct msm_vidc_core *core;
+
+	if (IS_ERR_OR_NULL(buf_priv))
+		return;
+
+	inst = buf->inst;
+	if (!inst || !inst->core)
+		return;
+
+	core = inst->core;
 
 	if (refcount_read(&buf->refcount) == 0)
 		return;
@@ -203,19 +241,26 @@ void msm_vb2_put(void *buf_priv)
 		buf->kvaddr = NULL;
 		buf->device_addr = 0x0;
 	}
+	put_inst(inst);
 }
 
 int msm_vb2_mmap(void *buf_priv, struct vm_area_struct *vma)
 {
 	struct msm_vidc_buffer *buf = buf_priv;
-	struct msm_vidc_inst *inst = buf->inst;
-	struct msm_vidc_core *core = inst->core;
-	struct context_bank_info *cb = NULL;
 	enum msm_vidc_buffer_region region;
+	struct context_bank_info *cb;
+	struct msm_vidc_inst *inst;
+	struct msm_vidc_core *core;
 	int ret;
 
-	if (!buf)
+	if (IS_ERR_OR_NULL(buf_priv))
 		return -EINVAL;
+
+	inst = buf->inst;
+    if (!inst || !inst->core)
+		return -EINVAL;
+
+    core = inst->core;
 
 	region = call_mem_op(core, buffer_region, inst, buf->type);
 	cb = msm_vidc_get_context_bank_for_region(inst->core, region);
@@ -233,7 +278,7 @@ int msm_vb2_mmap(void *buf_priv, struct vm_area_struct *vma)
 
 	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_private_data	= &buf->handler;
-	vma->vm_ops		= &vb2_common_vm_ops;
+	vma->vm_ops		= &msm_vb2_vm_dma_ops;
 
 	vma->vm_ops->open(vma);
 
@@ -608,30 +653,27 @@ int msm_vb2_queue_setup(struct vb2_queue *q,
 	}
 	core = inst->core;
 
-	if (is_state(inst, MSM_VIDC_STREAMING)) {
-		i_vpr_e(inst, "%s: invalid state %d\n", __func__, inst->state);
-		return -EINVAL;
-	}
-
 	port = v4l2_type_to_driver_port(inst, q->type, __func__);
 	if (port < 0)
 		return -EINVAL;
 
-	/* prepare dependency list once per session */
-	if (!inst->caps_list_prepared) {
-		rc = msm_vidc_prepare_dependency_list(inst);
-		if (rc)
-			return rc;
-		inst->caps_list_prepared = true;
-	}
+	if (!is_state(inst, MSM_VIDC_STREAMING)) {
+		/* prepare dependency list once per session */
+		if (!inst->caps_list_prepared) {
+			rc = msm_vidc_prepare_dependency_list(inst);
+			if (rc)
+				return rc;
+			inst->caps_list_prepared = true;
+		}
 
-	/* adjust v4l2 properties for master port */
-	if ((is_encode_session(inst) && port == OUTPUT_PORT) ||
-		(is_decode_session(inst) && port == INPUT_PORT)) {
-		rc = msm_vidc_adjust_v4l2_properties(inst);
-		if (rc) {
-			i_vpr_e(inst, "%s: failed to adjust properties\n", __func__);
-			return rc;
+		/* adjust v4l2 properties for master port */
+		if ((is_encode_session(inst) && port == OUTPUT_PORT) ||
+			(is_decode_session(inst) && port == INPUT_PORT)) {
+			rc = msm_vidc_adjust_v4l2_properties(inst);
+			if (rc) {
+				i_vpr_e(inst, "%s: failed to adjust properties\n", __func__);
+				return rc;
+			}
 		}
 	}
 
@@ -653,22 +695,28 @@ int msm_vb2_queue_setup(struct vb2_queue *q,
 	if (!buffer_type)
 		return -EINVAL;
 
-	rc = msm_vidc_free_buffers(inst, buffer_type);
-	if (rc) {
-		i_vpr_e(inst, "%s: failed to free buffers, type %s\n",
-			__func__, v4l2_type_name(q->type));
-		return rc;
+	if (!is_state(inst, MSM_VIDC_STREAMING)) {
+		rc = msm_vidc_free_buffers(inst, buffer_type);
+		if (rc) {
+			i_vpr_e(inst, "%s: failed to free buffers, type %s\n",
+				__func__, v4l2_type_name(q->type));
+			return rc;
+		}
 	}
 
 	buffers = msm_vidc_get_buffers(inst, buffer_type, __func__);
 	if (!buffers)
 		return -EINVAL;
 
-	buffers->min_count = call_session_op(core, min_count, inst, buffer_type);
-	buffers->extra_count = call_session_op(core, extra_count, inst, buffer_type);
-	if (*num_buffers < buffers->min_count + buffers->extra_count)
-		*num_buffers = buffers->min_count + buffers->extra_count;
-	buffers->actual_count = *num_buffers;
+	if (!is_state(inst, MSM_VIDC_STREAMING)) {
+		buffers->min_count = call_session_op(core, min_count, inst, buffer_type);
+		buffers->extra_count = call_session_op(core, extra_count, inst, buffer_type);
+		if (*num_buffers < buffers->min_count + buffers->extra_count)
+			*num_buffers = buffers->min_count + buffers->extra_count;
+		buffers->actual_count = *num_buffers;
+	} else {
+		buffers->actual_count += *num_buffers;
+	}
 	*num_planes = 1;
 
 	buffers->size = call_session_op(core, buffer_size, inst, buffer_type);
@@ -698,7 +746,7 @@ int msm_vb2_queue_setup(struct vb2_queue *q,
 	cb = msm_vidc_get_context_bank_for_region(core, region);
 	if (!cb) {
 		d_vpr_e("%s: Failed to get context bank device\n",
-			 __func__);
+			__func__);
 		return -EIO;
 	}
 	q->dev = cb->dev;
