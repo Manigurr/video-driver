@@ -4251,6 +4251,12 @@ int msm_vidc_session_open(struct msm_vidc_inst *inst)
 	if (core->is_hw_virt) {
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
+		if (!rc) {
+			__resume(core);
+			core_lock(core, __func__);
+			call_venus_op(core, enable_intr, core);
+			core_unlock(core, __func__);
+		}
 #endif
 	} else {
 		rc = venus_hfi_session_open(inst);
@@ -4917,8 +4923,8 @@ int msm_vidc_core_init(struct msm_vidc_core *core)
 				__func__);
 			msm_vidc_change_core_sub_state(core, 0,
 				CORE_SUBSTATE_POWER_ENABLE, __func__);
+			call_venus_op(core, enable_intr, core);
 
-			call_venus_op(core, setup_intr, core);
 #ifdef MSM_VIDC_HW_VIRT
 			core->pvm_event_handler_thread = kthread_run(msm_vidc_pvm_event_handler,
 					core, "msm_vidc_pvm_evt_handler");
