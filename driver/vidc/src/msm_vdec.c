@@ -587,6 +587,36 @@ static int msm_vdec_set_output_order(struct msm_vidc_inst *inst,
 	return rc;
 }
 
+static int msm_vdec_set_lsr_session(struct msm_vidc_inst *inst,
+	enum msm_vidc_port_type port)
+{
+	int rc = 0;
+	u32 lsr_enable = 0;
+
+	if (port != INPUT_PORT) {
+		i_vpr_e(inst, "%s: invalid port %d\n", __func__, port);
+		return -EINVAL;
+	}
+
+	if (inst->capabilities->cap[LSR_SESSION].value)
+		lsr_enable = 1;
+
+	i_vpr_h(inst, "%s: lsr enable: %d\n", __func__, lsr_enable);
+	rc = venus_hfi_session_property(inst,
+			HFI_PROP_LSR_SESSION,
+			HFI_HOST_FLAGS_NONE,
+			get_hfi_port(inst, port),
+			HFI_PAYLOAD_U32,
+			&lsr_enable,
+			sizeof(u32));
+	if (rc) {
+		i_vpr_e(inst, "%s: set property failed\n", __func__);
+		return rc;
+	}
+
+	return rc;
+}
+
 static int msm_vdec_set_rap_frame(struct msm_vidc_inst *inst,
 	enum msm_vidc_port_type port)
 {
@@ -748,6 +778,10 @@ static int msm_vdec_set_input_properties(struct msm_vidc_inst *inst)
 		return rc;
 
 	rc = msm_vdec_set_output_order(inst, INPUT_PORT);
+	if (rc)
+		return rc;
+
+	rc = msm_vdec_set_lsr_session(inst, INPUT_PORT);
 	if (rc)
 		return rc;
 
@@ -1094,6 +1128,7 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 	int rc = 0;
 	u32 payload[32] = {0};
 	u32 i, count = 0;
+	bool lsr_enable = 0;
 	struct msm_vidc_inst_capability *capability;
 	static const u32 metadata_input_list[] = {
 		META_BUF_TAG,
@@ -1114,10 +1149,15 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 
 	capability = inst->capabilities;
 	payload[0] = HFI_MODE_METADATA;
+	lsr_enable = capability->cap[LSR_SESSION].value;
 
 	if (port == INPUT_PORT) {
 		for (i = 0; i < ARRAY_SIZE(metadata_input_list); i++) {
 			if (capability->cap[metadata_input_list[i]].value) {
+				if (!lsr_enable && (metadata_input_list[i] ==
+					META_IN_OUT_PAIR_BUFFER_ID || 
+					metadata_input_list[i] == META_EVA_LSR_INFO))
+					continue;
 				payload[count + 1] =
 					capability->cap[metadata_input_list[i]].hfi_id;
 				count++;
@@ -1127,6 +1167,9 @@ static int msm_vdec_set_delivery_mode_metadata(struct msm_vidc_inst *inst,
 		for (i = 0; i < ARRAY_SIZE(metadata_output_list); i++) {
 			if (capability->cap[metadata_output_list[i]].value  &&
 				msm_vidc_allow_metadata(inst, metadata_output_list[i])) {
+				if (!lsr_enable && (metadata_input_list[i] ==
+					META_IN_OUT_PAIR_BUFFER_ID))
+					continue;
 				payload[count + 1] =
 					capability->cap[metadata_output_list[i]].hfi_id;
 				count++;
