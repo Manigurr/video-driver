@@ -4252,8 +4252,8 @@ int msm_vidc_session_open(struct msm_vidc_inst *inst)
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_open_gvm_session(&inst->device_id, &inst->session_id);
 		if (!rc) {
-			__resume(core);
 			core_lock(core, __func__);
+			__resume(core);
 			call_venus_op(core, enable_intr, core);
 			core_unlock(core, __func__);
 		}
