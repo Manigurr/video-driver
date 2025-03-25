@@ -4,4 +4,5 @@
  */
 
 #define CONFIG_MSM_VIDC_NEO   1
+#define CONFIG_MSM_GLOBAL_SYNX_V2 1
 #define CONFIG_MSM_VIDC_IRIS3    1
