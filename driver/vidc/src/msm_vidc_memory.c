@@ -11,6 +11,7 @@
 #include <linux/mem-buf.h>
 #include <soc/qcom/secure_buffer.h>
 #include <../drivers/dma-buf/heaps/qcom_sg_ops.h>
+#include <linux/version.h>
 
 #include "msm_vidc_memory.h"
 #include "msm_vidc_debug.h"
@@ -20,6 +21,10 @@
 #include "msm_vidc_dt.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_events.h"
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
+	MODULE_IMPORT_NS(DMA_BUF);
+#endif
 
 struct msm_vidc_buf_region_name {
 	enum msm_vidc_buffer_region region;
@@ -481,12 +486,30 @@ int msm_vidc_memory_alloc(struct msm_vidc_core *core, struct msm_vidc_alloc *mem
 
 	if (mem->map_kernel) {
 		dma_buf_begin_cpu_access(mem->dmabuf, DMA_BIDIRECTIONAL);
+	#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 		mem->kvaddr = dma_buf_vmap(mem->dmabuf);
 		if (!mem->kvaddr) {
 			d_vpr_e("%s: kernel map failed\n", __func__);
 			rc = -EIO;
 			goto error;
 		}
+	#elif (KERNEL_VERSION(5, 16, 0) > LINUX_VERSION_CODE)
+               rc = dma_buf_vmap(mem->dmabuf, &mem->dmabuf_map);
+               if (rc) {
+                       d_vpr_e("%s: kernel map failed\n", __func__);
+                       rc = -EIO;
+                       goto error;
+		}
+		mem->kvaddr = mem->dmabuf_map.vaddr;
+	#else
+		rc = dma_buf_vmap(mem->dmabuf, &mem->dmabuf_map);
+		if (rc) {
+                        d_vpr_e("%s: kernel map failed\n", __func__);
+                        rc = -EIO;
+                        goto error;
+               }
+		mem->kvaddr = mem->dmabuf_map.vaddr;
+	#endif
 	}
 
 	d_vpr_h(
