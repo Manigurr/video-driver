@@ -9,6 +9,13 @@
 #include <linux/types.h>
 #include <linux/v4l2-controls.h>
 
+/* MPEG-compression definitions kept for backwards compatibility */
+#define V4L2_CTRL_CLASS_MPEG            V4L2_CTRL_CLASS_CODEC
+#define V4L2_CID_MPEG_CLASS             V4L2_CID_CODEC_CLASS
+#define V4L2_CID_MPEG_BASE              V4L2_CID_CODEC_BASE
+#define V4L2_CID_MPEG_CX2341X_BASE      V4L2_CID_CODEC_CX2341X_BASE
+#define V4L2_CID_MPEG_MFC51_BASE        V4L2_CID_CODEC_MFC51_BASE
+
 /*
  * supported standard color formats
  * V4L2_PIX_FMT_NV12   Y/CbCr 4:2:0
