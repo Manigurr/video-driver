@@ -1720,7 +1720,6 @@ static void close_helper(struct kref *kref)
 {
 	struct msm_vidc_inst *inst = container_of(kref,
 			struct msm_vidc_inst, kref);
-
 	msm_vidc_destroy(inst);
 }
 
@@ -1735,19 +1734,19 @@ void *msm_vidc_open(int core_id, int session_type)
 			session_type >= MSM_VIDC_MAX_DEVICES) {
 		d_vpr_e("Invalid input, core_id = %d, session = %d\n",
 			core_id, session_type);
-		goto err_invalid_core;
+		return NULL;
 	}
 	core = get_vidc_core(core_id);
 	if (!core) {
 		d_vpr_e("Failed to find core for core_id = %d\n", core_id);
-		goto err_invalid_core;
+		return NULL;
 	}
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst) {
 		d_vpr_e("Failed to allocate memory\n");
 		rc = -ENOMEM;
-		goto err_invalid_core;
+		return NULL;
 	}
 	mutex_lock(&core->lock);
 	rc = get_sid(&inst->sid, session_type);
@@ -1851,14 +1850,15 @@ void *msm_vidc_open(int core_id, int session_type)
 		s_vpr_e(inst->sid,
 			"Failed to move video instance to init state\n");
 		kref_put(&inst->kref, close_helper);
-		inst = NULL;
-		goto err_invalid_core;
+		return NULL;
 	}
 
 	if (msm_comm_check_for_inst_overload(core)) {
 		s_vpr_e(inst->sid,
 			"Instance count reached Max limit, rejecting session");
-		goto fail_init;
+		msm_comm_kill_session(inst);
+		kref_put(&inst->kref, close_helper);
+		return NULL;
 	}
 
 	msm_comm_scale_clocks_and_bus(inst, 1);
@@ -1871,19 +1871,12 @@ void *msm_vidc_open(int core_id, int session_type)
 		if (rc) {
 			s_vpr_e(inst->sid,
 				"Failed to move video instance to open done state\n");
-			goto fail_init;
+			kref_put(&inst->kref, close_helper);
+			return NULL;
 		}
 	}
 
 	return inst;
-fail_init:
-	mutex_lock(&core->lock);
-	list_del(&inst->list);
-	mutex_unlock(&core->lock);
-
-	v4l2_fh_del(&inst->event_handler);
-	v4l2_fh_exit(&inst->event_handler);
-	vb2_queue_release(&inst->bufq[INPUT_PORT].vb2_bufq);
 fail_bufq_output:
 	vb2_queue_release(&inst->bufq[OUTPUT_PORT].vb2_bufq);
 fail_bufq_capture:
@@ -1912,7 +1905,6 @@ err_invalid_sid:
 	put_sid(inst->sid);
 	kfree(inst);
 	inst = NULL;
-err_invalid_core:
 	return inst;
 }
 EXPORT_SYMBOL(msm_vidc_open);
