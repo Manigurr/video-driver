@@ -3220,6 +3220,8 @@ int msm_vidc_vb2_queue_init(struct msm_vidc_inst *inst)
 		goto fail_in_meta_alloc;
 	}
 
+	inst->bufq[INPUT_META_PORT].vb2q->lock = &inst->ctx_q_lock;
+
 	/* do input meta port queues initialization */
 	rc = vb2q_init(inst, inst->bufq[INPUT_META_PORT].vb2q, INPUT_META_PLANE);
 	if (rc)
@@ -3231,6 +3233,8 @@ int msm_vidc_vb2_queue_init(struct msm_vidc_inst *inst)
 		rc = -ENOMEM;
 		goto fail_out_meta_alloc;
 	}
+
+	inst->bufq[OUTPUT_META_PORT].vb2q->lock = &inst->ctx_q_lock;
 
 	/* do output meta port queues initialization */
 	rc = vb2q_init(inst, inst->bufq[OUTPUT_META_PORT].vb2q, OUTPUT_META_PLANE);
