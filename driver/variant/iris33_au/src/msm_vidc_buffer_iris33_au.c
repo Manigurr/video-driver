@@ -387,12 +387,14 @@ static u32 msm_vidc_encoder_bin_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 size = 0;
 	u32 width = 0, height = 0, num_vpp_pipes = 0, stage = 0, profile = 0;
 	struct v4l2_format *f = NULL;
-	bool is_dual_core = vidc_session_is_multicore(inst);
+	bool is_dual_core = false;
 
 	if (!inst || !inst->core || !inst->capabilities) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return size;
 	}
+
+	is_dual_core = vidc_session_is_multicore(inst);
 	core = inst->core;
 	if (!core->capabilities) {
 		i_vpr_e(inst, "%s: invalid core capabilities\n", __func__);
@@ -478,18 +480,22 @@ static u32 msm_vidc_encoder_non_comv_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 size = 0;
 	u32 width = 0, height = 0, num_vpp_pipes = 0;
 	struct v4l2_format *f = NULL;
-	bool is_dual_core = vidc_session_is_multicore(inst);
-	u32 profile = inst->capabilities->cap[PROFILE].value;
+	bool is_dual_core = false;
+	u32 profile = 0;
 
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return size;
 	}
+
+	is_dual_core = vidc_session_is_multicore(inst);
+	profile = inst->capabilities->cap[PROFILE].value;
 	core = inst->core;
 	if (!core->capabilities) {
 		i_vpr_e(inst, "%s: invalid core capabilities\n", __func__);
 		return size;
 	}
+
 	num_vpp_pipes = core->capabilities[NUM_VPP_PIPE].value;
 	f = &inst->fmts[OUTPUT_PORT];
 	width = f->fmt.pix_mp.width;
@@ -513,12 +519,14 @@ static u32 msm_vidc_encoder_line_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 width = 0, height = 0, pixfmt = 0, num_vpp_pipes = 0;
 	bool is_tenbit = false;
 	struct v4l2_format *f = NULL;
-	bool is_dual_core = vidc_session_is_multicore(inst);
+	bool is_dual_core = false;
 
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return size;
 	}
+
+	is_dual_core = vidc_session_is_multicore(inst);
 	core = inst->core;
 	if (!core->capabilities || !inst->capabilities) {
 		i_vpr_e(inst, "%s: invalid capabilities\n", __func__);
