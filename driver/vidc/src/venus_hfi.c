@@ -41,7 +41,6 @@
 
 extern struct msm_vidc_core *g_core;
 
-static int __resume(struct msm_vidc_core *core);
 static int __suspend(struct msm_vidc_core *core);
 
 static void __fatal_error(bool fatal)
@@ -329,6 +328,10 @@ static int __power_collapse(struct msm_vidc_core *core, bool force)
 	} else {
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_pause_gvm_session(core->capabilities[NUM_VPU].value, 0);
+		if (!rc) {
+			msm_vidc_change_core_sub_state(core,
+				CORE_SUBSTATE_POWER_ENABLE, 0, __func__);
+		}
 #endif
 	}
 
@@ -613,7 +616,7 @@ err_tzbsp_suspend:
 	return rc;
 }
 
-static int __resume(struct msm_vidc_core *core)
+int __resume(struct msm_vidc_core *core)
 {
 	int rc = 0;
 
@@ -688,6 +691,12 @@ static int __resume(struct msm_vidc_core *core)
 	} else {
 #ifdef MSM_VIDC_HW_VIRT
 		rc = virtio_video_msm_cmd_resume_gvm_session(core->capabilities[NUM_VPU].value, 0);
+		if (!rc) {
+			msm_vidc_change_core_sub_state(core, 0,
+				CORE_SUBSTATE_POWER_ENABLE, __func__);
+			call_venus_op(core, enable_intr, core);
+		}
+
 #endif
 	}
 

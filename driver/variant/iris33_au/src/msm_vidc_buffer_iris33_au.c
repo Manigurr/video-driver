@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_vidc_buffer_iris33_au.h"
@@ -357,6 +357,29 @@ static u32 msm_vidc_decoder_dpb_size_iris33_au(struct msm_vidc_inst *inst)
 	return size;
 }
 
+
+bool vidc_session_is_multicore(struct msm_vidc_inst *inst)
+{
+	bool is_multicore = false;
+
+	/*
+	 * multi-core scheduling can be done for following scenarios:
+	 * 1, All intra encoding
+	 * 2, Lossless encoding
+	 * 3, Hierarchical-P encoding
+	 */
+	if ((is_encode_session(inst)) &&
+		((inst->capabilities->cap[LAYER_TYPE].value ==
+		V4L2_MPEG_VIDEO_HEVC_HIERARCHICAL_CODING_P) ||
+		(inst->capabilities->cap[ALL_INTRA].value == 1) ||
+		(inst->capabilities->cap[LOSSLESS].value == 1))) {
+		is_multicore = true;
+	}
+	i_vpr_l(inst, "is_multicore: %d session", is_multicore);
+
+	return is_multicore;
+}
+
 /* encoder internal buffers */
 static u32 msm_vidc_encoder_bin_size_iris33_au(struct msm_vidc_inst *inst)
 {
@@ -364,6 +387,7 @@ static u32 msm_vidc_encoder_bin_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 size = 0;
 	u32 width = 0, height = 0, num_vpp_pipes = 0, stage = 0, profile = 0;
 	struct v4l2_format *f = NULL;
+	bool is_dual_core = vidc_session_is_multicore(inst);
 
 	if (!inst || !inst->core || !inst->capabilities) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -383,10 +407,10 @@ static u32 msm_vidc_encoder_bin_size_iris33_au(struct msm_vidc_inst *inst)
 
 	if (inst->codec == MSM_VIDC_H264)
 		HFI_BUFFER_BIN_H264E(size, inst->hfi_rc_type, width,
-			height, stage, num_vpp_pipes, profile);
+			height, stage, num_vpp_pipes, profile, is_dual_core);
 	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
 		HFI_BUFFER_BIN_H265E(size, inst->hfi_rc_type, width,
-			height, stage, num_vpp_pipes, profile);
+			height, stage, num_vpp_pipes, profile, is_dual_core);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
 	return size;
@@ -398,6 +422,7 @@ static u32 msm_vidc_get_recon_buf_count(struct msm_vidc_inst *inst)
 	s32 n_bframe = 0, ltr_count = 0, hp_layers = 0, hb_layers = 0;
 	bool is_hybrid_hp = false;
 	u32 hfi_codec = 0;
+	bool is_dual_core = vidc_session_is_multicore(inst);
 
 	n_bframe = inst->capabilities->cap[B_FRAME].value;
 	ltr_count = inst->capabilities->cap[LTR_COUNT].value;
@@ -416,7 +441,8 @@ static u32 msm_vidc_get_recon_buf_count(struct msm_vidc_inst *inst)
 		hfi_codec = HFI_CODEC_ENCODE_HEVC;
 
 	HFI_IRIS3_ENC_RECON_BUF_COUNT(num_buf_recon, n_bframe, ltr_count,
-			hp_layers, hb_layers, is_hybrid_hp, hfi_codec);
+			hp_layers, hb_layers, is_hybrid_hp, hfi_codec,
+			is_dual_core);
 
 	return num_buf_recon;
 }
@@ -452,6 +478,8 @@ static u32 msm_vidc_encoder_non_comv_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 size = 0;
 	u32 width = 0, height = 0, num_vpp_pipes = 0;
 	struct v4l2_format *f = NULL;
+	bool is_dual_core = vidc_session_is_multicore(inst);
+	u32 profile = inst->capabilities->cap[PROFILE].value;
 
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -468,9 +496,11 @@ static u32 msm_vidc_encoder_non_comv_size_iris33_au(struct msm_vidc_inst *inst)
 	height = f->fmt.pix_mp.height;
 
 	if (inst->codec == MSM_VIDC_H264)
-		HFI_BUFFER_NON_COMV_H264E(size, width, height, num_vpp_pipes);
+		HFI_BUFFER_NON_COMV_H264E(size, width, height, num_vpp_pipes,
+			profile, is_dual_core);
 	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
-		HFI_BUFFER_NON_COMV_H265E(size, width, height, num_vpp_pipes);
+		HFI_BUFFER_NON_COMV_H265E(size, width, height, num_vpp_pipes,
+			profile, is_dual_core);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
 	return size;
@@ -483,6 +513,7 @@ static u32 msm_vidc_encoder_line_size_iris33_au(struct msm_vidc_inst *inst)
 	u32 width = 0, height = 0, pixfmt = 0, num_vpp_pipes = 0;
 	bool is_tenbit = false;
 	struct v4l2_format *f = NULL;
+	bool is_dual_core = vidc_session_is_multicore(inst);
 
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params\n", __func__);
@@ -502,9 +533,11 @@ static u32 msm_vidc_encoder_line_size_iris33_au(struct msm_vidc_inst *inst)
 	is_tenbit = (pixfmt == MSM_VIDC_FMT_P010 || pixfmt == MSM_VIDC_FMT_TP10C);
 
 	if (inst->codec == MSM_VIDC_H264)
-		HFI_BUFFER_LINE_H264E(size, width, height, is_tenbit, num_vpp_pipes);
+		HFI_BUFFER_LINE_H264E(size, width, height, is_tenbit,
+			num_vpp_pipes, is_dual_core);
 	else if (inst->codec == MSM_VIDC_HEVC || inst->codec == MSM_VIDC_HEIC)
-		HFI_BUFFER_LINE_H265E(size, width, height, is_tenbit, num_vpp_pipes);
+		HFI_BUFFER_LINE_H265E(size, width, height, is_tenbit,
+			num_vpp_pipes, is_dual_core);
 
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
 	return size;
@@ -547,7 +580,7 @@ static u32 msm_vidc_encoder_arp_size_iris33_au(struct msm_vidc_inst *inst)
 		return 0;
 	}
 
-	HFI_BUFFER_ARP_ENC(size);
+	HFI_BUFFER_ARP_ENC(size, 1 /*is_dual_core*/);
 	i_vpr_l(inst, "%s: size %d\n", __func__, size);
 	return size;
 }

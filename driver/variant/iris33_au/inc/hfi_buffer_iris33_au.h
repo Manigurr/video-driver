@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HFI_BUFFER_IRIS33_AU__
@@ -786,8 +786,8 @@ typedef HFI_U32 HFI_BOOL;
 	} while (0)
 
 #define VPX_DECODER_FRAME_CONCURENCY_LVL (2)
-#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO (1 / 2)
-#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO (3 / 2)
+#define VPX_DECODER_FRAME_BIN_HDR_BUDGET_RATIO 1 / 2
+#define VPX_DECODER_FRAME_BIN_RES_BUDGET_RATIO 3 / 2
 
 #define HFI_BUFFER_BIN_VP9D(_size, frame_width, frame_height, \
 				is_interlaced, num_vpp_pipes) \
@@ -1269,9 +1269,14 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 			frame_height, is_roi_enabled, 32); \
 	} while (0)
 
-#define HFI_BUFFER_ARP_ENC(size) \
+#define HFI_BUFFER_ARP_ENC(size, is_dual_core) \
 	do { \
-		size = 204800; \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			size = 204800;	\
+		} else { \
+			size = 360448;	\
+		} \
 	} while (0)
 
 #define HFI_MAX_COL_FRAME 6
@@ -1289,7 +1294,8 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 #endif
 
 #define HFI_IRIS3_ENC_RECON_BUF_COUNT(num_recon, n_bframe, ltr_count, \
-	_total_hp_layers, _total_hb_layers, hybrid_hp, codec_standard) \
+	_total_hp_layers, _total_hb_layers, hybrid_hp, codec_standard, \
+	is_dual_core) \
 	do { \
 		HFI_U32 num_ref = 1; \
 		if (n_bframe) \
@@ -1313,7 +1319,13 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 			else if (codec_standard == HFI_CODEC_ENCODE_AVC) \
 				num_ref = (1 << (_total_hb_layers - 2)) + 1; \
 		} \
-		num_recon = num_ref + 1; \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			/* num_recon(DPB count) = No.of references + 1 */ \
+			num_recon = num_ref + 1; \
+		} else { \
+			num_recon = MAX(4, (num_ref + 2)); \
+		} \
 	} while (0)
 
 #define SIZE_BIN_BITSTREAM_ENC(_size, rc_type, frame_width, frame_height, \
@@ -1386,20 +1398,30 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_BUFFER_BIN_ENC(_size, rc_type, frame_width, frame_height, lcu_size, \
-			work_mode, num_vpp_pipes, profile) \
+			work_mode, num_vpp_pipes, profile, \
+			is_dual_mode) \
 	do { \
 		HFI_U32 bitstream_size = 0, total_bitbin_buffers = 0, \
 			size_single_pipe = 0, bitbin_size = 0; \
 		SIZE_BIN_BITSTREAM_ENC(bitstream_size, rc_type, frame_width, \
 			frame_height, work_mode, lcu_size, profile);         \
 		if (work_mode == HFI_WORKMODE_2) { \
-			total_bitbin_buffers = 3; \
+			/* if dual_core encoding is disabled */ \
+			if (!is_dual_core) { \
+				total_bitbin_buffers = 3; \
+			} else { \
+				total_bitbin_buffers = 5; \
+			} \
 			bitbin_size = bitstream_size * 17 / 10; \
 			bitbin_size = HFI_ALIGN(bitbin_size, \
 				VENUS_DMA_ALIGNMENT); \
 		} \
 		else if ((lcu_size == 16) || (num_vpp_pipes > 1)) { \
-			total_bitbin_buffers = 1; \
+			if (!is_dual_mode) { \
+				total_bitbin_buffers = 1; \
+			} else { \
+				total_bitbin_buffers = 2; \
+			} \
 			bitbin_size = bitstream_size; \
 		} \
 		if (total_bitbin_buffers > 0) { \
@@ -1415,17 +1437,17 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	} while (0)
 
 #define HFI_BUFFER_BIN_H264E(_size, rc_type, frame_width, frame_height, \
-			work_mode, num_vpp_pipes, profile) \
+			work_mode, num_vpp_pipes, profile, is_dual_mode) \
 	do { \
 		HFI_BUFFER_BIN_ENC(_size, rc_type, frame_width, frame_height, 16, \
-			work_mode, num_vpp_pipes, profile); \
+			work_mode, num_vpp_pipes, profile, is_dual_mode); \
 	} while (0)
 
 #define HFI_BUFFER_BIN_H265E(_size, rc_type, frame_width, frame_height, \
-			work_mode, num_vpp_pipes, profile)    \
+			work_mode, num_vpp_pipes, profile, is_dual_mode)    \
 	do { \
 		HFI_BUFFER_BIN_ENC(_size, rc_type, frame_width, frame_height, 32,\
-			work_mode, num_vpp_pipes, profile); \
+			work_mode, num_vpp_pipes, profile, is_dual_mode); \
 	} while (0)
 
 #define SIZE_ENC_SLICE_INFO_BUF(num_lcu_in_frame) HFI_ALIGN((256 + \
@@ -1537,13 +1559,44 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 #define SIZE_LINE_BUF_SDE(frame_width_coded) HFI_ALIGN((256 + \
 		(16 * ((frame_width_coded) >> 4))), VENUS_DMA_ALIGNMENT)
 
-#define SIZE_BSE_SLICE_CMD_BUF ((((8192 << 2) + 7) & (~7)) * 3)
+#define SIZE_BSE_SLICE_CMD_BUF(size_bse_slice_cmd_buf, is_dual_core) \
+	do { \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			/* worker_vppsg_delay + vppsg_vspap_fb_sync_delay + 1 = 3 */ \
+			size_bse_slice_cmd_buf = ((((8192 << 2) + 7) & (~7)) * 3); \
+		} else { \
+			/* worker_vppsg_delay + vppsg_vspap_fb_sync_delay + 1 = 5 */ \
+			size_bse_slice_cmd_buf = ((((8192 << 2) + 7) & (~7)) * 5); \
+		} \
+	} while (0)
 
 #define SIZE_LAMBDA_LUT (256 * 11)
-#define SIZE_OVERRIDE_BUF(num_lcumb) (HFI_ALIGN(((16 * (((num_lcumb) + 7)\
-		>> 3))), VENUS_DMA_ALIGNMENT) * 2)
-#define SIZE_IR_BUF(num_lcu_in_frame) HFI_ALIGN((((((num_lcu_in_frame) << 1) + 7) &\
-	(~7)) * 3), VENUS_DMA_ALIGNMENT)
+#define SIZE_OVERRIDE_BUF(size_override_buf, num_lcumb, is_dual_core) \
+	do { \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			size_override_buf = (HFI_ALIGN(((16 * \
+				(((num_lcumb) + 7) >> 3))), VENUS_DMA_ALIGNMENT) * 2); \
+		} else { \
+			/* worker_vppsg_delay + 1 = 4, for DualCore Encoding usecases */ \
+			size_override_buf = (HFI_ALIGN(((16 * \
+				(((num_lcumb) + 7) >> 3))), VENUS_DMA_ALIGNMENT) * 4); \
+		} \
+	} while (0)
+
+#define SIZE_IR_BUF(size_ir_buf, num_lcu_in_frame, is_dual_core) \
+	do { \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			size_ir_buf = HFI_ALIGN((((((num_lcu_in_frame) << 1) + 7) & \
+				(~7)) * 3), VENUS_DMA_ALIGNMENT); \
+		} else { \
+			/* worker_vppsg_delay + 2 = 5, for DualCore Encoding usecases */ \
+			size_ir_buf = HFI_ALIGN((((((num_lcu_in_frame) << 1) + 7) & \
+				(~7)) * 5), VENUS_DMA_ALIGNMENT); \
+		} \
+	} while (0)
 
 #define SIZE_VPSS_LINE_BUF(num_vpp_pipes_enc, frame_height_coded, \
 			frame_width_coded) \
@@ -1555,7 +1608,7 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 	HFI_ALIGN((16 * ((frame_width_coded) >> 5)), VENUS_DMA_ALIGNMENT)
 
 #define HFI_BUFFER_LINE_ENC(_size, frame_width, frame_height, is_ten_bit, \
-			num_vpp_pipes_enc, lcu_size, standard) \
+			num_vpp_pipes_enc, lcu_size, standard, is_dual_core) \
 	do { \
 		HFI_U32 width_in_lcus = 0, height_in_lcus = 0, \
 			frame_width_coded = 0, frame_height_coded = 0; \
@@ -1599,20 +1652,24 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		SIZE_VPSS_LINE_BUF(num_vpp_pipes_enc, frame_height_coded, \
 			frame_width_coded) + \
 		SIZE_TOP_LINE_BUF_FIRST_STG_SAO(frame_width_coded); \
+		if (is_dual_core) { \
+			_size = (_size << 1); \
+		} \
 	} while (0)
 
 #define HFI_BUFFER_LINE_H264E(_size, frame_width, frame_height, is_ten_bit, \
-		num_vpp_pipes)                   \
+		num_vpp_pipes, is_dual_core)                   \
 	do { \
 		HFI_BUFFER_LINE_ENC(_size, frame_width, frame_height, 0, \
-			num_vpp_pipes, 16, HFI_CODEC_ENCODE_AVC); \
+			num_vpp_pipes, 16, HFI_CODEC_ENCODE_AVC, is_dual_core); \
 	} while (0)
 
 #define HFI_BUFFER_LINE_H265E(_size, frame_width, frame_height, is_ten_bit, \
-			num_vpp_pipes)                          \
+			num_vpp_pipes, is_dual_core)                          \
 	do { \
 		HFI_BUFFER_LINE_ENC(_size, frame_width, frame_height, \
-		is_ten_bit, num_vpp_pipes, 32, HFI_CODEC_ENCODE_HEVC); \
+		is_ten_bit, num_vpp_pipes, 32, HFI_CODEC_ENCODE_HEVC, \
+		is_dual_core); \
 	} while (0)
 
 #define HFI_BUFFER_COMV_ENC(_size, frame_width, frame_height, lcu_size, \
@@ -1650,13 +1707,16 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 			num_recon, HFI_CODEC_ENCODE_HEVC); \
 	} while (0)
 
+#define HDR10_LUT_TBL_SIZE        (2 * 1024 * 4)
 #define HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
-			num_vpp_pipes_enc, lcu_size, standard) \
+			num_vpp_pipes_enc, lcu_size, standard, profile, \
+			is_dual_core) \
 	do { \
 		HFI_U32 width_in_lcus = 0, height_in_lcus = 0, \
 		frame_width_coded = 0, frame_height_coded = 0, \
 		num_lcu_in_frame = 0, num_lcumb = 0; \
-		HFI_U32	frame_rc_buf_size = 0; \
+		HFI_U32	frame_rc_buf_size = 0, override_buf_size = 0, \
+			ir_buf_size = 0, bse_slice_cmd_buf_size = 0; \
 		width_in_lcus = ((frame_width) + (lcu_size)-1) / (lcu_size); \
 		height_in_lcus = ((frame_height) + (lcu_size)-1) / (lcu_size); \
 		num_lcu_in_frame = width_in_lcus * height_in_lcus; \
@@ -1666,32 +1726,48 @@ _yuv_bufcount_min, is_opb, num_vpp_pipes)           \
 		((frame_width_coded + lcu_size * 8) / lcu_size); \
 		SIZE_FRAME_RC_BUF_SIZE(frame_rc_buf_size, standard, \
 		frame_height_coded, num_vpp_pipes_enc); \
+		SIZE_OVERRIDE_BUF(override_buf_size, num_lcumb, is_dual_core); \
+		SIZE_IR_BUF(ir_buf_size, num_lcu_in_frame, is_dual_core); \
+		SIZE_BSE_SLICE_CMD_BUF(bse_slice_cmd_buf_size, is_dual_core); \
 		_size = SIZE_ENC_SLICE_INFO_BUF(num_lcu_in_frame) + \
-			   SIZE_SLICE_CMD_BUFFER + \
-			   SIZE_SPS_PPS_SLICE_HDR + \
-			   frame_rc_buf_size + \
-			   ENC_BITCNT_BUF_SIZE(num_lcu_in_frame) + \
-			   ENC_BITMAP_BUF_SIZE(num_lcu_in_frame) + \
-			   SIZE_BSE_SLICE_CMD_BUF + \
-			   SIZE_LAMBDA_LUT + \
-			   SIZE_OVERRIDE_BUF(num_lcumb) + \
-			   SIZE_IR_BUF(num_lcu_in_frame); \
+			SIZE_SLICE_CMD_BUFFER + \
+			SIZE_SPS_PPS_SLICE_HDR + \
+			frame_rc_buf_size + \
+			ENC_BITCNT_BUF_SIZE(num_lcu_in_frame) + \
+			ENC_BITMAP_BUF_SIZE(num_lcu_in_frame) + \
+			bse_slice_cmd_buf_size + \
+			SIZE_LAMBDA_LUT + \
+			override_buf_size + \
+			ir_buf_size + \
+			(((standard == HFI_CODEC_ENCODE_HEVC) &&\
+				(profile == HFI_H265_PROFILE_MAIN_10)) ? \
+				HDR10_LUT_TBL_SIZE : 0); \
+		if (is_dual_core) { \
+			_size = (_size << 1); \
+		} \
 	} while (0)
 
 #define HFI_BUFFER_NON_COMV_H264E(_size, frame_width, frame_height, \
-				num_vpp_pipes_enc) \
+				num_vpp_pipes_enc, profile, is_dual_core) \
 	do { \
 		HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
-				num_vpp_pipes_enc, 16, HFI_CODEC_ENCODE_AVC); \
+				num_vpp_pipes_enc, 16, HFI_CODEC_ENCODE_AVC, \
+				profile, is_dual_core); \
 	} while (0)
 
 #define SIZE_ONE_SLICE_BUF 256
 #define HFI_BUFFER_NON_COMV_H265E(_size, frame_width, frame_height, \
-				num_vpp_pipes_enc) \
+				num_vpp_pipes_enc, profile, is_dual_core) \
 	do { \
 		HFI_BUFFER_NON_COMV_ENC(_size, frame_width, frame_height, \
-			num_vpp_pipes_enc, 32, HFI_CODEC_ENCODE_HEVC); \
-		_size += SIZE_ONE_SLICE_BUF; \
+			num_vpp_pipes_enc, 32, HFI_CODEC_ENCODE_HEVC, \
+			profile, is_dual_core); \
+		/* if dual_core encoding is disabled */ \
+		if (!is_dual_core) { \
+			_size += SIZE_ONE_SLICE_BUF; \
+		} else { \
+			_size += (SIZE_ONE_SLICE_BUF << 1); \
+		} \
 	} while (0)
 
 #define SIZE_ENC_REF_BUFFER(size, frame_width, frame_height) \

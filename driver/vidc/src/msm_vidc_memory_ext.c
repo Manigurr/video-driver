@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -42,7 +42,8 @@ static struct dma_buf_attachment *msm_vidc_dma_buf_attach_ext(struct msm_vidc_co
 	}
 
 	/* reject non-secure mapping request for a secure buffer(or vice versa) */
-	if (cb->region == MSM_VIDC_NON_SECURE || cb->region == MSM_VIDC_NON_SECURE_PIXEL) {
+	if (cb->region == MSM_VIDC_NON_SECURE || cb->region == MSM_VIDC_NON_SECURE_PIXEL
+		|| cb->region == MSM_VIDC_NON_SECURE_BITSTREAM) {
 		if (!is_non_secure_buffer(dbuf)) {
 			d_vpr_e("%s: secure buffer mapping to non-secure region %d not allowed\n",
 				__func__, cb->region);
@@ -72,7 +73,9 @@ static struct dma_buf_attachment *msm_vidc_dma_buf_attach_ext(struct msm_vidc_co
 	 * Get the scatterlist for the given attachment
 	 * Mapping of sg is taken care by map attachment
 	 */
+#ifndef MSM_VIDC_HW_VIRT
 	attach->dma_map_attrs |= DMA_ATTR_DELAYED_UNMAP;
+#endif
 	if (is_sys_cache_present(core))
 		attach->dma_map_attrs |= DMA_ATTR_IOMMU_USE_UPSTREAM_HINT;
 
@@ -248,7 +251,8 @@ static int msm_vidc_memory_map_ext(struct msm_vidc_core *core, struct msm_vidc_m
 	}
 
 	/* reject non-secure mapping request for a secure buffer(or vice versa) */
-	if (map->region == MSM_VIDC_NON_SECURE || map->region == MSM_VIDC_NON_SECURE_PIXEL) {
+	if (map->region == MSM_VIDC_NON_SECURE || map->region == MSM_VIDC_NON_SECURE_PIXEL
+		|| map->region == MSM_VIDC_NON_SECURE_BITSTREAM) {
 		if (!is_non_secure_buffer(map->dmabuf)) {
 			d_vpr_e("%s: secure buffer mapping to non-secure region %d not allowed\n",
 				__func__, map->region);
@@ -303,84 +307,123 @@ error_cb:
 	return rc;
 }
 
+static u32 get_buffer_region_for_non_secure(struct msm_vidc_inst *inst,
+	enum msm_vidc_buffer_type buffer_type, struct msm_vidc_core *core)
+{
+	u32 region = MSM_VIDC_NON_SECURE;
+
+	switch (buffer_type) {
+	case MSM_VIDC_BUF_ARP:
+		region = MSM_VIDC_NON_SECURE;
+		break;
+	case MSM_VIDC_BUF_INPUT:
+		if (is_encode_session(inst)) {
+			region = MSM_VIDC_NON_SECURE_PIXEL;
+		} else {
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+			region = MSM_VIDC_NON_SECURE_BITSTREAM;
+#else
+			region = MSM_VIDC_NON_SECURE;
+#endif
+		}
+		break;
+	case MSM_VIDC_BUF_OUTPUT:
+		if (!is_encode_session(inst)) {
+			region = MSM_VIDC_NON_SECURE_PIXEL;
+		} else {
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+			region = MSM_VIDC_NON_SECURE_BITSTREAM;
+#else
+			region = MSM_VIDC_NON_SECURE;
+#endif
+		}
+		break;
+	case MSM_VIDC_BUF_DPB:
+	case MSM_VIDC_BUF_VPSS:
+	case MSM_VIDC_BUF_PARTIAL_DATA:
+		region = MSM_VIDC_NON_SECURE_PIXEL;
+		break;
+	case MSM_VIDC_BUF_INPUT_META:
+	case MSM_VIDC_BUF_OUTPUT_META:
+	case MSM_VIDC_BUF_COMV:
+	case MSM_VIDC_BUF_NON_COMV:
+	case MSM_VIDC_BUF_LINE:
+	case MSM_VIDC_BUF_PERSIST:
+		region = MSM_VIDC_NON_SECURE;
+		break;
+	case MSM_VIDC_BUF_BIN:
+#if defined(CONFIG_MSM_VIDC_IRIS33_AU)
+		region = MSM_VIDC_NON_SECURE_BITSTREAM;
+#else
+		region = MSM_VIDC_NON_SECURE;
+#endif
+		break;
+	default:
+		i_vpr_e(inst, "%s: invalid driver buffer type %d\n",
+			__func__, buffer_type);
+	}
+
+	return region;
+}
+
+/* Needs to be updated: Update buffer regions similar to secure buffers in PVM */
+static u32 get_buffer_region_for_secure(struct msm_vidc_inst *inst,
+	enum msm_vidc_buffer_type buffer_type, struct msm_vidc_core *core)
+{
+	u32 region = MSM_VIDC_SECURE_PIXEL;
+
+	switch (buffer_type) {
+	case MSM_VIDC_BUF_INPUT:
+		if (is_encode_session(inst))
+			region = MSM_VIDC_SECURE_PIXEL;
+		else
+			region = MSM_VIDC_SECURE_BITSTREAM;
+		break;
+	case MSM_VIDC_BUF_OUTPUT:
+		if (is_encode_session(inst))
+			region = MSM_VIDC_SECURE_BITSTREAM;
+		else
+			region = MSM_VIDC_SECURE_PIXEL;
+		break;
+	case MSM_VIDC_BUF_INPUT_META:
+	case MSM_VIDC_BUF_OUTPUT_META:
+		region = MSM_VIDC_NON_SECURE;
+		break;
+	case MSM_VIDC_BUF_DPB:
+	case MSM_VIDC_BUF_VPSS:
+	case MSM_VIDC_BUF_PARTIAL_DATA:
+		region = MSM_VIDC_SECURE_PIXEL;
+		break;
+	case MSM_VIDC_BUF_BIN:
+		region = MSM_VIDC_SECURE_BITSTREAM;
+		break;
+	case MSM_VIDC_BUF_ARP:
+	case MSM_VIDC_BUF_COMV:
+	case MSM_VIDC_BUF_NON_COMV:
+	case MSM_VIDC_BUF_LINE:
+	case MSM_VIDC_BUF_PERSIST:
+		region = MSM_VIDC_SECURE_NONPIXEL;
+		break;
+	default:
+		i_vpr_e(inst, "%s: invalid driver buffer type %d\n",
+			__func__, buffer_type);
+	}
+
+	return region;
+}
+
 static u32 msm_vidc_buffer_region_ext(struct msm_vidc_inst *inst,
 	enum msm_vidc_buffer_type buffer_type)
 {
 	u32 region = MSM_VIDC_NON_SECURE;
+	struct msm_vidc_core *core = inst->core;
 
-	if (!is_secure_session(inst)) {
-		switch (buffer_type) {
-		case MSM_VIDC_BUF_ARP:
-			region = MSM_VIDC_NON_SECURE;
-			break;
-		case MSM_VIDC_BUF_INPUT:
-			if (is_encode_session(inst))
-				region = MSM_VIDC_NON_SECURE_PIXEL;
-			else
-				region = MSM_VIDC_NON_SECURE;
-			break;
-		case MSM_VIDC_BUF_OUTPUT:
-			if (is_encode_session(inst))
-				region = MSM_VIDC_NON_SECURE;
-			else
-				region = MSM_VIDC_NON_SECURE_PIXEL;
-			break;
-		case MSM_VIDC_BUF_DPB:
-		case MSM_VIDC_BUF_VPSS:
-		case MSM_VIDC_BUF_PARTIAL_DATA:
-			region = MSM_VIDC_NON_SECURE_PIXEL;
-			break;
-		case MSM_VIDC_BUF_INPUT_META:
-		case MSM_VIDC_BUF_OUTPUT_META:
-		case MSM_VIDC_BUF_BIN:
-		case MSM_VIDC_BUF_COMV:
-		case MSM_VIDC_BUF_NON_COMV:
-		case MSM_VIDC_BUF_LINE:
-		case MSM_VIDC_BUF_PERSIST:
-			region = MSM_VIDC_NON_SECURE;
-			break;
-		default:
-			i_vpr_e(inst, "%s: invalid driver buffer type %d\n",
-				__func__, buffer_type);
-		}
-	} else {
-		switch (buffer_type) {
-		case MSM_VIDC_BUF_INPUT:
-			if (is_encode_session(inst))
-				region = MSM_VIDC_SECURE_PIXEL;
-			else
-				region = MSM_VIDC_SECURE_BITSTREAM;
-			break;
-		case MSM_VIDC_BUF_OUTPUT:
-			if (is_encode_session(inst))
-				region = MSM_VIDC_SECURE_BITSTREAM;
-			else
-				region = MSM_VIDC_SECURE_PIXEL;
-			break;
-		case MSM_VIDC_BUF_INPUT_META:
-		case MSM_VIDC_BUF_OUTPUT_META:
-			region = MSM_VIDC_NON_SECURE;
-			break;
-		case MSM_VIDC_BUF_DPB:
-		case MSM_VIDC_BUF_VPSS:
-		case MSM_VIDC_BUF_PARTIAL_DATA:
-			region = MSM_VIDC_SECURE_PIXEL;
-			break;
-		case MSM_VIDC_BUF_BIN:
-			region = MSM_VIDC_SECURE_BITSTREAM;
-			break;
-		case MSM_VIDC_BUF_ARP:
-		case MSM_VIDC_BUF_COMV:
-		case MSM_VIDC_BUF_NON_COMV:
-		case MSM_VIDC_BUF_LINE:
-		case MSM_VIDC_BUF_PERSIST:
-			region = MSM_VIDC_SECURE_NONPIXEL;
-			break;
-		default:
-			i_vpr_e(inst, "%s: invalid driver buffer type %d\n",
-				__func__, buffer_type);
-		}
-	}
+	if (!is_secure_session(inst))
+		region = get_buffer_region_for_non_secure(inst,
+			buffer_type, core);
+	else
+		region = get_buffer_region_for_secure(inst,
+			buffer_type, core);
 
 	return region;
 }

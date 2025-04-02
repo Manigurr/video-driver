@@ -3,8 +3,10 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#ifndef MSM_VIDC_HW_VIRT
 #include <dt-bindings/clock/qcom,gcc-nordau.h>
 #include <dt-bindings/clock/qcom,videocc-nordau.h>
+#endif
 
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <soc/qcom/of_common.h>
@@ -2636,6 +2638,7 @@ static const struct regulator_table nordau_regulator_table[] = {
 	{ "vcodec1",  1 },
 };
 
+#ifndef MSM_VIDC_HW_VIRT
 /* name, clock id, scaling */
 static const struct clk_table nordau_clk_table[] = {
 	{ "gcc_video_axi0",         GCC_VIDEO_AXI0_CLK,     0 },
@@ -2643,6 +2646,7 @@ static const struct clk_table nordau_clk_table[] = {
 	{ "vcodec_clk",             VIDEO_CC_MVS0_CLK,      0 },
 	{ "video_cc_mvs0_clk_src",  VIDEO_CC_MVS0_CLK_SRC,  1 },
 };
+#endif
 
 /* name */
 static const struct clk_rst_table nordau_clk_reset_table[] = {
@@ -2657,12 +2661,12 @@ static const struct subcache_table nordau_subcache_table[] = {
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
 const struct context_bank_table nordau_context_bank_table[] = {
-	{"qcom,vidc,cb-ns-non-pxl",    0x92400000, 0x1f400000, 0, 1,
-		MSM_VIDC_NON_SECURE_NONPIXEL, 0 },
+	{"qcom,vidc,cb-ns",    0x92400000, 0x1f400000, 0, 1,
+		MSM_VIDC_NON_SECURE, 0 },
 	{"qcom,vidc,cb-ns-pxl",        0x00500000, 0xefb00000, 0, 1,
 		MSM_VIDC_NON_SECURE_PIXEL,    0 },
-	{"qcom,vidc,cb-ns",            0x00500000, 0xefb00000, 0, 1,
-		MSM_VIDC_NON_SECURE,          0 },
+	{"qcom,vidc,cb-ns-bitstream",            0x00500000, 0xefb00000, 0, 1,
+		MSM_VIDC_NON_SECURE_BITSTREAM,          0 },
 	{"qcom,vidc,cb-sec-pxl",       0x00500000, 0xefb00000, 1, 0,
 		MSM_VIDC_SECURE_PIXEL,        0 },
 	{"qcom,vidc,cb-sec-non-pxl",   0x0d800000, 0x0c800000, 1, 0,
@@ -2687,8 +2691,10 @@ static const struct msm_vidc_platform_data nordau_data = {
 	.bw_tbl_size = ARRAY_SIZE(nordau_bw_table),
 	.regulator_tbl = nordau_regulator_table,
 	.regulator_tbl_size = ARRAY_SIZE(nordau_regulator_table),
+#ifndef MSM_VIDC_HW_VIRT
 	.clk_tbl = nordau_clk_table,
 	.clk_tbl_size = ARRAY_SIZE(nordau_clk_table),
+#endif
 	.clk_rst_tbl = nordau_clk_reset_table,
 	.clk_rst_tbl_size = ARRAY_SIZE(nordau_clk_reset_table),
 	// .subcache_tbl = nordau_subcache_table,
@@ -2749,9 +2755,13 @@ static int msm_vidc_init_data(struct msm_vidc_core *core, struct device *dev)
 
 	core->platform->data = nordau_data;
 	core->mem_ops = get_mem_ops_ext();
-	rc = msm_vidc_nordau_check_ddr_type();
-	if (rc)
-		return rc;
+
+	/* if hw_virt, skip ddr check */
+	if (!core->is_hw_virt) {
+		rc = msm_vidc_nordau_check_ddr_type();
+		if (rc)
+			return rc;
+	}
 
 	return rc;
 }

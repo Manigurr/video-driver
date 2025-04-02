@@ -9,7 +9,7 @@ TARGET_VIDC_ENABLE := true
 endif
 
 ifeq ($(ENABLE_HYP), true)
-ifneq ($(CONFIG_ARCH_NORDAU), y)
+ifneq ($(TARGET_BOARD_PLATFORM), gen5)
 TARGET_VIDC_ENABLE := false
 endif
 endif
@@ -33,7 +33,7 @@ DLKM_DIR   := device/qcom/common/dlkm
 
 LOCAL_PATH := $(call my-dir)
 
-ifeq ($(CONFIG_ARCH_NORDAU), y)
+ifeq ($(TARGET_BOARD_PLATFORM), gen5)
 ifeq ($(ENABLE_HYP), true)
 KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(PWD)/$(call intermediates-dir-for,DLKM,virtio-video-symvers)/Module.symvers
 endif
@@ -41,7 +41,7 @@ endif
 
 include $(CLEAR_VARS)
 # For incremental compilation
-ifeq ($(CONFIG_ARCH_NORDAU), y)
+ifeq ($(TARGET_BOARD_PLATFORM), gen5)
 ifeq ($(ENABLE_HYP), true)
 LOCAL_REQUIRED_MODULES := virtio-video-symvers
 LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,virtio-video-symvers)/Module.symvers
