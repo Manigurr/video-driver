@@ -135,35 +135,6 @@ static struct device *devm_pd_get(struct device *dev, const char *name)
 	return pd;
 }
 
-static void devm_opp_dl_release(void *res)
-{
-	struct device_link *link = (struct device_link *)res;
-
-	d_vpr_h("%s(): %s\n", __func__, dev_name(&link->link_dev));
-	device_link_del(link);
-}
-
-static int devm_opp_dl_get(struct device *dev, struct device *supplier)
-{
-	u32 flag = DL_FLAG_RPM_ACTIVE | DL_FLAG_PM_RUNTIME | DL_FLAG_STATELESS;
-	struct device_link *link = NULL;
-	int rc = 0;
-
-	link = device_link_add(dev, supplier, flag);
-	if (!link) {
-		d_vpr_e("%s: device link add failed\n", __func__);
-		return -EINVAL;
-	}
-
-	rc = devm_add_action_or_reset(dev, devm_opp_dl_release, (void *)link);
-	if (rc) {
-		d_vpr_e("%s: add action or reset failed\n", __func__);
-		return rc;
-	}
-
-	return rc;
-}
-
 static void devm_pm_runtime_put_sync(void *res)
 {
 	struct device *dev = (struct device *)res;
@@ -341,7 +312,6 @@ static int __init_power_domains(struct msm_vidc_core *core)
 	struct power_domain_info *pdinfo = NULL;
 	const struct pd_table *pd_tbl;
 	struct power_domain_set *pds;
-	struct device **opp_vdevs = NULL;
 	const char * const *opp_tbl;
 	u32 pd_count = 0, opp_count = 0, cnt = 0;
 	int rc = 0;
@@ -414,20 +384,16 @@ static int __init_power_domains(struct msm_vidc_core *core)
 	for (cnt = 0; cnt < opp_count; cnt++)
 		d_vpr_e("%s: opp name %s\n", __func__, opp_tbl[cnt]);
 
-	/* populate opp power domains(for rails) */
-	rc = devm_pm_opp_attach_genpd(&core->pdev->dev, opp_tbl, &opp_vdevs);
-	if (rc)
-		return rc;
+	struct dev_pm_domain_attach_data opp_pd_data = {
+		.pd_names = opp_tbl,
+		.num_pd_names = opp_count,
+		.pd_flags = PD_FLAG_DEV_LINK_ON,
+	};
 
-	/* create device_links b/w consumer(dev) and multiple suppliers(mx, mmcx) */
-	for (cnt = 0; cnt < opp_count; cnt++) {
-		rc = devm_opp_dl_get(&core->pdev->dev, opp_vdevs[cnt]);
-		if (rc) {
-			d_vpr_e("%s: failed to create dl: %s\n",
-				__func__, dev_name(opp_vdevs[cnt]));
-			return rc;
-		}
-	}
+	rc =  devm_pm_domain_attach_list(&core->pdev->dev, &opp_pd_data,
+					 &core->platform->data.opp_pmdomain_tbl);
+	if (rc < 0)
+		return rc;
 
 	/* initialize opp table from device tree */
 	rc = devm_pm_opp_of_add_table(&core->pdev->dev);
