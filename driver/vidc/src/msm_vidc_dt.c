@@ -5,7 +5,10 @@
  */
 
 #include <linux/iommu.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0))
 #include <linux/dma-iommu.h>
+#endif
 #include <linux/of.h>
 #include <linux/sort.h>
 
@@ -786,9 +789,15 @@ static int msm_vidc_read_resources_from_dt(struct platform_device *pdev)
 	d_vpr_h("%s: register base %pa, size %#x\n",
 		__func__, &dt->register_base, dt->register_size);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
+	dt->irq = platform_get_irq(pdev, 0);
+#else
 	kres = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	dt->irq = kres ? kres->start : -1;
+	if (dt->irq < 0)
+		d_vpr_e("%s: get irq failed, %d\n", __func__, dt->irq);
 	d_vpr_h("%s: irq %d\n", __func__, dt->irq);
+#endif
 
 	rc = msm_vidc_load_fw_name(core);
 	if (rc)
@@ -907,8 +916,9 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_core *core,
 	 * When memory is fragmented, below configuration increases the
 	 * possibility to get a mapping for buffer in the configured CB.
 	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0))
 	iommu_dma_enable_best_fit_algo(cb->dev);
-
+#endif
 	/*
 	 * configure device segment size and segment boundary to ensure
 	 * iommu mapping returns one mapping (which is required for partial

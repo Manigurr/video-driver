@@ -15,6 +15,8 @@
 #include <media/v4l2-ctrls.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
+#include <linux/version.h>
+
 
 #define MAX_NAME_LENGTH   128
 #define VENUS_VERSION_LENGTH 128
@@ -782,6 +784,11 @@ struct msm_vidc_alloc {
 	u8                          secure:1;
 	u8                          map_kernel:1;
 	struct dma_buf             *dmabuf;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
+	struct iosys_map            dmabuf_map;
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0))
+	struct dma_buf             *dmabuf;
+#endif
 	void                       *kvaddr;
 };
 

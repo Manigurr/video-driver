@@ -9,16 +9,25 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include "msm_vidc_inst.h"
+#include <linux/version.h>
 
 struct vb2_queue *msm_vidc_get_vb2q(struct msm_vidc_inst *inst,
 	u32 type, const char *func);
 
 /* vb2_mem_ops */
+#if (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 void *msm_vb2_get_userptr(struct device *dev, unsigned long vaddr,
 			unsigned long size, enum dma_data_direction dma_dir);
-void msm_vb2_put_userptr(void *buf_priv);
 void* msm_vb2_attach_dmabuf(struct device* dev, struct dma_buf* dbuf,
 	unsigned long size, enum dma_data_direction dma_dir);
+#else
+void *msm_vb2_get_userptr(struct vb2_buffer *vb, struct device *dev,
+	unsigned long vaddr, unsigned long size);
+void *msm_vb2_attach_dmabuf(struct vb2_buffer *vb, struct device *dev,
+	struct dma_buf *dbuf, unsigned long size);
+#endif
+void msm_vb2_put_userptr(void *buf_priv);
+void msm_vb2_put_userptr(void *buf_priv);
 void msm_vb2_detach_dmabuf(void* buf_priv);
 int msm_vb2_map_dmabuf(void* buf_priv);
 void msm_vb2_unmap_dmabuf(void* buf_priv);

@@ -609,7 +609,7 @@ int msm_vidc_sync_create_queue_fences(struct msm_vidc_inst *inst,
 
 	/* fence create ioctl is allowed only at output port side */
 	if (f->type != OUTPUT_MPLANE) {
-		i_vpr_e(inst, "%s: unsupported port %d\n", f->type);
+		i_vpr_e(inst, "%s: unsupported port %d\n", __func__, f->type);
 		return -EINVAL;
 	}
 	/* allocate wait sync_fence and attach to &tl->fence_tracker.submit_list */
