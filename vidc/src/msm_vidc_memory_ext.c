@@ -6,9 +6,6 @@
 
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
-#include <linux/qcom-dma-mapping.h>
-#include <linux/mem-buf.h>
-#include <soc/qcom/secure_buffer.h>
 
 #include "msm_vidc_core.h"
 #include "msm_vidc_driver.h"
