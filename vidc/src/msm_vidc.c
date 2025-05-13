@@ -143,29 +143,6 @@ int msm_vidc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 	return -EINVAL;
 }
 
-int msm_vidc_query_ctrl(struct msm_vidc_inst *inst, struct v4l2_queryctrl *q_ctrl)
-{
-	int rc = 0;
-	struct v4l2_ctrl *ctrl;
-
-	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, q_ctrl->id);
-	if (!ctrl) {
-		i_vpr_e(inst, "%s: get_ctrl failed for id %d\n",
-			__func__, q_ctrl->id);
-		return -EINVAL;
-	}
-	q_ctrl->minimum = ctrl->minimum;
-	q_ctrl->maximum = ctrl->maximum;
-	q_ctrl->default_value = ctrl->default_value;
-	q_ctrl->flags = 0;
-	q_ctrl->step = ctrl->step;
-	i_vpr_h(inst,
-		"query ctrl: %s: min %d, max %d, default %d step %d flags %#x\n",
-		ctrl->name, q_ctrl->minimum, q_ctrl->maximum,
-		q_ctrl->default_value, q_ctrl->step, q_ctrl->flags);
-	return rc;
-}
-
 int msm_vidc_query_menu(struct msm_vidc_inst *inst, struct v4l2_querymenu *qmenu)
 {
 	int rc = 0;
