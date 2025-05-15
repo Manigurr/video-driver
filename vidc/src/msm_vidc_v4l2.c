@@ -948,38 +948,6 @@ unlock:
 	return rc;
 }
 
-int msm_v4l2_querymenu(struct file *filp, void *fh,
-	struct v4l2_querymenu *qmenu)
-{
-	struct msm_vidc_inst *inst = get_vidc_inst(filp, fh);
-	int rc = 0;
-
-	inst = get_inst_ref(g_core, inst);
-	if (!inst || !qmenu) {
-		d_vpr_e("%s: invalid params %pK %pK\n",
-			__func__, inst, qmenu);
-		return -EINVAL;
-	}
-
-	client_lock(inst, __func__);
-	inst_lock(inst, __func__);
-	if (is_session_error(inst)) {
-		i_vpr_e(inst, "%s: inst in error state\n", __func__);
-		rc = -EBUSY;
-		goto unlock;
-	}
-	rc = msm_vidc_query_menu((void *)inst, qmenu);
-	if (rc)
-		goto unlock;
-
-unlock:
-	inst_unlock(inst, __func__);
-	client_unlock(inst, __func__);
-	put_inst(inst);
-
-	return rc;
-}
-
 int msm_v4l2_request_validate(struct media_request *req)
 {
 	d_vpr_l("%s()\n", __func__);

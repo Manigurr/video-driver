@@ -143,36 +143,6 @@ int msm_vidc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 	return -EINVAL;
 }
 
-int msm_vidc_query_menu(struct msm_vidc_inst *inst, struct v4l2_querymenu *qmenu)
-{
-	int rc = 0;
-	struct v4l2_ctrl *ctrl;
-
-	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, qmenu->id);
-	if (!ctrl) {
-		i_vpr_e(inst, "%s: get_ctrl failed for id %d\n",
-			__func__, qmenu->id);
-		return -EINVAL;
-	}
-	if (ctrl->type != V4L2_CTRL_TYPE_MENU) {
-		i_vpr_e(inst, "%s: ctrl: %s: type (%d) is not MENU type\n",
-			__func__, ctrl->name, ctrl->type);
-		return -EINVAL;
-	}
-	if (qmenu->index < ctrl->minimum || qmenu->index > ctrl->maximum)
-		return -EINVAL;
-
-	if (ctrl->menu_skip_mask & (1 << qmenu->index))
-		rc = -EINVAL;
-
-	i_vpr_h(inst,
-		"%s: ctrl: %s: min %lld, max %lld, menu_skip_mask %lld, qmenu: id %u, index %d, %s\n",
-		__func__, ctrl->name, ctrl->minimum, ctrl->maximum,
-		ctrl->menu_skip_mask, qmenu->id, qmenu->index,
-		rc ? "not supported" : "supported");
-	return rc;
-}
-
 int msm_vidc_try_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 {
 	int rc = 0;
