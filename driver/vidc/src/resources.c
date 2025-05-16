@@ -149,7 +149,13 @@ static int __init_irq(struct msm_vidc_core *core)
 		d_vpr_e("%s: Failed to allocate venus IRQ\n", __func__);
 		return rc;
 	}
-	disable_irq_nosync(res->irq);
+
+	/*
+	 * If hw virtualization is enabled, fw is ready when you get to this
+	 * point. Do not disable irq.
+	 */
+	if (!core->is_hw_virt)
+		disable_irq_nosync(res->irq);
 
 	return rc;
 }

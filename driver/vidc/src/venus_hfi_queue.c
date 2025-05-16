@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
-/* Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022,2024-2025 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include "venus_hfi_queue.h"
 #include "msm_vidc_debug.h"
@@ -591,7 +591,7 @@ int venus_hfi_queue_init(struct msm_vidc_core *core)
 		alloc.secure = false;
 		alloc.map_kernel = true;
 		rc = call_mem_op(core, memory_alloc, core, &alloc);
-		if (rc) {
+		if (rc || !alloc.kvaddr) {
 			d_vpr_e("%s: sfr alloc failed\n", __func__);
 			goto fail_alloc_queue;
 		}

@@ -41,7 +41,6 @@
 
 extern struct msm_vidc_core *g_core;
 
-static int __resume(struct msm_vidc_core *core);
 static int __suspend(struct msm_vidc_core *core);
 
 static void __fatal_error(bool fatal)
@@ -617,7 +616,7 @@ err_tzbsp_suspend:
 	return rc;
 }
 
-static int __resume(struct msm_vidc_core *core)
+int __resume(struct msm_vidc_core *core)
 {
 	int rc = 0;
 
@@ -695,7 +694,9 @@ static int __resume(struct msm_vidc_core *core)
 		if (!rc) {
 			msm_vidc_change_core_sub_state(core, 0,
 				CORE_SUBSTATE_POWER_ENABLE, __func__);
+			call_venus_op(core, enable_intr, core);
 		}
+
 #endif
 	}
 
