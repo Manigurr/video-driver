@@ -7070,9 +7070,9 @@ struct msm_vidc_buffer *msm_comm_get_vidc_buffer(struct msm_vidc_inst *inst,
 	struct vb2_v4l2_buffer *vbuf;
 	struct vb2_buffer *vb;
 	unsigned long dma_planes[VB2_MAX_PLANES] = {0};
-	struct msm_vidc_buffer *mbuf;
+	struct msm_vidc_buffer *mbuf = NULL;
 	bool found = false;
-	unsigned int i;
+	unsigned int i = 0, planes = 0;
 
 	if (!inst || !vb2) {
 		d_vpr_e("%s: invalid params %pK %pK\n",
@@ -7080,17 +7080,15 @@ struct msm_vidc_buffer *msm_comm_get_vidc_buffer(struct msm_vidc_inst *inst,
 		return NULL;
 	}
 
-	for (i = 0; i < vb2->num_planes; i++) {
+	for (planes = 0; planes < vb2->num_planes; planes++) {
 		/*
 		 * always compare dma_buf addresses which is guaranteed
 		 * to be same across the processes (duplicate fds).
 		 */
-		dma_planes[i] = (unsigned long)msm_smem_get_dma_buf(
-				vb2->planes[i].m.fd, inst->sid);
-		if (!dma_planes[i])
-			return NULL;
-		msm_smem_put_dma_buf((struct dma_buf *)dma_planes[i],
-			inst->sid);
+		dma_planes[planes] = (unsigned long)msm_smem_get_dma_buf(
+				vb2->planes[planes].m.fd, inst->sid);
+		if (!dma_planes[planes])
+			goto put_ref;
 	}
 
 	mutex_lock(&inst->registeredbufs.lock);
@@ -7192,27 +7190,27 @@ struct msm_vidc_buffer *msm_comm_get_vidc_buffer(struct msm_vidc_inst *inst,
 	if (!found)
 		list_add_tail(&mbuf->list, &inst->registeredbufs.list);
 
-	mutex_unlock(&inst->registeredbufs.lock);
-
+exit:
 	/*
 	 * Return mbuf if decode batching is enabled as this buffer
 	 * may trigger queuing full batch to firmware, also this buffer
 	 * will not be queued to firmware while full batch queuing,
 	 * it will be queued when rbr event arrived from firmware.
 	 */
-	if (rc == -EEXIST && !inst->batch.enable)
-		return ERR_PTR(rc);
-
-	return mbuf;
-
-exit:
-	s_vpr_e(inst->sid, "%s: %d\n", __func__, rc);
-	msm_comm_unmap_vidc_buffer(inst, mbuf);
-	if (!found)
-		kref_put_mbuf(mbuf);
+	if (rc == -EEXIST && !inst->batch.enable) {
+		print_vidc_buffer(VIDC_DBG, "qbuf upon rbr", inst, mbuf);
+	} else if (rc) {
+		dprintk(VIDC_ERR, "%s: rc %d\n", __func__, rc);
+		msm_comm_unmap_vidc_buffer(inst, mbuf);
+		if (!found)
+			kref_put_mbuf(mbuf);
+	}
 	mutex_unlock(&inst->registeredbufs.lock);
+put_ref:
+	while (planes)
+		msm_smem_put_dma_buf((struct dma_buf *)dma_planes[--planes]);
 
-	return ERR_PTR(rc);
+	return rc ? ERR_PTR(rc) : mbuf;
 }
 
 void msm_comm_put_vidc_buffer(struct msm_vidc_inst *inst,
