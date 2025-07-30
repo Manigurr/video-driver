@@ -3121,7 +3121,7 @@ static int msm_vidc_queue_buffer(struct msm_vidc_inst *inst, struct msm_vidc_buf
 		/* retrieve synx buffer based on index */
 		sbuf = msm_vidc_sync_get_synx_buffer_from_index(inst, slist, buf->index);
 		if (!sbuf) {
-			i_vpr_e(inst, "%s: index not found %u\n", __func__, buf->index);
+			i_vpr_l(inst, "%s: index not found %u\n", __func__, buf->index);
 			/**
 			 * For free-pool buffers, create_fence ioctl willnot be called from client.
 			 * So no fences were tied with this buffer. But since delivery mode is set
