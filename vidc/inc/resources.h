@@ -153,7 +153,6 @@ struct clock_residency {
 struct clock_info {
 	struct clk                *clk;
 	const char                *name;
-	u32                        clk_id;
 	bool                       has_scaling;
 	u64                        prev;
 #ifdef CONFIG_MSM_MMRM
