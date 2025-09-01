@@ -32,6 +32,7 @@
 #include "venus_hfi.h"
 
 #define BASE_DEVICE_NUMBER 32
+#define DMA_MASK (0xe0000000 - 1)
 
 struct msm_vidc_core *g_core;
 
@@ -580,10 +581,12 @@ static int msm_vidc_component_master_bind(struct device *dev)
 
 	d_vpr_h("%s(): %s\n", __func__, dev_name(dev));
 
-	rc = component_bind_all(dev, core);
-	if (rc) {
-		d_vpr_e("%s: sub-device bind failed. rc %d\n", __func__, rc);
-		return rc;
+	if (core->cb_count) {
+		rc = component_bind_all(dev, core);
+		if (rc) {
+			d_vpr_e("%s: sub-device bind failed. rc %d\n", __func__, rc);
+			return rc;
+		}
 	}
 
 	if (core->capabilities[SUPPORTS_SYNX_FENCE].value) {
@@ -648,7 +651,8 @@ static void msm_vidc_component_master_unbind(struct device *dev)
 	venus_hfi_queue_deinit(core);
 	msm_vidc_deinitialize_media(core);
 	call_fence_op(core, fence_deregister, core);
-	component_unbind_all(dev, core);
+	if (core->cb_count)
+		component_unbind_all(dev, core);
 
 	d_vpr_h("%s(): succssful\n", __func__);
 }
@@ -681,15 +685,19 @@ static void msm_vidc_remove_video_device(struct platform_device *pdev)
 	d_vpr_h("%s()\n", __func__);
 
 	/* destroy component master and deallocate match data */
-	component_master_del(&pdev->dev, &msm_vidc_component_master_ops);
+	if (core->cb_count) {
+		component_master_del(&pdev->dev, &msm_vidc_component_master_ops);
 
-	d_vpr_h("depopulating sub devices\n");
-	/*
-	 * Trigger remove for each sub-device i.e. qcom,context-bank,xxxx
-	 * When msm_vidc_remove is called for each sub-device, destroy
-	 * context-bank mappings.
-	 */
-	of_platform_depopulate(&pdev->dev);
+		d_vpr_e("depopulating sub devices\n");
+		/*
+		 * Trigger remove for each sub-device i.e. qcom,context-bank,xxxx
+		 * When msm_vidc_remove is called for each sub-device, destroy
+		 * context-bank mappings.
+		 */
+		of_platform_depopulate(&pdev->dev);
+	} else {
+		msm_vidc_component_master_unbind(&pdev->dev);
+	}
 
 	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 
@@ -732,7 +740,7 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 	struct component_match *match = NULL;
 	struct msm_vidc_core *core = NULL;
 	struct device_node *child = NULL;
-	int cb_count = 0;
+	struct context_bank_info *cb = NULL;
 
 	d_vpr_h("%s: %s\n", __func__, dev_name(&pdev->dev));
 
@@ -817,10 +825,14 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 		}
 
 		/* count context bank devices */
-		cb_count++;
+		core->cb_count++;
 	}
 
-	d_vpr_h("populating sub devices. count %d\n", cb_count);
+	d_vpr_h("populating sub devices. count %d\n", core->cb_count);
+
+	if (!core->cb_count)
+		goto no_context_banks;
+
 	/*
 	 * Trigger probe for each sub-device i.e. qcom,msm-vidc,context-bank.
 	 * When msm_vidc_probe is called for each sub-device, parse the
@@ -834,7 +846,8 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 	}
 
 	/**
-	 * create and try to bring up aggregate device for master.
+	 * create and try to bring up aggregate device for master
+	 * if sub nodes available in device tree.
 	 * match is a component_match_array and acts as a placeholder for
 	 * components added via component_add().
 	 */
@@ -846,6 +859,29 @@ static int msm_vidc_probe_video_device(struct platform_device *pdev)
 
 	d_vpr_h("%s(): succssful\n", __func__);
 
+	return rc;
+
+no_context_banks:
+	venus_hfi_for_each_context_bank(core, cb) {
+		cb->dev = &pdev->dev;
+		cb->domain = iommu_get_domain_for_dev(cb->dev);
+		if (!cb->domain) {
+			d_vpr_e("%s: Failed to get iommu domain for %s\n",
+				__func__, dev_name(cb->dev));
+			return -EIO;
+		}
+		iommu_set_fault_handler(cb->domain, msm_vidc_smmu_fault_handler, (void *)core);
+	}
+
+	dma_set_mask_and_coherent(&pdev->dev, DMA_MASK);
+	dma_set_max_seg_size(&pdev->dev, (unsigned int)DMA_BIT_MASK(32));
+	dma_set_seg_boundary(&pdev->dev, (unsigned long)DMA_BIT_MASK(64));
+	rc = msm_vidc_component_master_bind(&pdev->dev);
+	if (rc < 0) {
+		d_vpr_e("%s: component master bind failed\n", __func__);
+		return rc;
+	}
+	d_vpr_h("%s(): successful\n", __func__);
 	return rc;
 
 master_add_failed:
