@@ -4,9 +4,6 @@
  * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <dt-bindings/clock/qcom,gcc-sc7280.h>
-#include <dt-bindings/clock/qcom,videocc-sc7280.h>
-
 #include <linux/soc/qcom/llcc-qcom.h>
 
 #include <media/v4l2_vidc_extensions.h>
@@ -2297,11 +2294,11 @@ static const struct pd_table qcm6490_pd_table[] = {
 
 /* name, clock id, scaling */
 static const struct clk_table qcm6490_clk_table[] = {
-    { "bus",     VIDEO_CC_MVSC_CTL_AXI_CLK,      0 },
-    { "iface",   VIDEO_CC_VENUS_AHB_CLK,         0 },
-    { "vcodec_core",     VIDEO_CC_MVS0_CORE_CLK, 1},
-    { "core",      VIDEO_CC_MVSC_CORE_CLK,       1 },
-    { "vcodec_bus",  VIDEO_CC_MVS0_AXI_CLK,      0 },
+    { "bus",		0 },
+    { "iface",		0 },
+    { "vcodec_core",	1 },
+    { "core",		1 },
+    { "vcodec_bus",	0 },
 
 };
 

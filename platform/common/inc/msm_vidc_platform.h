@@ -60,7 +60,6 @@ struct regulator_table {
 
 struct clk_table {
 	const char      *name;
-	u32              clk_id;
 	bool             scaling;
 };
 
