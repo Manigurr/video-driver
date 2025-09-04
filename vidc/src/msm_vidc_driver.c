@@ -5585,11 +5585,14 @@ struct context_bank_info *msm_vidc_get_context_bank_for_device(
 	struct context_bank_info *cb = NULL, *match = NULL;
 
 	venus_hfi_for_each_context_bank(core, cb) {
-		if (of_device_is_compatible(dev->of_node, cb->name)) {
+		if (!core->cb_count && !strcmp("qcom,vidc,cb-ns", cb->name))
 			match = cb;
+		else if (of_device_is_compatible(dev->of_node, cb->name))
+			match = cb;
+		if (match)
 			break;
-		}
 	}
+
 	if (!match)
 		d_vpr_e("cb not found for dev %s\n", dev_name(dev));
 
