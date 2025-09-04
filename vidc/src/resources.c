@@ -462,7 +462,6 @@ static int __init_clocks(struct msm_vidc_core *core)
 	/* populate clock field from platform data */
 	for (cnt = 0; cnt < clocks->count; cnt++) {
 		clocks->clock_tbl[cnt].name = clk_tbl[cnt].name;
-		clocks->clock_tbl[cnt].clk_id = clk_tbl[cnt].clk_id;
 		clocks->clock_tbl[cnt].has_scaling = clk_tbl[cnt].scaling;
 	}
 
@@ -504,8 +503,8 @@ static int __init_clocks(struct msm_vidc_core *core)
 
 	/* print clock fields */
 	venus_hfi_for_each_clock(core, cinfo) {
-		d_vpr_h("%s: clock name %s clock id %#x scaling %d\n",
-			__func__, cinfo->name, cinfo->clk_id, cinfo->has_scaling);
+		d_vpr_h("%s: clock name %s scaling %d\n",
+			__func__, cinfo->name, cinfo->has_scaling);
 	}
 
 	/* get clock handle */

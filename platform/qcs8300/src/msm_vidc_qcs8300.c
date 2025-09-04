@@ -4,8 +4,6 @@
  * Copyright (c) 2021-2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <dt-bindings/clock/qcom,qcs8300-gcc.h>
-#include <dt-bindings/clock/qcom,sa8775p-videocc.h>
 #include <media/v4l2_vidc_extensions.h>
 #include "hfi_command.h"
 #include "hfi_property.h"
@@ -2359,9 +2357,9 @@ static const char * const qcs8300_opp_pd_table[] = { "mx", "mmcx", NULL };
 
 /* name, clock id, scaling */
 static const struct clk_table qcs8300_clk_table[] = {
-	{ "iface",         GCC_VIDEO_AXI0_CLK,     0 },
-	{ "core",          VIDEO_CC_MVS0C_CLK,     0 },
-	{ "vcodec0_core",  VIDEO_CC_MVS0_CLK,      1 },
+	{ "iface",         0 },
+	{ "core",          0 },
+	{ "vcodec0_core",  1 },
 };
 
 /* name, exclusive_release */
