@@ -12,29 +12,21 @@ jobs:
     steps:
       - name: Checkout current repo
         uses: actions/checkout@v3
-      - name: Environment setup commands
-        run: |
-          pip install kas
-          git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
-          cd meta-qcom/ci
-          sudo pip3 install kas
-          kas shell qcs9100-ride-sx.yml:qcom-distro.yml
-          bitbake qcom-multimedia-proprietary-image
+      - name: Install kas
+        run: pip3 install kas
 
   clone_meta_qcom:
     needs: setup-environment
-    runs-on: ronment:
     runs-on: self-hosted
     steps:
-      - name: Install kas
-        run:  sudo pip3 install kas 
       - name: Clone meta-qcom repo
         run: |
           git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
           cd meta-qcom/ci
-          sudo pip3 install kas
+      - name: Install kas in meta-qcom/ci
+        run: sudo pip3 install kas
+      - name: Run kas shell and bitbake
+        run: |
+          cd meta-qcom/ci
           kas shell qcs9100-ride-sx.yml:qcom-distro.yml
           bitbake qcom-multimedia-proprietary-image
-
-
-
