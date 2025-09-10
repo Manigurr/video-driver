@@ -15,6 +15,11 @@ jobs:
       - name: Environment setup commands
         run: |
           pip install kas
+          git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
+          cd meta-qcom/ci
+          sudo pip3 install kas
+          kas shell qcs9100-ride-sx.yml:qcom-distro.yml
+          bitbake qcom-multimedia-proprietary-image
 
   clone_meta_qcom:
     needs: setup-environment
