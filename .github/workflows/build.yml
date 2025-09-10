@@ -3,7 +3,7 @@ name: Environment setup and build
 on:
   push:
     branches:
-      - main
+      - test-workflow
   workflow_dispatch:
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Clone meta-qcom repo
         run: |
-          git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
+          git clone git@github.com:qualcomm-linux/meta-qcom.git
           cd meta-qcom/ci
       - name: Install kas in meta-qcom/ci
         run: sudo pip3 install kas
