@@ -8,7 +8,6 @@ on:
 
 jobs:
   setup-environment:
-    runs-on: ronment:
     runs-on: self-hosted
     steps:
       - name: Checkout current repo
