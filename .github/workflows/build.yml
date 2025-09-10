@@ -21,7 +21,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Install kas
-        run: pip install --user kas
+        run: sudo pip3 install kas 
       - name: Clone meta-qcom repo
         run: git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
 
