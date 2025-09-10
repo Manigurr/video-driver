@@ -1,1 +1,34 @@
+---
+name: Environment setup and build
+on: 
+   push:
+     branches:
+        - main
+
+jobs:
+ setup-environment:
+   runs-on: self-hosted
+   steps:
+      - name: checkout current repo
+        uses: action/checkout@v3
+      - name: environment setup commands
+        run: |
+             pip install kas
+
+  clone_meta_qcom:
+    needs: setup-environment:
+    runs-on: self-hosted
+    steps: 
+      - name: clone meta-qcom repo
+        run: git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
+
+     - name: build steps
+       run: |
+            kas shell meta-qcom/ci/qcs9100-ride-sx.yml:meta-qcom/ci/qcom-distro.yml
+            bitbake qcom-multimedia-proprietary-image
+            kas shell meta-qcom/ci/qcs8300-ride-sx.yml:meta-qcom/ci/qcom-distro.yml
+            bitbake qcom-multimedia-proprietary-image
+  
+
+
 
