@@ -23,8 +23,9 @@ jobs:
       - name: Install kas
         run:  pip install kas 
       - name: Clone meta-qcom repo
-        run: git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
-             cd meta-qcom/ci
+        run: |
+          git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
+          cd meta-qcom/ci
 
       - name: Build steps
         run: |
