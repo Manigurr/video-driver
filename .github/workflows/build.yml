@@ -1,8 +1,10 @@
+---
 name: Environment setup and build
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   setup-environment:
