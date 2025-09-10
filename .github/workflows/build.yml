@@ -14,14 +14,14 @@ jobs:
         uses: actions/checkout@v3
       - name: Environment setup commands
         run: |
-          pip install kas
+          pip3 install kas
 
   clone_meta_qcom:
     needs: setup-environment
     runs-on: self-hosted
     steps:
       - name: Install kas
-        run: pip install kas
+        run: pip install --user kas
       - name: Clone meta-qcom repo
         run: git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
 
