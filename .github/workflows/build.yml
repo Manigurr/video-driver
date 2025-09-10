@@ -14,22 +14,23 @@ jobs:
         uses: actions/checkout@v3
       - name: Environment setup commands
         run: |
-          sudo pip3 install kas
+          sudo pip install kas
 
   clone_meta_qcom:
     needs: setup-environment
     runs-on: self-hosted
     steps:
       - name: Install kas
-        run: sudo pip3 install kas 
+        run: sudo pip install kas 
       - name: Clone meta-qcom repo
         run: git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
+             cd meta-qcom/ci
 
       - name: Build steps
         run: |
-          kas shell meta-qcom/ci/qcs9100-ride-sx.yml:meta-qcom/ci/qcom-distro.yml
+          kas shell qcs9100-ride-sx.yml:qcom-distro.yml
           bitbake qcom-multimedia-proprietary-image
-          kas shell meta-qcom/ci/qcs8300-ride-sx.yml:meta-qcom/ci/qcom-distro.yml
+          kas shell qcs8300-ride-sx.yml:qcom-distro.yml
           bitbake qcom-multimedia-proprietary-image
 
 
