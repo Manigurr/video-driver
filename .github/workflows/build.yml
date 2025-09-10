@@ -25,13 +25,7 @@ jobs:
       - name: Clone meta-qcom repo
         run: |
           git clone https://github.com/qualcomm-linux/meta-qcom.git -b master
-          cd meta-qcom/ci
-
-      - name: Build steps
-        run: |
-          kas shell qcs9100-ride-sx.yml:qcom-distro.yml
-          bitbake qcom-multimedia-proprietary-image
-          kas shell qcs8300-ride-sx.yml:qcom-distro.yml
+          kas shell meta-qcom/ci/qcs9100-ride-sx.yml:meta-qcom/ci/qcom-distro.yml
           bitbake qcom-multimedia-proprietary-image
 
 
