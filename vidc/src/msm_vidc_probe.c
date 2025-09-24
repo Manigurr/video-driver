@@ -1027,14 +1027,14 @@ static int __init msm_vidc_init(void)
 {
 	int rc = 0;
 
-	d_vpr_h("%s: %s\n", __func__, video_banner);
+	d_vpr_e("%s: %s\n", __func__, video_banner);
 
 	rc = platform_driver_register(&msm_vidc_driver);
 	if (rc) {
 		d_vpr_e("Failed to register platform driver\n");
 		return rc;
 	}
-	d_vpr_h("%s(): succssful\n", __func__);
+	d_vpr_e("%s(): succssful\n", __func__);
 
 	return 0;
 }
