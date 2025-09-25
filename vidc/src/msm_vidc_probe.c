@@ -1034,7 +1034,7 @@ static int __init msm_vidc_init(void)
 		d_vpr_e("Failed to register platform driver\n");
 		return rc;
 	}
-	d_vpr_e("%s(): succssful\n", __func__);
+	d_vpr_e("%s(): succssful_manigurr\n", __func__);
 
 	return 0;
 }
